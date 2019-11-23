@@ -1,23 +1,50 @@
 extern crate clap;
+extern crate difference;
 
 use std::fs;
 use std::process;
 use clap::{Arg, App};
+use difference::{Changeset, Difference};
 
 fn read_file_or_die(path: &str) -> String {
     match fs::read_to_string(path) {
         Ok(content) => content,
-        Err(error)  => {
+        Err(ref error)  => {
             eprintln!("Could not read {}: {}", path, error);
             process::exit(1);
         },
     }
 }
 
-fn calc_diff(lpath: &str, rpath: &str) {
+fn calc_diff(lpath: &str, rpath: &str) -> Changeset {
     let lfile = read_file_or_die(lpath);
     let rfile = read_file_or_die(rpath);
-    println!("lpath: {}\n{}\nrpath: {}\n{}\n", lpath, lfile, rpath, rfile);
+    //println!("lpath: {}\n{}\nrpath: {}\n{}\n", lpath, lfile, rpath, rfile);
+    Changeset::new(&lfile, &rfile, "\n")
+}
+
+fn print_diff(changeset: &Changeset) {
+    //println!("diffs: {:?}", changeset.diffs);
+
+    for change in &changeset.diffs {
+        match change {
+            Difference::Same(ref lines) => {
+                for line in lines.split('\n') {
+                    println!("  {}", line);
+                }
+            }
+            Difference::Add(ref lines) => {
+                for line in lines.split('\n') {
+                    println!("+ {}", line);
+                }
+            }
+            Difference::Rem(ref lines) => {
+                for line in lines.split('\n') {
+                    println!("- {}", line);
+                }
+            }
+        }
+    }
 }
 
 fn main() {
@@ -46,5 +73,6 @@ fn main() {
 
     let lpath = matches.value_of("file1").expect("file1 is required");
     let rpath = matches.value_of("file2").expect("file2 is required");
-    calc_diff(lpath, rpath);
+    let changeset = calc_diff(lpath, rpath);
+    print_diff(&changeset);
 }
