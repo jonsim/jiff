@@ -1,5 +1,3 @@
-extern crate clap;
-
 mod diff;
 
 use std::fs;
@@ -47,7 +45,7 @@ fn main() {
 
     // Calculate the changeset.
     let diffs = diff::calculate_diff(&lfile, &rfile);
-    diff::print_diffs(&diffs);
+    diff::print_diffs(&diffs, true);
 
     // Print the changeset.
     if matches.is_present("side-by-side") {
