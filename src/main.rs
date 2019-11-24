@@ -1,5 +1,6 @@
 mod diff;
 
+use std::cmp::max;
 use std::fs;
 use std::process;
 use clap::{Arg, App};
@@ -39,18 +40,20 @@ fn main() {
                     .get_matches();
     let lpath = matches.value_of("file1").expect("file1 is required");
     let rpath = matches.value_of("file2").expect("file2 is required");
+    let color = !matches.is_present("no-color");
+    let side_by_side = matches.is_present("side-by-side");
     let lfile = read_file_or_die(lpath);
     let rfile = read_file_or_die(rpath);
+    let max_line_count = max(lfile.matches('\n').count(), rfile.matches('\n').count());
     //println!("lpath: {}\n{}\nrpath: {}\n{}\n", lpath, lfile, rpath, rfile);
 
     // Calculate the changeset.
     let diffs = diff::calculate_diff(&lfile, &rfile);
-    diff::print_diffs(&diffs, true);
 
     // Print the changeset.
-    if matches.is_present("side-by-side") {
-        //print_diff_side_by_side(&changeset);
+    if side_by_side {
+        diff::print_diffs_side_by_side(&diffs, max_line_count, 0, color);
     } else {
-        //print_diff(&changeset);
+        diff::print_diffs(&diffs, 0, color);
     }
 }
