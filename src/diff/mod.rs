@@ -1,4 +1,3 @@
-
 use std::borrow::Cow;
 
 use ansi_term::Color::{Red, Green, Black};
@@ -6,57 +5,73 @@ use difference::{Changeset, Difference};
 
 pub enum Diff {
     Same(String),
-    Replace(Option<String>, Option<String>),
+    Add(String),
+    Remove(String),
+    Replace(String, String),
 }
 
 pub fn calculate_diff(left: &str, right: &str) -> Vec<Diff> {
     let mut changeset = Changeset::new(left, right, "\n");
     let mut diffs = Vec::new();
+    let mut previous: Option<Difference> = None;
 
     for change in changeset.diffs.drain(..) {
         match change {
             Difference::Same(same) => {
-                diffs.push(Diff::Same(same))
+                match previous {
+                    Some(last_change) => {
+                        diffs.push(match last_change {
+                            Difference::Same(_) => panic!("Invalid state"),
+                            Difference::Add(add) => Diff::Add(add),
+                            Difference::Rem(rem) => Diff::Remove(rem),
+                        });
+                        previous = None;
+                    },
+                    None => {},
+                }
+                diffs.push(Diff::Same(same));
             },
             Difference::Add(add) => {
-                match diffs.last_mut() {
-                    Some(ref mut last_change) => {
-                        match last_change {
-                            Diff::Same(_) => {
-                                diffs.push(Diff::Replace(Option::None, Option::Some(add)));
-                            }
-                            Diff::Replace(before, ref mut after) => {
-                                assert!(before.is_some(), "Invalid changeset");
-                                assert!(after.is_none(),  "Invalid changeset");
-                                *after = Option::Some(add);
-                            }
-                        }
-                    }
+                match previous {
+                    Some(last_change) => {
+                        diffs.push(match last_change {
+                            Difference::Same(_) => panic!("Invalid state"),
+                            Difference::Add(_) => panic!("Invalid state"),
+                            Difference::Rem(rem) => Diff::Replace(rem, add),
+                        });
+                        previous = None;
+                    },
                     None => {
-                        diffs.push(Diff::Replace(Option::None, Option::Some(add)));
-                    }
+                        previous = Some(Difference::Add(add));
+                    },
                 }
             },
             Difference::Rem(rem) => {
-                match diffs.last_mut() {
-                    Some(ref mut last_change) => {
-                        match last_change {
-                            Diff::Same(_) => {
-                                diffs.push(Diff::Replace(Option::Some(rem), Option::None));
-                            }
-                            Diff::Replace(ref mut before, after) => {
-                                assert!(before.is_none(), "Invalid changeset");
-                                assert!(after.is_some(), "Invalid changeset");
-                                *before = Option::Some(rem);
-                            }
-                        }
-                    }
+                match previous {
+                    Some(last_change) => {
+                        diffs.push(match last_change {
+                            Difference::Same(_) => panic!("Invalid state"),
+                            Difference::Add(add) => Diff::Replace(rem, add),
+                            Difference::Rem(_) => panic!("Invalid state"),
+                        });
+                        previous = None;
+                    },
                     None => {
-                        diffs.push(Diff::Replace(Option::Some(rem), Option::None));
-                    }
+                        previous = Some(Difference::Rem(rem));
+                    },
                 }
             }
         }
+    }
+    match previous {
+        Some(uncommitted) => {
+            diffs.push(match uncommitted {
+                Difference::Same(_) => panic!("Invalid state"),
+                Difference::Add(add) => Diff::Add(add),
+                Difference::Rem(rem) => Diff::Remove(rem),
+            });
+        },
+        None => {},
     }
     diffs
 }
@@ -65,7 +80,6 @@ pub fn print_diffs(diffs: &Vec<Diff>, context: usize, color: bool) {
     for change in diffs {
         match change {
             Diff::Same(same) => {
-                //println!("SAME");
                 let lines: Vec<&str> = same.split('\n').collect();
                 if context > 0 && lines.len() > (context*2) {
                     for line in lines.iter().take(context) {
@@ -81,35 +95,26 @@ pub fn print_diffs(diffs: &Vec<Diff>, context: usize, color: bool) {
                     }
                 }
             },
+            Diff::Add(add) => {
+                for line in add.split('\n') {
+                    let formatted = format!("+ {}", line);
+                    println!("{}", Green.paint(formatted));
+                }
+            },
+            Diff::Remove(rem) => {
+                for line in rem.split('\n') {
+                    let formatted = format!("- {}", line);
+                    println!("{}", Red.paint(formatted));
+                }
+            },
             Diff::Replace(before, after) => {
-                //println!("REPLACE");
-                match (before, after) {
-                    (Some(before_lines), Some(after_lines)) => {
-                        // Replacement.
-                        for line in before_lines.split('\n') {
-                            let formatted = format!("- {}", line);
-                            println!("{}", Red.paint(formatted));
-                        }
-                        for line in after_lines.split('\n') {
-                            let formatted = format!("+ {}", line);
-                            println!("{}", Green.paint(formatted));
-                        }
-                    },
-                    (Some(before_lines), None) => {
-                        // Removal.
-                        for line in before_lines.split('\n') {
-                            let formatted = format!("- {}", line);
-                            println!("{}", Red.paint(formatted));
-                        }
-                    },
-                    (None, Some(after_lines)) => {
-                        // Addition.
-                        for line in after_lines.split('\n') {
-                            let formatted = format!("+ {}", line);
-                            println!("{}", Green.paint(formatted));
-                        }
-                    },
-                    (None, None) => {}
+                for line in before.split('\n') {
+                    let formatted = format!("- {}", line);
+                    println!("{}", Red.paint(formatted));
+                }
+                for line in after.split('\n') {
+                    let formatted = format!("+ {}", line);
+                    println!("{}", Green.paint(formatted));
                 }
             },
         }
@@ -148,34 +153,26 @@ pub fn print_diffs_side_by_side(diffs: &Vec<Diff>, max_line_count: usize,
                     lineno_r += 1;
                 }
             },
+            Diff::Add(add) => {
+                for line in add.split('\n') {
+                    let formatted = format!("+ {}", line);
+                    println!("{}", Green.paint(formatted));
+                }
+            },
+            Diff::Remove(rem) => {
+                for line in rem.split('\n') {
+                    let formatted = format!("- {}", line);
+                    println!("{}", Red.paint(formatted));
+                }
+            },
             Diff::Replace(before, after) => {
-                match (before, after) {
-                    (Some(before_lines), Some(after_lines)) => {
-                        // Replacement.
-                        for line in before_lines.split('\n') {
-                            let formatted = format!("- {}", line);
-                            println!("{}", Red.paint(formatted));
-                        }
-                        for line in after_lines.split('\n') {
-                            let formatted = format!("+ {}", line);
-                            println!("{}", Green.paint(formatted));
-                        }
-                    },
-                    (Some(before_lines), None) => {
-                        // Removal.
-                        for line in before_lines.split('\n') {
-                            let formatted = format!("- {}", line);
-                            println!("{}", Red.paint(formatted));
-                        }
-                    },
-                    (None, Some(after_lines)) => {
-                        // Addition.
-                        for line in after_lines.split('\n') {
-                            let formatted = format!("+ {}", line);
-                            println!("{}", Green.paint(formatted));
-                        }
-                    },
-                    (None, None) => {}
+                for line in before.split('\n') {
+                    let formatted = format!("- {}", line);
+                    println!("{}", Red.paint(formatted));
+                }
+                for line in after.split('\n') {
+                    let formatted = format!("+ {}", line);
+                    println!("{}", Green.paint(formatted));
                 }
             },
         }
