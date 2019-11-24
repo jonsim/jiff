@@ -1,13 +1,23 @@
-use std::borrow::Cow;
+mod wrap;
 
 use ansi_term::Color::{Red, Green, Black};
+use ansi_term::Style;
 use difference::{Changeset, Difference};
+use itertools::EitherOrBoth;
+use itertools::Itertools;
+use wrap::wrap_str;
 
 pub enum Diff {
     Same(String),
     Add(String),
     Remove(String),
     Replace(String, String),
+}
+
+struct DiffStyling {
+    same: Style,
+    add: Style,
+    remove: Style,
 }
 
 pub fn calculate_diff(left: &str, right: &str) -> Vec<Diff> {
@@ -121,58 +131,174 @@ pub fn print_diffs(diffs: &Vec<Diff>, context: usize, color: bool) {
     }
 }
 
+fn _print_side_by_side_line(lineno_l: Option<(usize, Style)>,
+                            line_l: Option<(&str, Style)>,
+                            lineno_r: Option<(usize, Style)>,
+                            line_r: Option<(&str, Style)>,
+                            lineno_width: usize, line_width: usize,
+                            separator: &str) {
+    let mut lineno_l_fmt = match lineno_l {
+        Some((i, _)) => format!("{:w$}:", i, w=lineno_width),
+        None =>         format!("{:w$} ", "", w=lineno_width),
+    };
+    let mut lineno_r_fmt = match lineno_r {
+        Some((i, _)) => format!("{:w$}:", i, w=lineno_width),
+        None =>         format!("{:w$} ", "", w=lineno_width),
+    };
+    let line_l_iter = match line_l {
+        Some((s, _)) => wrap_str(s, line_width),
+        None => wrap_str("", 1),
+    };
+    let line_r_iter = match line_r {
+        Some((s, _)) => wrap_str(s, line_width),
+        None => wrap_str("", 1),
+    };
+    let lineno_l_style = match lineno_l {
+        Some((_, style)) => style,
+        None => Black.bold(),
+    };
+    let lineno_r_style = match lineno_r {
+        Some((_, style)) => style,
+        None => Black.bold(),
+    };
+    let line_l_style = match line_l {
+        Some((_, style)) => style,
+        None => Style::default(),
+    };
+    let line_r_style = match line_r {
+        Some((_, style)) => style,
+        None => Style::default(),
+    };
+    let mut first_line = true;
+    let mut counter = 0;
+    for zipped in line_l_iter.zip_longest(line_r_iter) {
+        counter += 1;
+        let (wrap_l_fmt, wrap_r_fmt) = match zipped {
+            EitherOrBoth::Both(l, r) => {
+                (format!("{:w$}", l, w=line_width),
+                 format!("{:w$}", r, w=line_width))
+            },
+            EitherOrBoth::Left(l) => {
+                (format!("{:w$}", l, w=line_width),
+                 format!("{:w$}", "", w=line_width))
+            },
+            EitherOrBoth::Right(r) => {
+                (format!("{:w$}", "", w=line_width),
+                 format!("{:w$}", r, w=line_width))
+            },
+        };
+
+        println!("{} {}{}{} {}",
+                 lineno_l_style.paint(&lineno_l_fmt),
+                 line_l_style.paint(&wrap_l_fmt),
+                 separator,
+                 lineno_r_style.paint(&lineno_r_fmt),
+                 line_r_style.paint(&wrap_r_fmt));
+        if first_line {
+            lineno_l_fmt = format!("{:w$} ", "", w=lineno_width);
+            lineno_r_fmt = format!("{:w$} ", "", w=lineno_width);
+            first_line = false;
+        }
+    }
+    if counter == 0 {
+        println!("LEFT PRINT HAVING PRINTED 0 LINES");
+        println!("  line_l = '{:?}', line_r = '{:?}'", line_l, line_r)
+    }
+}
+
 pub fn print_diffs_side_by_side(diffs: &Vec<Diff>, max_line_count: usize,
                                 context: usize, color: bool) {
+    // Define styling constants.
+    let lineno_styling = DiffStyling {
+        same: Black.bold(),
+        add: Green.bold(),
+        remove: Red.bold(),
+    };
+    let line_styling = DiffStyling {
+        same: Style::default(),
+        add: Green.normal(),
+        remove: Red.normal(),
+    };
+
+    // Define separation characters.
     let sep = "\u{2502} ";
     let sep_width = sep.len();
+
+    // Caclulcate widths to draw to.
     let lineno_width = (max_line_count as f32).log(10.0).ceil() as usize;
-    let (term_width, term_height) = match term_size::dimensions_stdout() {
+    let (term_width, _) = match term_size::dimensions_stdout() {
         Some(dim) => dim,
         None => (80, 80), // TODO: should really disable all wrapping.
     };
     let line_width = ((term_width - sep_width) / 2) - (lineno_width + 2);
 
+    // Print all diffs.
     let mut lineno_l = 1;
     let mut lineno_r = 1;
     for change in diffs {
         match change {
             Diff::Same(same) => {
                 for line in same.split('\n') {
-                    let mut lineno_l_fmt = Black.bold().paint(format!("{:w$}:", lineno_l, w=lineno_width));
-                    let mut lineno_r_fmt = Black.bold().paint(format!("{:w$}:", lineno_r, w=lineno_width));
-                    for wrapped in textwrap::wrap_iter(&line, line_width) {
-                        println!("{} {:w$}{}{} {:w$}",
-                                 lineno_l_fmt,
-                                 wrapped, sep,
-                                 lineno_r_fmt,
-                                 wrapped, w=line_width);
-                        lineno_l_fmt = Black.bold().paint(format!("{:w$} ", "", w=lineno_width));
-                        lineno_r_fmt = Black.bold().paint(format!("{:w$} ", "", w=lineno_width));
-                    }
+                    _print_side_by_side_line(
+                            Some((lineno_l, lineno_styling.same)),
+                            Some((line, line_styling.same)),
+                            Some((lineno_r, lineno_styling.same)),
+                            Some((line, line_styling.same)),
+                            lineno_width, line_width, sep);
                     lineno_l += 1;
                     lineno_r += 1;
                 }
             },
             Diff::Add(add) => {
-                for line in add.split('\n') {
-                    let formatted = format!("+ {}", line);
-                    println!("{}", Green.paint(formatted));
+                for line_r in add.split('\n') {
+                    _print_side_by_side_line(
+                            None, None,
+                            Some((lineno_r, lineno_styling.add)),
+                            Some((line_r, line_styling.add)),
+                            lineno_width, line_width, sep);
+                    lineno_r += 1;
                 }
             },
             Diff::Remove(rem) => {
-                for line in rem.split('\n') {
-                    let formatted = format!("- {}", line);
-                    println!("{}", Red.paint(formatted));
+                for line_l in rem.split('\n') {
+                    _print_side_by_side_line(
+                            Some((lineno_l, lineno_styling.remove)),
+                            Some((line_l, line_styling.remove)),
+                            None, None,
+                            lineno_width, line_width, sep);
+                    lineno_l += 1;
                 }
             },
             Diff::Replace(before, after) => {
-                for line in before.split('\n') {
-                    let formatted = format!("- {}", line);
-                    println!("{}", Red.paint(formatted));
-                }
-                for line in after.split('\n') {
-                    let formatted = format!("+ {}", line);
-                    println!("{}", Green.paint(formatted));
+                for zipped in before.split('\n').zip_longest(after.split('\n')) {
+                    match zipped {
+                        EitherOrBoth::Both(line_l, line_r) => {
+                            _print_side_by_side_line(
+                                    Some((lineno_l, lineno_styling.remove)),
+                                    Some((line_l, line_styling.remove)),
+                                    Some((lineno_r, lineno_styling.add)),
+                                    Some((line_r, line_styling.add)),
+                                    lineno_width, line_width, sep);
+                            lineno_l += 1;
+                            lineno_r += 1;
+                        },
+                        EitherOrBoth::Left(line_l) => {
+                            _print_side_by_side_line(
+                                    Some((lineno_l, lineno_styling.remove)),
+                                    Some((line_l, line_styling.remove)),
+                                    None, None,
+                                    lineno_width, line_width, sep);
+                            lineno_l += 1;
+                        },
+                        EitherOrBoth::Right(line_r) => {
+                            _print_side_by_side_line(
+                                    None, None,
+                                    Some((lineno_r, lineno_styling.add)),
+                                    Some((line_r, line_styling.add)),
+                                    lineno_width, line_width, sep);
+                            lineno_r += 1;
+                        },
+                    }
                 }
             },
         }
