@@ -48,7 +48,7 @@ fn main() {
     //println!("lpath: {}\n{}\nrpath: {}\n{}\n", lpath, lfile, rpath, rfile);
 
     // Calculate the changeset.
-    let diffs = diff::calculate_diff(&lfile, &rfile);
+    let diffs = diff::calculate_line_diff(&lfile, &rfile);
 
     // Print the changeset.
     if side_by_side {

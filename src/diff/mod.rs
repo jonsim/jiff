@@ -1,5 +1,8 @@
+mod align;
 mod wrap;
 
+use align::AlignmentMatrix;
+use ansi_term::ANSIStrings;
 use ansi_term::Color::{Red, Green, Black};
 use ansi_term::Style;
 use difference::{Changeset, Difference};
@@ -7,6 +10,7 @@ use itertools::EitherOrBoth;
 use itertools::Itertools;
 use wrap::wrap_str;
 
+#[derive(Debug)]
 pub enum Diff {
     Same(String),
     Add(String),
@@ -20,8 +24,16 @@ struct DiffStyling {
     remove: Style,
 }
 
-pub fn calculate_diff(left: &str, right: &str) -> Vec<Diff> {
-    let mut changeset = Changeset::new(left, right, "\n");
+pub fn calculate_line_diff(left: &str, right: &str) -> Vec<Diff> {
+    calculate_diff(left, right, "\n")
+}
+
+pub fn calculate_word_diff(left: &str, right: &str) -> Vec<Diff> {
+    calculate_diff(left, right, "")
+}
+
+fn calculate_diff(left: &str, right: &str, split: &str) -> Vec<Diff> {
+    let mut changeset = Changeset::new(left, right, split);
     let mut diffs = Vec::new();
     let mut previous: Option<Difference> = None;
 
@@ -86,6 +98,16 @@ pub fn calculate_diff(left: &str, right: &str) -> Vec<Diff> {
     diffs
 }
 
+fn _align_replacement<'a>(before: &'a String, after: &'a String)
+        -> Vec<(Option<&'a str>, Option<&'a str>)> {
+    let lines_b: Vec<&str> = before.split('\n').collect();
+    let lines_a: Vec<&str> = after.split('\n').collect();
+    let mut alignment = AlignmentMatrix::new(&lines_b, &lines_a);
+    println!("{}", alignment);
+    alignment.shortest_path();
+    return Vec::new();
+}
+
 pub fn print_diffs(diffs: &Vec<Diff>, context: usize, color: bool) {
     for change in diffs {
         match change {
@@ -118,14 +140,58 @@ pub fn print_diffs(diffs: &Vec<Diff>, context: usize, color: bool) {
                 }
             },
             Diff::Replace(before, after) => {
-                for line in before.split('\n') {
-                    let formatted = format!("- {}", line);
-                    println!("{}", Red.paint(formatted));
+                // println!("word diff = {:?}", calculate_word_diff(before, after));
+                _align_replacement(before, after);
+                // First print the 'removed' lines.
+                let mut decorated = Vec::new();
+                decorated.push(Red.paint("- "));
+                for word_change in calculate_word_diff(before, after) {
+                    match word_change {
+                        Diff::Same(same) => {
+                            decorated.push(Red.paint(same));
+                        },
+                        Diff::Add(_) => {
+                            // Ignored on the left side.
+                        },
+                        Diff::Remove(rem) => {
+                            decorated.push(Black.on(Red).paint(rem));
+                        },
+                        Diff::Replace(left, _) => {
+                            decorated.push(Black.on(Red).paint(left));
+                        }
+                    }
                 }
-                for line in after.split('\n') {
-                    let formatted = format!("+ {}", line);
-                    println!("{}", Green.paint(formatted));
+                println!("{}", ANSIStrings(&decorated));
+
+                // First print the 'removed' lines.
+                let mut decorated = Vec::new();
+                decorated.push(Green.paint("+ "));
+                for word_change in calculate_word_diff(before, after) {
+                    match word_change {
+                        Diff::Same(same) => {
+                            decorated.push(Green.paint(same));
+                        },
+                        Diff::Add(add) => {
+                            decorated.push(Black.on(Green).paint(add));
+                        },
+                        Diff::Remove(_) => {
+                            // Ignored on the right side.
+                        },
+                        Diff::Replace(_, right) => {
+                            decorated.push(Black.on(Green).paint(right));
+                        }
+                    }
                 }
+                println!("{}", ANSIStrings(&decorated));
+
+                // for line in before.split('\n') {
+                //     let formatted = format!("- {}", line);
+                //     println!("{}", Red.paint(formatted));
+                // }
+                // for line in after.split('\n') {
+                //     let formatted = format!("+ {}", line);
+                //     println!("{}", Green.paint(formatted));
+                // }
             },
         }
     }
@@ -228,7 +294,7 @@ pub fn print_diffs_side_by_side(diffs: &Vec<Diff>, max_line_count: usize,
     let lineno_width = (max_line_count as f32).log(10.0).ceil() as usize;
     let (term_width, _) = match term_size::dimensions_stdout() {
         Some(dim) => dim,
-        None => (80, 80), // TODO: should really disable all wrapping.
+        None => (120, 80), // TODO: should really disable all wrapping.
     };
     let line_width = ((term_width - sep_width) / 2) - (lineno_width + 2);
 
