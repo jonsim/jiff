@@ -1,7 +1,7 @@
 mod align;
 mod wrap;
 
-use align::AlignmentMatrix;
+use align::align;
 use ansi_term::ANSIStrings;
 use ansi_term::Color::{Red, Green, Black};
 use ansi_term::Style;
@@ -21,14 +21,16 @@ pub enum Diff {
 struct DiffStyling {
     same: Style,
     add: Style,
+    add_highlight: Style,
     remove: Style,
+    remove_highlight: Style,
 }
 
 pub fn calculate_line_diff(left: &str, right: &str) -> Vec<Diff> {
     calculate_diff(left, right, "\n")
 }
 
-pub fn calculate_word_diff(left: &str, right: &str) -> Vec<Diff> {
+pub fn calculate_char_diff(left: &str, right: &str) -> Vec<Diff> {
     calculate_diff(left, right, "")
 }
 
@@ -98,100 +100,92 @@ fn calculate_diff(left: &str, right: &str, split: &str) -> Vec<Diff> {
     diffs
 }
 
-fn _align_replacement<'a>(before: &'a String, after: &'a String)
-        -> Vec<(Option<&'a str>, Option<&'a str>)> {
-    let lines_b: Vec<&str> = before.split('\n').collect();
-    let lines_a: Vec<&str> = after.split('\n').collect();
-    let mut alignment = AlignmentMatrix::new(&lines_b, &lines_a);
-    println!("{}", alignment);
-    alignment.shortest_path();
-    return Vec::new();
-}
-
 pub fn print_diffs(diffs: &Vec<Diff>, context: usize, color: bool) {
+    let margin_styling = DiffStyling {
+        same:             Style::default(),
+        add:              Style::default(),
+        add_highlight:    Style::default(),
+        remove:           Style::default(),
+        remove_highlight: Style::default(),
+    };
+    let line_styling = DiffStyling {
+        same:             Style::default(),
+        add:              Green.normal(),
+        add_highlight:    Black.on(Green),
+        remove:           Red.normal(),
+        remove_highlight: Black.on(Red),
+    };
+
     for change in diffs {
         match change {
             Diff::Same(same) => {
-                let lines: Vec<&str> = same.split('\n').collect();
-                if context > 0 && lines.len() > (context*2) {
-                    for line in lines.iter().take(context) {
-                        println!("  {}", line);
-                    }
-                    println!("  ...");
-                    for line in lines.iter().skip(lines.len() - context) {
-                        println!("  {}", line);
-                    }
-                } else {
-                    for line in lines {
-                        println!("  {}", line);
-                    }
+                for line in same.split('\n') {
+                    let margin = margin_styling.same.paint("  ");
+                    let fmt = line_styling.same.paint(line);
+                    println!("{}{}", margin, fmt);
                 }
             },
             Diff::Add(add) => {
                 for line in add.split('\n') {
-                    let formatted = format!("+ {}", line);
-                    println!("{}", Green.paint(formatted));
+                    let margin = margin_styling.add.paint("+ ");
+                    let fmt = line_styling.add.paint(line);
+                    println!("{}{}", margin, fmt);
                 }
             },
             Diff::Remove(rem) => {
                 for line in rem.split('\n') {
-                    let formatted = format!("- {}", line);
-                    println!("{}", Red.paint(formatted));
+                    let margin = margin_styling.remove.paint("- ");
+                    let fmt = line_styling.remove.paint(line);
+                    println!("{}{}", margin, fmt);
                 }
             },
             Diff::Replace(before, after) => {
-                // println!("word diff = {:?}", calculate_word_diff(before, after));
-                _align_replacement(before, after);
-                // First print the 'removed' lines.
-                let mut decorated = Vec::new();
-                decorated.push(Red.paint("- "));
-                for word_change in calculate_word_diff(before, after) {
-                    match word_change {
-                        Diff::Same(same) => {
-                            decorated.push(Red.paint(same));
+                let lines_b = before.split('\n').collect();
+                let lines_a = after.split('\n').collect();
+                let alignment = align(&lines_b, &lines_a);
+                let mut fmts_b = Vec::new();
+                let mut fmts_a = Vec::new();
+                for aligned in alignment {
+                    match aligned {
+                        (Some(before), None) => {
+                            fmts_b.push(margin_styling.remove_highlight.paint("- "));
+                            fmts_b.push(line_styling.remove_highlight.paint(before));
+                            fmts_b.push(Style::default().paint("\n"));
                         },
-                        Diff::Add(_) => {
-                            // Ignored on the left side.
+                        (None, Some(after)) => {
+                            fmts_a.push(margin_styling.add_highlight.paint("+ "));
+                            fmts_a.push(line_styling.add_highlight.paint(after));
+                            fmts_a.push(Style::default().paint("\n"));
                         },
-                        Diff::Remove(rem) => {
-                            decorated.push(Black.on(Red).paint(rem));
+                        (Some(before), Some(after)) => {
+                            fmts_b.push(margin_styling.remove.paint("- "));
+                            fmts_a.push(margin_styling.add.paint("+ "));
+                            for char_change in calculate_char_diff(before, after) {
+                                match char_change {
+                                    Diff::Same(same) => {
+                                        fmts_b.push(line_styling.remove.paint(same.clone()));
+                                        fmts_a.push(line_styling.add.paint(same));
+                                    },
+                                    Diff::Add(add) => {
+                                        fmts_a.push(line_styling.add.paint(add));
+                                    },
+                                    Diff::Remove(rem) => {
+                                        fmts_b.push(line_styling.remove.paint(rem));
+                                    },
+                                    Diff::Replace(rem, add) => {
+                                        fmts_b.push(line_styling.remove.paint(rem));
+                                        fmts_a.push(line_styling.remove.paint(add));
+                                    }
+                                }
+                            }
+                            fmts_b.push(Style::default().paint("\n"));
+                            fmts_a.push(Style::default().paint("\n"));
                         },
-                        Diff::Replace(left, _) => {
-                            decorated.push(Black.on(Red).paint(left));
-                        }
+                        (None, None) => {},
                     }
                 }
-                println!("{}", ANSIStrings(&decorated));
-
-                // First print the 'removed' lines.
-                let mut decorated = Vec::new();
-                decorated.push(Green.paint("+ "));
-                for word_change in calculate_word_diff(before, after) {
-                    match word_change {
-                        Diff::Same(same) => {
-                            decorated.push(Green.paint(same));
-                        },
-                        Diff::Add(add) => {
-                            decorated.push(Black.on(Green).paint(add));
-                        },
-                        Diff::Remove(_) => {
-                            // Ignored on the right side.
-                        },
-                        Diff::Replace(_, right) => {
-                            decorated.push(Black.on(Green).paint(right));
-                        }
-                    }
-                }
-                println!("{}", ANSIStrings(&decorated));
-
-                // for line in before.split('\n') {
-                //     let formatted = format!("- {}", line);
-                //     println!("{}", Red.paint(formatted));
-                // }
-                // for line in after.split('\n') {
-                //     let formatted = format!("+ {}", line);
-                //     println!("{}", Green.paint(formatted));
-                // }
+                print!("{}", ANSIStrings(&fmts_b));
+                print!("{}", ANSIStrings(&fmts_a));
             },
         }
     }
@@ -276,14 +270,18 @@ pub fn print_diffs_side_by_side(diffs: &Vec<Diff>, max_line_count: usize,
                                 context: usize, color: bool) {
     // Define styling constants.
     let lineno_styling = DiffStyling {
-        same: Black.bold(),
-        add: Green.bold(),
-        remove: Red.bold(),
+        same:             Black.bold(),
+        add:              Green.bold(),
+        add_highlight:    Green.bold(),
+        remove:           Red.bold(),
+        remove_highlight: Red.bold(),
     };
     let line_styling = DiffStyling {
-        same: Style::default(),
-        add: Green.normal(),
-        remove: Red.normal(),
+        same:             Style::default(),
+        add:              Green.normal(),
+        remove:           Red.normal(),
+        add_highlight:    Green.on(Black),
+        remove_highlight: Red.on(Black),
     };
 
     // Define separation characters.
@@ -336,34 +334,40 @@ pub fn print_diffs_side_by_side(diffs: &Vec<Diff>, max_line_count: usize,
                 }
             },
             Diff::Replace(before, after) => {
-                for zipped in before.split('\n').zip_longest(after.split('\n')) {
-                    match zipped {
-                        EitherOrBoth::Both(line_l, line_r) => {
+                let lines_b = before.split('\n').collect();
+                let lines_a = after.split('\n').collect();
+                let alignment = align(&lines_b, &lines_a);
+                for aligned in alignment {
+                    match aligned {
+                        (Some(before), None) => {
+                            _print_side_by_side_line(
+                                    Some((lineno_l, lineno_styling.remove_highlight)),
+                                    Some((before, line_styling.remove_highlight)),
+                                    None,
+                                    None,
+                                    lineno_width, line_width, sep);
+                            lineno_l += 1;
+                        },
+                        (None, Some(after)) => {
+                            _print_side_by_side_line(
+                                    None,
+                                    None,
+                                    Some((lineno_r, lineno_styling.add_highlight)),
+                                    Some((after, line_styling.add_highlight)),
+                                    lineno_width, line_width, sep);
+                            lineno_r += 1;
+                        },
+                        (Some(before), Some(after)) => {
                             _print_side_by_side_line(
                                     Some((lineno_l, lineno_styling.remove)),
-                                    Some((line_l, line_styling.remove)),
+                                    Some((before, line_styling.remove)),
                                     Some((lineno_r, lineno_styling.add)),
-                                    Some((line_r, line_styling.add)),
+                                    Some((after, line_styling.add)),
                                     lineno_width, line_width, sep);
                             lineno_l += 1;
                             lineno_r += 1;
                         },
-                        EitherOrBoth::Left(line_l) => {
-                            _print_side_by_side_line(
-                                    Some((lineno_l, lineno_styling.remove)),
-                                    Some((line_l, line_styling.remove)),
-                                    None, None,
-                                    lineno_width, line_width, sep);
-                            lineno_l += 1;
-                        },
-                        EitherOrBoth::Right(line_r) => {
-                            _print_side_by_side_line(
-                                    None, None,
-                                    Some((lineno_r, lineno_styling.add)),
-                                    Some((line_r, line_styling.add)),
-                                    lineno_width, line_width, sep);
-                            lineno_r += 1;
-                        },
+                        (None, None) => {},
                     }
                 }
             },

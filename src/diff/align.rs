@@ -4,7 +4,7 @@ use std::fmt;
 use std::vec::Vec;
 
 #[derive(Clone)]
-pub struct Point {
+struct Point {
     x: usize,
     y: usize,
 }
@@ -58,14 +58,14 @@ impl fmt::Debug for AlignmentNode {
     }
 }
 
-pub struct AlignmentMatrix {
+struct AlignmentMatrix {
     line_matrix: Vec<Vec<AlignmentNode>>,
     line_matrix_x_len: usize,
     line_matrix_y_len: usize,
 }
 
 impl AlignmentMatrix {
-    pub fn new(lines_b: &Vec<&str>, lines_a: &Vec<&str>) -> AlignmentMatrix {
+    fn new(lines_b: &Vec<&str>, lines_a: &Vec<&str>) -> AlignmentMatrix {
         let lines_b_len = lines_b.len();
         let lines_a_len = lines_a.len();
         let line_matrix_x_len = lines_b_len * 2 + 1;
@@ -163,10 +163,11 @@ impl AlignmentMatrix {
             let next = &self.line_matrix[pos.id.x][pos.id.y].relax_parent;
             pos = &self.line_matrix[next.x][next.y];
         }
+        path.reverse();
         return path;
     }
 
-    pub fn shortest_path(&mut self) -> Vec<Point> {
+    fn shortest_path(&mut self) -> Vec<Point> {
         // Generate all nodes.
         let mut topo = self.root_adjacency();
         for adj in &topo {
@@ -182,7 +183,6 @@ impl AlignmentMatrix {
         // This is significantly better than conventional shortest-path finding
         // algorithms both in terms of time and memory complexity, by exploiting
         // the structure of the data.
-        println!("enumerating all nodes...");
         let mut i = 0usize;
         while i < topo.len() {
             let vertex = &self.line_matrix[topo[i].x][topo[i].y];
@@ -203,11 +203,11 @@ impl AlignmentMatrix {
         let exit_xy = &self.line_matrix[self.line_matrix_x_len-2][self.line_matrix_y_len-2];
         let exit_x  = &self.line_matrix[self.line_matrix_x_len-2][self.line_matrix_y_len-1];
         let exit_y  = &self.line_matrix[self.line_matrix_x_len-1][self.line_matrix_y_len-2];
-        println!("enumerated all {} nodes", topo.len());
-        println!("exits:");
-        println!("  {:?}", self.walk_path_debug(exit_xy));
-        println!("  {:?}", self.walk_path_debug(exit_x));
-        println!("  {:?}", self.walk_path_debug(exit_y));
+        // println!("enumerated all {} nodes", topo.len());
+        // println!("exits:");
+        // println!("  {:?}", self.walk_path_debug(exit_xy));
+        // println!("  {:?}", self.walk_path_debug(exit_x));
+        // println!("  {:?}", self.walk_path_debug(exit_y));
         if exit_x.relax_weight < exit_y.relax_weight && exit_x.relax_weight < exit_xy.relax_weight {
             return self.walk_path(exit_x);
         } else if exit_y.relax_weight < exit_xy.relax_weight {
@@ -229,4 +229,27 @@ impl fmt::Display for AlignmentMatrix {
         }
         Ok(())
     }
+}
+
+pub fn align<'a>(lines_b: &Vec<&'a str>, lines_a: &Vec<&'a str>) ->
+        Vec<(Option<&'a str>, Option<&'a str>)> {
+    let mut matrix = AlignmentMatrix::new(lines_b, lines_a);
+    let path = matrix.shortest_path();
+    let mut alignment = Vec::with_capacity(lines_b.len() + lines_a.len());
+    for point in path {
+        let before;
+        let after;
+        if point.x & 1 > 0 {
+            before = Some(lines_b[point.x / 2]);
+        } else {
+            before = None;
+        }
+        if point.y & 1 > 0 {
+            after = Some(lines_a[point.y / 2]);
+        } else {
+            after = None;
+        }
+        alignment.push((before, after));
+    }
+    return alignment;
 }
