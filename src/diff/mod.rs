@@ -253,8 +253,8 @@ fn _print_side_by_side_line(lineno_l: ANSIString,
             EitherOrBoth::Both(l, r) => (format!("{}", l),
                                          format!("{}", r)),
             EitherOrBoth::Left(l)    => (format!("{}", l),
-                                         ""),
-            EitherOrBoth::Right(r)   => ("",
+                                         String::from("")),
+            EitherOrBoth::Right(r)   => (String::from(""),
                                          format!("{}", r)),
         };
 
@@ -306,7 +306,7 @@ pub fn print_diffs_side_by_side(diffs: &Vec<Diff>, max_line_count: usize,
     // Print all diffs.
     let mut lineno_l = 1;
     let mut lineno_r = 1;
-    let empty_lineno = format!("{:w$} ", w=lineno_width);
+    let empty_lineno = format!("{:w$} ", "", w=lineno_width);
     for change in diffs {
         match change {
             Diff::Same(same) => {
