@@ -2,13 +2,13 @@ mod align;
 mod wrap;
 
 use align::align;
-use ansi_term::ANSIStrings;
+use ansi_term::{ANSIString, ANSIStrings};
 use ansi_term::Color::{Red, Green, Black};
 use ansi_term::Style;
 use difference::{Changeset, Difference};
 use itertools::EitherOrBoth;
 use itertools::Itertools;
-use wrap::wrap_str;
+use wrap::{wrap_str, wrap_ansistrings};
 
 #[derive(Debug)]
 pub enum Diff {
@@ -231,72 +231,40 @@ fn calc_max_line_width(diffs: &Vec<Diff>) -> (usize, usize){
     return max_width;
 }
 
-fn _print_side_by_side_line(lineno_l: Option<(usize, Style)>,
-                            line_l: Option<(&str, Style)>,
-                            lineno_r: Option<(usize, Style)>,
-                            line_r: Option<(&str, Style)>,
-                            lineno_width: usize,
+fn _print_side_by_side_line(lineno_l: ANSIString,
+                            lineno_r: ANSIString,
+                            wrapno_l: ANSIString,
+                            wrapno_r: ANSIString,
+                            line_l:   ANSIString,
+                            line_r:   ANSIString,
                             line_width: (usize, usize),
                             separator: &str) {
-    let mut lineno_l_fmt = match lineno_l {
-        Some((i, _)) => format!("{:w$}:", i, w=lineno_width),
-        None =>         format!("{:w$} ", "", w=lineno_width),
-    };
-    let mut lineno_r_fmt = match lineno_r {
-        Some((i, _)) => format!("{:w$}:", i, w=lineno_width),
-        None =>         format!("{:w$} ", "", w=lineno_width),
-    };
-    let line_l_iter = match line_l {
-        Some((s, _)) => wrap_str(s, line_width.0),
-        None => wrap_str("", 1),
-    };
-    let line_r_iter = match line_r {
-        Some((s, _)) => wrap_str(s, line_width.1),
-        None => wrap_str("", 1),
-    };
-    let lineno_l_style = match lineno_l {
-        Some((_, style)) => style,
-        None => Black.bold(),
-    };
-    let lineno_r_style = match lineno_r {
-        Some((_, style)) => style,
-        None => Black.bold(),
-    };
-    let line_l_style = match line_l {
-        Some((_, style)) => style,
-        None => Style::default(),
-    };
-    let line_r_style = match line_r {
-        Some((_, style)) => style,
-        None => Style::default(),
-    };
-    let mut first_line = true;
+    let mut margin_l = &lineno_l;
+    let mut margin_r = &lineno_r;
+    let line_l_slice = [line_l];
+    let line_r_slice = [line_r];
+    let line_l_ansis = ANSIStrings(&line_l_slice);
+    let line_r_ansis = ANSIStrings(&line_r_slice);
+    let line_l_iter = wrap_ansistrings(&line_l_ansis, line_width.0);
+    let line_r_iter = wrap_ansistrings(&line_r_ansis, line_width.1);
+    let mut first_iteration = true;
     for zipped in line_l_iter.zip_longest(line_r_iter) {
-        let (wrap_l_fmt, wrap_r_fmt) = match zipped {
-            EitherOrBoth::Both(l, r) => {
-                (format!("{:w$}", l, w=line_width.0),
-                 format!("{:w$}", r, w=line_width.1))
-            },
-            EitherOrBoth::Left(l) => {
-                (format!("{:w$}", l,  w=line_width.0),
-                 format!("{:w$}", "", w=line_width.1))
-            },
-            EitherOrBoth::Right(r) => {
-                (format!("{:w$}", "", w=line_width.0),
-                 format!("{:w$}", r,  w=line_width.1))
-            },
+        let (wrapped_l, wrapped_r) = match zipped {
+            EitherOrBoth::Both(l, r) => (format!("{}", l),
+                                         format!("{}", r)),
+            EitherOrBoth::Left(l)    => (format!("{}", l),
+                                         ""),
+            EitherOrBoth::Right(r)   => ("",
+                                         format!("{}", r)),
         };
 
+        // TODO: optimize to expoit ANSIStrings
         println!("{} {}{}{} {}",
-                 lineno_l_style.paint(&lineno_l_fmt),
-                 line_l_style.paint(&wrap_l_fmt),
-                 separator,
-                 lineno_r_style.paint(&lineno_r_fmt),
-                 line_r_style.paint(&wrap_r_fmt));
-        if first_line {
-            lineno_l_fmt = format!("{:w$} ", "", w=lineno_width);
-            lineno_r_fmt = format!("{:w$} ", "", w=lineno_width);
-            first_line = false;
+                 margin_l, wrapped_l, separator, margin_r, wrapped_r);
+        if first_iteration {
+            margin_l = &wrapno_l;
+            margin_r = &wrapno_r;
+            first_iteration = true;
         }
     }
 }
@@ -338,39 +306,50 @@ pub fn print_diffs_side_by_side(diffs: &Vec<Diff>, max_line_count: usize,
     // Print all diffs.
     let mut lineno_l = 1;
     let mut lineno_r = 1;
+    let empty_lineno = format!("{:w$} ", w=lineno_width);
     for change in diffs {
         match change {
             Diff::Same(same) => {
                 for line in same.split('\n') {
+                    let lineno_l_fmt = format!("{:w$}:", lineno_l, w=lineno_width);
+                    let lineno_r_fmt = format!("{:w$}:", lineno_r, w=lineno_width);
                     _print_side_by_side_line(
-                            Some((lineno_l, lineno_styling.same)),
-                            Some((line, line_styling.same)),
-                            Some((lineno_r, lineno_styling.same)),
-                            Some((line, line_styling.same)),
-                            lineno_width, line_width, sep);
+                            lineno_styling.same.paint(&lineno_l_fmt),
+                            lineno_styling.same.paint(&lineno_r_fmt),
+                            lineno_styling.same.paint(&empty_lineno),
+                            lineno_styling.same.paint(&empty_lineno),
+                            line_styling.same.paint(line),
+                            line_styling.same.paint(line),
+                            line_width, sep);
                     lineno_l += 1;
                     lineno_r += 1;
                 }
             },
             Diff::Add(add) => {
                 for line_r in add.split('\n') {
+                    let lineno_r_fmt = format!("{:w$}:", lineno_r, w=lineno_width);
                     _print_side_by_side_line(
-                            None,
-                            None,
-                            Some((lineno_r, lineno_styling.add)),
-                            Some((line_r, line_styling.add)),
-                            lineno_width, line_width, sep);
+                            lineno_styling.same.paint(&empty_lineno),
+                            lineno_styling.add.paint(&lineno_r_fmt),
+                            lineno_styling.same.paint(&empty_lineno),
+                            lineno_styling.add.paint(&empty_lineno),
+                            line_styling.same.paint(""),
+                            line_styling.add.paint(line_r),
+                            line_width, sep);
                     lineno_r += 1;
                 }
             },
             Diff::Remove(rem) => {
                 for line_l in rem.split('\n') {
+                    let lineno_l_fmt = format!("{:w$}:", lineno_l, w=lineno_width);
                     _print_side_by_side_line(
-                            Some((lineno_l, lineno_styling.remove)),
-                            Some((line_l, line_styling.remove)),
-                            None,
-                            None,
-                            lineno_width, line_width, sep);
+                            lineno_styling.remove.paint(&lineno_l_fmt),
+                            lineno_styling.same.paint(&empty_lineno),
+                            lineno_styling.remove.paint(&empty_lineno),
+                            lineno_styling.same.paint(&empty_lineno),
+                            line_styling.remove.paint(line_l),
+                            line_styling.same.paint(""),
+                            line_width, sep);
                     lineno_l += 1;
                 }
             },
@@ -381,30 +360,40 @@ pub fn print_diffs_side_by_side(diffs: &Vec<Diff>, max_line_count: usize,
                 for aligned in alignment {
                     match aligned {
                         (Some(line_l), None) => {
+                            let lineno_l_fmt = format!("{:w$}:", lineno_l, w=lineno_width);
                             _print_side_by_side_line(
-                                    Some((lineno_l, lineno_styling.remove_highlight)),
-                                    Some((line_l, line_styling.remove_highlight)),
-                                    None,
-                                    None,
-                                    lineno_width, line_width, sep);
+                                    lineno_styling.remove_highlight.paint(&lineno_l_fmt),
+                                    lineno_styling.same.paint(&empty_lineno),
+                                    lineno_styling.remove_highlight.paint(&empty_lineno),
+                                    lineno_styling.same.paint(&empty_lineno),
+                                    line_styling.remove_highlight.paint(line_l),
+                                    line_styling.same.paint(""),
+                                    line_width, sep);
                             lineno_l += 1;
                         },
                         (None, Some(line_r)) => {
+                            let lineno_r_fmt = format!("{:w$}:", lineno_r, w=lineno_width);
                             _print_side_by_side_line(
-                                    None,
-                                    None,
-                                    Some((lineno_r, lineno_styling.add_highlight)),
-                                    Some((line_r, line_styling.add_highlight)),
-                                    lineno_width, line_width, sep);
+                                    lineno_styling.same.paint(&empty_lineno),
+                                    lineno_styling.add_highlight.paint(&lineno_r_fmt),
+                                    lineno_styling.same.paint(&empty_lineno),
+                                    lineno_styling.add_highlight.paint(&empty_lineno),
+                                    line_styling.same.paint(""),
+                                    line_styling.add_highlight.paint(line_r),
+                                    line_width, sep);
                             lineno_r += 1;
                         },
                         (Some(line_l), Some(line_r)) => {
+                            let lineno_l_fmt = format!("{:w$}:", lineno_l, w=lineno_width);
+                            let lineno_r_fmt = format!("{:w$}:", lineno_r, w=lineno_width);
                             _print_side_by_side_line(
-                                    Some((lineno_l, lineno_styling.remove)),
-                                    Some((line_l, line_styling.remove)),
-                                    Some((lineno_r, lineno_styling.add)),
-                                    Some((line_r, line_styling.add)),
-                                    lineno_width, line_width, sep);
+                                    lineno_styling.remove.paint(&lineno_l_fmt),
+                                    lineno_styling.add.paint(&lineno_r_fmt),
+                                    lineno_styling.remove.paint(&empty_lineno),
+                                    lineno_styling.add.paint(&empty_lineno),
+                                    line_styling.remove.paint(line_l),
+                                    line_styling.add.paint(line_r),
+                                    line_width, sep);
                             lineno_l += 1;
                             lineno_r += 1;
                         },
