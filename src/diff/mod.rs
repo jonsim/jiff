@@ -3,7 +3,7 @@ mod wrap;
 
 use align::align;
 use ansi_term::{ANSIString, ANSIStrings};
-use ansi_term::Color::{Red, Green, Black};
+use ansi_term::Color::{Red, Green, Black, Fixed};
 use ansi_term::Style;
 use difference::{Changeset, Difference};
 use itertools::EitherOrBoth;
@@ -160,24 +160,8 @@ pub fn print_diffs(diffs: &Vec<Diff>, context: usize, color: bool) {
                         (Some(before), Some(after)) => {
                             fmts_b.push(margin_styling.remove.paint("- "));
                             fmts_a.push(margin_styling.add.paint("+ "));
-                            for char_change in calculate_char_diff(before, after) {
-                                match char_change {
-                                    Diff::Same(same) => {
-                                        fmts_b.push(line_styling.remove.paint(same.clone()));
-                                        fmts_a.push(line_styling.add.paint(same));
-                                    },
-                                    Diff::Add(add) => {
-                                        fmts_a.push(line_styling.add.paint(add));
-                                    },
-                                    Diff::Remove(rem) => {
-                                        fmts_b.push(line_styling.remove.paint(rem));
-                                    },
-                                    Diff::Replace(rem, add) => {
-                                        fmts_b.push(line_styling.remove.paint(rem));
-                                        fmts_a.push(line_styling.remove.paint(add));
-                                    }
-                                }
-                            }
+                            _style_diff_line(before, after, &line_styling,
+                                             &mut fmts_b, &mut fmts_a);
                             fmts_b.push(Style::default().paint("\n"));
                             fmts_a.push(Style::default().paint("\n"));
                         },
@@ -235,27 +219,20 @@ fn _print_side_by_side_line(lineno_l: ANSIString,
                             lineno_r: ANSIString,
                             wrapno_l: ANSIString,
                             wrapno_r: ANSIString,
-                            line_l:   ANSIString,
-                            line_r:   ANSIString,
+                            line_l:   &Vec<ANSIString>,
+                            line_r:   &Vec<ANSIString>,
                             line_width: (usize, usize),
                             separator: &str) {
     let mut margin_l = &lineno_l;
     let mut margin_r = &lineno_r;
-    let line_l_slice = [line_l];
-    let line_r_slice = [line_r];
-    let line_l_ansis = ANSIStrings(&line_l_slice);
-    let line_r_ansis = ANSIStrings(&line_r_slice);
-    let line_l_iter = wrap_ansistrings(&line_l_ansis, line_width.0);
-    let line_r_iter = wrap_ansistrings(&line_r_ansis, line_width.1);
+    let line_l_iter = wrap_ansistrings(line_l, line_width.0);
+    let line_r_iter = wrap_ansistrings(line_r, line_width.1);
     let mut first_iteration = true;
     for zipped in line_l_iter.zip_longest(line_r_iter) {
         let (wrapped_l, wrapped_r) = match zipped {
-            EitherOrBoth::Both(l, r) => (format!("{}", l),
-                                         format!("{}", r)),
-            EitherOrBoth::Left(l)    => (format!("{}", l),
-                                         String::from("")),
-            EitherOrBoth::Right(r)   => (String::from(""),
-                                         format!("{}", r)),
+            EitherOrBoth::Both(l, r) => (l, r),
+            EitherOrBoth::Left(l)    => (l, String::from("")),
+            EitherOrBoth::Right(r)   => (String::from(""), r),
         };
 
         // TODO: optimize to expoit ANSIStrings
@@ -265,6 +242,28 @@ fn _print_side_by_side_line(lineno_l: ANSIString,
             margin_l = &wrapno_l;
             margin_r = &wrapno_r;
             first_iteration = true;
+        }
+    }
+}
+
+fn _style_diff_line<'u>(before: &'u str, after: &'u str, styling: &DiffStyling,
+        before_fmts: &mut Vec<ANSIString<'u>>, after_fmts: &mut Vec<ANSIString<'u>>) {
+    for char_change in calculate_char_diff(before, after) {
+        match char_change {
+            Diff::Same(same) => {
+                before_fmts.push(styling.remove.paint(same.clone()));
+                after_fmts.push( styling.add.paint(same));
+            },
+            Diff::Add(add) => {
+                after_fmts.push( styling.add_highlight.paint(add));
+            },
+            Diff::Remove(rem) => {
+                before_fmts.push(styling.remove_highlight.paint(rem));
+            },
+            Diff::Replace(rem, add) => {
+                before_fmts.push(styling.remove_highlight.paint(rem));
+                after_fmts.push( styling.add_highlight.paint(add));
+            }
         }
     }
 }
@@ -281,10 +280,22 @@ pub fn print_diffs_side_by_side(diffs: &Vec<Diff>, max_line_count: usize,
     };
     let line_styling = DiffStyling {
         same:             Style::default(),
-        add:              Green.normal(),
-        remove:           Red.normal(),
-        add_highlight:    Green.on(Black),
-        remove_highlight: Red.on(Black),
+        // add:              Fixed(10).normal(),
+        // remove:           Fixed( 9).normal(),
+        // add_highlight:    Style::default().on(Fixed(22)),
+        // remove_highlight: Style::default().on(Fixed(88)),
+
+        // add:              Black.on(Fixed(114)),
+        // remove:           Black.on(Fixed(203)),
+        // add_highlight:    Black.on(Fixed( 40)),
+        // remove_highlight: Black.on(Fixed(160)),
+
+        add:              Fixed(157).normal(), // 194
+        remove:           Fixed(217).normal(), // 224
+        // add_highlight:    Fixed( 40).on(Fixed(235)),
+        // remove_highlight: Fixed(160).on(Fixed(235)),
+        add_highlight:    Fixed(157).reverse(),
+        remove_highlight: Fixed(217).reverse(),
     };
 
     // Define separation characters.
@@ -318,8 +329,8 @@ pub fn print_diffs_side_by_side(diffs: &Vec<Diff>, max_line_count: usize,
                             lineno_styling.same.paint(&lineno_r_fmt),
                             lineno_styling.same.paint(&empty_lineno),
                             lineno_styling.same.paint(&empty_lineno),
-                            line_styling.same.paint(line),
-                            line_styling.same.paint(line),
+                            &vec![line_styling.same.paint(line)],
+                            &vec![line_styling.same.paint(line)],
                             line_width, sep);
                     lineno_l += 1;
                     lineno_r += 1;
@@ -330,11 +341,11 @@ pub fn print_diffs_side_by_side(diffs: &Vec<Diff>, max_line_count: usize,
                     let lineno_r_fmt = format!("{:w$}:", lineno_r, w=lineno_width);
                     _print_side_by_side_line(
                             lineno_styling.same.paint(&empty_lineno),
-                            lineno_styling.add.paint(&lineno_r_fmt),
+                            lineno_styling.add_highlight.paint(&lineno_r_fmt),
                             lineno_styling.same.paint(&empty_lineno),
-                            lineno_styling.add.paint(&empty_lineno),
-                            line_styling.same.paint(""),
-                            line_styling.add.paint(line_r),
+                            lineno_styling.add_highlight.paint(&empty_lineno),
+                            &vec![line_styling.same.paint("")],
+                            &vec![line_styling.add_highlight.paint(line_r)],
                             line_width, sep);
                     lineno_r += 1;
                 }
@@ -343,12 +354,12 @@ pub fn print_diffs_side_by_side(diffs: &Vec<Diff>, max_line_count: usize,
                 for line_l in rem.split('\n') {
                     let lineno_l_fmt = format!("{:w$}:", lineno_l, w=lineno_width);
                     _print_side_by_side_line(
-                            lineno_styling.remove.paint(&lineno_l_fmt),
+                            lineno_styling.remove_highlight.paint(&lineno_l_fmt),
                             lineno_styling.same.paint(&empty_lineno),
-                            lineno_styling.remove.paint(&empty_lineno),
+                            lineno_styling.remove_highlight.paint(&empty_lineno),
                             lineno_styling.same.paint(&empty_lineno),
-                            line_styling.remove.paint(line_l),
-                            line_styling.same.paint(""),
+                            &vec![line_styling.remove_highlight.paint(line_l)],
+                            &vec![line_styling.same.paint("")],
                             line_width, sep);
                     lineno_l += 1;
                 }
@@ -366,8 +377,8 @@ pub fn print_diffs_side_by_side(diffs: &Vec<Diff>, max_line_count: usize,
                                     lineno_styling.same.paint(&empty_lineno),
                                     lineno_styling.remove_highlight.paint(&empty_lineno),
                                     lineno_styling.same.paint(&empty_lineno),
-                                    line_styling.remove_highlight.paint(line_l),
-                                    line_styling.same.paint(""),
+                                    &vec![line_styling.remove_highlight.paint(line_l)],
+                                    &vec![line_styling.same.paint("")],
                                     line_width, sep);
                             lineno_l += 1;
                         },
@@ -378,21 +389,25 @@ pub fn print_diffs_side_by_side(diffs: &Vec<Diff>, max_line_count: usize,
                                     lineno_styling.add_highlight.paint(&lineno_r_fmt),
                                     lineno_styling.same.paint(&empty_lineno),
                                     lineno_styling.add_highlight.paint(&empty_lineno),
-                                    line_styling.same.paint(""),
-                                    line_styling.add_highlight.paint(line_r),
+                                    &vec![line_styling.same.paint("")],
+                                    &vec![line_styling.add_highlight.paint(line_r)],
                                     line_width, sep);
                             lineno_r += 1;
                         },
                         (Some(line_l), Some(line_r)) => {
                             let lineno_l_fmt = format!("{:w$}:", lineno_l, w=lineno_width);
                             let lineno_r_fmt = format!("{:w$}:", lineno_r, w=lineno_width);
+                            let mut fmt_l = Vec::new();
+                            let mut fmt_r = Vec::new();
+                            _style_diff_line(line_l, line_r, &line_styling,
+                                             &mut fmt_l, &mut fmt_r);
                             _print_side_by_side_line(
                                     lineno_styling.remove.paint(&lineno_l_fmt),
                                     lineno_styling.add.paint(&lineno_r_fmt),
                                     lineno_styling.remove.paint(&empty_lineno),
                                     lineno_styling.add.paint(&empty_lineno),
-                                    line_styling.remove.paint(line_l),
-                                    line_styling.add.paint(line_r),
+                                    &fmt_l,
+                                    &fmt_r,
                                     line_width, sep);
                             lineno_l += 1;
                             lineno_r += 1;

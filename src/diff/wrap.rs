@@ -36,7 +36,8 @@ pub fn wrap_str<'a>(s: &'a str, width: usize) -> WrappedStrIter<'a> {
 }
 
 pub struct WrappedANSIStringsIter<'u, 's> where 'u: 's  {
-    s: &'s ANSIStrings<'u>,
+    s: &'s Vec<ANSIString<'u>>,
+    s_ansi: ANSIStrings<'u>,
     unstyled_len: usize,
     wrap_at: usize,
     cur_pos: usize,
@@ -55,11 +56,11 @@ impl<'s, 'u> Iterator for WrappedANSIStringsIter<'s, 'u> where 'u: 's  {
         if self.unstyled_len <= self.wrap_at {
             self.cur_pos = self.unstyled_len;
             let padding_required = self.wrap_at - self.unstyled_len;
-            let fmt = format!("{}{:w$}", self.s, "", w=padding_required);
+            let fmt = format!("{}{:w$}", self.s_ansi, "", w=padding_required);
             return Some(fmt);
         } else {
             self.cur_pos = min(self.cur_pos + self.wrap_at, self.unstyled_len);
-            let split = ansi_term::sub_string(start_pos, self.cur_pos, self.s);
+            let split = ansi_term::sub_string(start_pos, self.cur_pos, &self.s_ansi);
             let ansi = ANSIStrings(split.as_slice());
             let padding_required = self.wrap_at - ansi_term::unstyled_len(&ansi);
             let fmt = format!("{}{:w$}", ansi, "", w=padding_required);
@@ -68,11 +69,12 @@ impl<'s, 'u> Iterator for WrappedANSIStringsIter<'s, 'u> where 'u: 's  {
     }
 }
 
-pub fn wrap_ansistrings<'s, 'u>(s: &'s ANSIStrings<'u>, width: usize)
+pub fn wrap_ansistrings<'s, 'u>(s: &'s Vec<ANSIString<'u>>, width: usize)
         -> WrappedANSIStringsIter<'s, 'u> where 'u: 's {
     WrappedANSIStringsIter {
         s: s,
-        unstyled_len: ansi_term::unstyled_len(&s),
+        s_ansi: ANSIStrings(s.as_slice()),
+        unstyled_len: ansi_term::unstyled_len(&ANSIStrings(s.as_slice())),
         wrap_at: width,
         cur_pos: 0,
         output_once: false,
