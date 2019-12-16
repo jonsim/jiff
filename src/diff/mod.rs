@@ -231,8 +231,8 @@ fn _print_side_by_side_line(lineno_l: ANSIString,
     for zipped in line_l_iter.zip_longest(line_r_iter) {
         let (wrapped_l, wrapped_r) = match zipped {
             EitherOrBoth::Both(l, r) => (l, r),
-            EitherOrBoth::Left(l)    => (l, String::from("")),
-            EitherOrBoth::Right(r)   => (String::from(""), r),
+            EitherOrBoth::Left(l)    => (l, " ".repeat(line_width.1)),
+            EitherOrBoth::Right(r)   => (" ".repeat(line_width.0), r),
         };
 
         // TODO: optimize to expoit ANSIStrings
@@ -247,7 +247,8 @@ fn _print_side_by_side_line(lineno_l: ANSIString,
 }
 
 fn _style_diff_line<'u>(before: &'u str, after: &'u str, styling: &DiffStyling,
-        before_fmts: &mut Vec<ANSIString<'u>>, after_fmts: &mut Vec<ANSIString<'u>>) {
+        before_fmts: &mut Vec<ANSIString<'u>>,
+        after_fmts: &mut Vec<ANSIString<'u>>) {
     for char_change in calculate_char_diff(before, after) {
         match char_change {
             Diff::Same(same) => {
@@ -317,7 +318,7 @@ pub fn print_diffs_side_by_side(diffs: &Vec<Diff>, max_line_count: usize,
     // Print all diffs.
     let mut lineno_l = 1;
     let mut lineno_r = 1;
-    let empty_lineno = format!("{:w$} ", "", w=lineno_width);
+    let empty_lineno = " ".repeat(lineno_width + 1);
     for change in diffs {
         match change {
             Diff::Same(same) => {

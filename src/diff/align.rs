@@ -143,18 +143,6 @@ impl AlignmentMatrix {
         return adjacency;
     }
 
-    fn walk_path_debug<'a>(&'a self, exit: &'a AlignmentNode) -> Vec<&'a AlignmentNode> {
-        // TODO: delete this method once algorithm is finalised.
-        let mut path = Vec::with_capacity(self.line_matrix_x_len / 2 + self.line_matrix_y_len / 2);
-        let mut pos = exit;
-        while pos.id.x > 0 || pos.id.y > 0 {
-            path.push(pos);
-            let next = &self.line_matrix[pos.id.x][pos.id.y].relax_parent;
-            pos = &self.line_matrix[next.x][next.y];
-        }
-        return path;
-    }
-
     fn walk_path(&self, exit: &AlignmentNode) -> Vec<Point> {
         let mut path = Vec::with_capacity(self.line_matrix_x_len / 2 + self.line_matrix_y_len / 2);
         let mut pos = exit;
@@ -168,34 +156,38 @@ impl AlignmentMatrix {
     }
 
     fn shortest_path(&mut self) -> Vec<Point> {
-        // Generate all nodes.
-        let mut topo = self.root_adjacency();
-        for adj in &topo {
+        // Initialize the root adjacency nodes (i.e. those accessible from
+        // the single source node).
+        for adj in self.root_adjacency() {
             let vertex = &mut self.line_matrix[adj.x][adj.y];
             vertex.relax_weight = 0;
         }
         // Walk all nodes.
-        // As the root adjacency list (or the immediate children of the graph's
-        // single source) is topologically sorted, and the adjacency list is
-        // always topologically sorted, the walk will be in topological order.
-        // This permits a single pass through the line matrix (which is in fact
-        // a weighted DAG) to relax all edges and compute the shortest path.
-        // This is significantly better than conventional shortest-path finding
-        // algorithms both in terms of time and memory complexity, by exploiting
-        // the structure of the data.
-        let mut i = 0usize;
-        while i < topo.len() {
-            let vertex = &self.line_matrix[topo[i].x][topo[i].y];
-            let vertex_id = vertex.id.clone();
-            assert!((vertex_id.x | vertex_id.y) & 1 == 1, "vertex is an invalid node");
-            let vertex_weight = vertex.relax_weight;
-            let adjacency = self.adjacency(vertex);
-            for adj in adjacency {
-                let child = &mut self.line_matrix[adj.x][adj.y];
-                child.relax(&vertex_id, vertex_weight);
-                topo.push(adj);
+        // The line matrix is iterated in topological order, line by line, since
+        // the adjacency for a given node may never go backwards (decrease x or
+        // y). The iteration order is not the most obvious topological ordering
+        // of the matrix, but it is the most cache friendly.
+        // Iterating in topological order permits a single pass through the line
+        // matrix (a weighted DAG) to relax all edges and compute the shortest
+        // path. This is significantly better than conventional shortest-path
+        // finding algorithms both in terms of time and memory complexity, by
+        // exploiting the structure of the data. The walk will visit
+        // 3|A||B| + |A| + |B| nodes, relaxing at most 3 nodes from each (i.e.
+        // O(|A||B|) or linear complexity).
+        for x in 0..self.line_matrix_x_len {
+            for y in 0..self.line_matrix_y_len {
+                if (x | y) & 1 == 0 {
+                    continue;
+                }
+                let vertex = &self.line_matrix[x][y];
+                let vertex_id = vertex.id.clone();
+                let vertex_weight = vertex.relax_weight;
+                let adjacency = self.adjacency(vertex);
+                for adj in adjacency {
+                    let child = &mut self.line_matrix[adj.x][adj.y];
+                    child.relax(&vertex_id, vertex_weight);
+                }
             }
-            i += 1;
         }
         // Derive the shortest path from the walk.
         // There are three legal exit points, so choose the best of these and
@@ -203,11 +195,6 @@ impl AlignmentMatrix {
         let exit_xy = &self.line_matrix[self.line_matrix_x_len-2][self.line_matrix_y_len-2];
         let exit_x  = &self.line_matrix[self.line_matrix_x_len-2][self.line_matrix_y_len-1];
         let exit_y  = &self.line_matrix[self.line_matrix_x_len-1][self.line_matrix_y_len-2];
-        // println!("enumerated all {} nodes", topo.len());
-        // println!("exits:");
-        // println!("  {:?}", self.walk_path_debug(exit_xy));
-        // println!("  {:?}", self.walk_path_debug(exit_x));
-        // println!("  {:?}", self.walk_path_debug(exit_y));
         if exit_x.relax_weight < exit_y.relax_weight && exit_x.relax_weight < exit_xy.relax_weight {
             return self.walk_path(exit_x);
         } else if exit_y.relax_weight < exit_xy.relax_weight {
