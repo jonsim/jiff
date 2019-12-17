@@ -304,7 +304,7 @@ pub fn print_diffs_side_by_side(diffs: &Vec<Diff>, max_line_count: usize,
     let sep_width = sep.len();
 
     // Caclulcate widths to draw to.
-    let lineno_width = (max_line_count as f32).log(10.0).ceil() as usize;
+    let lineno_width = (max_line_count as f32).log(10.0).floor() as usize + 1;
     let line_width = match term_size::dimensions_stdout() {
         Some((term_width, _)) => {
             let line_width = ((term_width - sep_width) / 2) - (lineno_width + 2);
