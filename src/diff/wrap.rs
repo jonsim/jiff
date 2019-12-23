@@ -59,11 +59,12 @@ impl<'s, 'u> Iterator for WrappedANSIStringsIter<'s, 'u> where 'u: 's  {
             let fmt = format!("{}{:w$}", self.s_ansi, "", w=padding_required);
             return Some(fmt);
         } else {
-            self.cur_pos = min(self.cur_pos + self.wrap_at, self.unstyled_len);
-            let split = ansi_term::sub_string(start_pos, self.cur_pos, &self.s_ansi);
-            let ansi = ANSIStrings(split.as_slice());
-            let padding_required = self.wrap_at - ansi_term::unstyled_len(&ansi);
-            let fmt = format!("{}{:w$}", ansi, "", w=padding_required);
+            let split = ansi_term::sub_string(start_pos, self.wrap_at, &self.s_ansi);
+            let split_fmt = ANSIStrings(split.as_slice());
+            let split_len = ansi_term::unstyled_len(&split_fmt);
+            self.cur_pos += split_len;
+            let padding_required = self.wrap_at - split_len;
+            let fmt = format!("{}{:w$}", split_fmt, "", w=padding_required);
             return Some(fmt);
         }
     }
