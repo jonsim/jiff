@@ -1,0 +1,5 @@
+goodbye cruel
+ins foo bar
+ins hello world
+ins text strings
+great example

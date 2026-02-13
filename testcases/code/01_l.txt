@@ -1,0 +1,116 @@
+extern crate clap;
+extern crate difference;
+
+use std::fs;
+use std::process;
+use clap::{Arg, App};
+use difference::{Changeset, Difference};
+
+fn read_file_or_die(path: &str) -> String {
+    match fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(ref error)  => {
+            eprintln!("Could not read {}: {}", path, error);
+            process::exit(1);
+        },
+    }
+}
+
+fn calc_diff(lpath: &str, rpath: &str) -> Changeset {
+    let lfile = read_file_or_die(lpath);
+    let rfile = read_file_or_die(rpath);
+    //println!("lpath: {}\n{}\nrpath: {}\n{}\n", lpath, lfile, rpath, rfile);
+    Changeset::new(&lfile, &rfile, "\n")
+}
+
+fn print_diff_side_by_side(changeset: &Changeset) {
+    println!("diffs: {:?}", changeset.diffs);
+
+    let mut lfile_lc: u32 = 1;
+    let mut rfile_lc: u32 = 1;
+    for change in &changeset.diffs {
+        match change {
+            Difference::Same(ref lines) => {
+                for line in lines.split('\n') {
+                    println!("l{}| {}", lfile_lc, line);
+                    println!("r{}| {}", rfile_lc, line);
+                    lfile_lc += 1;
+                    rfile_lc += 1;
+                }
+            }
+            Difference::Add(ref lines) => {
+                for line in lines.split('\n') {
+                    println!("r{}| {}", rfile_lc, line);
+                    rfile_lc += 1;
+                }
+            }
+            Difference::Rem(ref lines) => {
+                for line in lines.split('\n') {
+                    println!("l{}| {}", lfile_lc, line);
+                    lfile_lc += 1;
+                }
+            }
+        }
+    }
+}
+
+fn print_diff(changeset: &Changeset) {
+    println!("diffs: {:?}", changeset.diffs);
+
+    for change in &changeset.diffs {
+        match change {
+            Difference::Same(ref lines) => {
+                for line in lines.split('\n') {
+                    println!("  {}", line);
+                }
+            }
+            Difference::Add(ref lines) => {
+                for line in lines.split('\n') {
+                    println!("+ {}", line);
+                }
+            }
+            Difference::Rem(ref lines) => {
+                for line in lines.split('\n') {
+                    println!("- {}", line);
+                }
+            }
+        }
+    }
+}
+
+fn main() {
+    // Handle command line.
+    let matches = App::new("jiff")
+                    .version("1.0")
+                    .about("Colored diff tool")
+                    .arg(Arg::with_name("git-diff")
+                        .short("g")
+                        .long("git-diff")
+                        .help("Enable git diff mode"))
+                    .arg(Arg::with_name("side-by-side")
+                        .short("s")
+                        .long("side-by-side")
+                        .help("Enable side-by-side diffing"))
+                    .arg(Arg::with_name("no-color")
+                        .long("no-color")
+                        .help("Disables colorization of the output"))
+                    .arg(Arg::with_name("file1")
+                        .required(true)
+                        .help("Left file"))
+                    .arg(Arg::with_name("file2")
+                        .required(true)
+                        .help("Right file"))
+                    .get_matches();
+    let lpath = matches.value_of("file1").expect("file1 is required");;
+    let rpath = matches.value_of("file2").expect("file2 is required");
+
+    // Calculate the changeset.
+    let changeset = calc_diff(lpath, rpath);
+
+    // Print the changeset.
+    if matches.is_present("side-by-side") {
+        print_diff_side_by_side(&changeset);
+    } else {
+        print_diff(&changeset);
+    }
+}
