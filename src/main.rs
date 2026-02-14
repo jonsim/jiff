@@ -6,13 +6,17 @@ use std::process;
 use clap::{Arg, App};
 
 fn read_file_or_die(path: &str) -> String {
-    match fs::read_to_string(path) {
+    let mut content = match fs::read_to_string(path) {
         Ok(content) => content,
         Err(ref error)  => {
             eprintln!("Could not read {}: {}", path, error);
             process::exit(1);
         },
+    };
+    if content.ends_with('\n') {
+        content.pop();
     }
+    content
 }
 
 fn main() {

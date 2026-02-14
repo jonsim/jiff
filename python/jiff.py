@@ -5,7 +5,10 @@ import diff
 def read_file_or_die(path):
     try:
         with open(path, 'r', encoding='utf-8') as file:
-            return file.read()
+            content = file.read()
+            if content[-1] == '\n':
+                content = content[:-1]
+            return content
     except Exception as error:
         print(f"Could not read {path}: {error}", file=sys.stderr)
         sys.exit(1)
