@@ -2,7 +2,7 @@ import difflib
 import math
 import os
 import sys
-from typing import List, Optional, Tuple
+from typing import List, Literal, Optional, Tuple
 
 debug = os.environ.get("JIFF_DEBUG", "0") == "1"
 
@@ -80,11 +80,10 @@ class AlignmentMatrix:
                 elif aligned_x and aligned_y:
                     line_b = lines_b[x // 2]
                     line_a = lines_a[y // 2]
-                    changeset = list(difflib.ndiff(line_b, line_a))
-                    edit_dist = sum(1 for _ in changeset if _[0] != ' ')
-                    operations = sum(1 for _ in changeset if _[0] in ['+', '-'])
-                    if debug: print(f"  Changeset for {line_b!r} -> {line_a!r}:\n    {common}", file=sys.stderr)
-                    operations = len(line_b) + len(line_a) - 2 * len(common)
+                    matcher = difflib.SequenceMatcher(None, line_b, line_a, autojunk=False)
+                    changeset = list(matcher.get_opcodes())
+                    edit_dist, operations = compute_edit_distance(changeset)
+                    if debug: print(f"  Changeset for {line_b!r} -> {line_a!r}:\n    {changeset}", file=sys.stderr)
                     if debug: print(f"    Edit distance: {edit_dist}, operations: {operations}", file=sys.stderr)
                     weight = edit_dist * ((operations + 1) // 2)
                 row.append(AlignmentNode(x, y, weight))
@@ -186,3 +185,22 @@ def align(lines_b: List[str], lines_a: List[str]) -> List[Tuple[Optional[str], O
         after  = lines_a[point.y // 2] if point.y % 2 else None
         alignment.append((before, after))
     return alignment
+
+
+def compute_edit_distance(matches: list[tuple[Literal['replace', 'delete', 'insert', 'equal'], int, int, int, int]]) \
+    -> Tuple[int, int]:
+    operations = 0
+    edit_distance = 0
+    for match in matches:
+        if match[0] == 'replace':
+            operations += 2
+            edit_distance += (match[2] - match[1]) + (match[4] - match[3])
+        elif match[0] == 'delete':
+            operations += 1
+            edit_distance += match[2] - match[1]
+        elif match[0] == 'insert':
+            operations += 1
+            edit_distance += match[4] - match[3]
+        elif match[0] == 'equal':
+            operations += 1 # TODO: bodge for consistency with
+    return edit_distance, operations

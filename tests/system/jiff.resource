@@ -1,4 +1,5 @@
 *** Settings ***
+Library    Collections
 Library    OperatingSystem
 Library    Process
 
@@ -7,12 +8,16 @@ Jiff Files
     [Documentation]    Runs the jiff.py script with the given left and right
     ...    files, checking the output matches the expectation file and
     ...    checks for successful execution.
-    [Arguments]    ${left}    ${right}    ${expectation}
+    [Arguments]    ${left}    ${right}    ${expectation}    ${side_by_side}=False
+    Remove Environment Variable    JIFF_DEBUG
     VAR    ${base_dir}    ${CURDIR}/../..
     VAR    @{cmd}    python3
     ...    ${base_dir}/python/jiff.py
     ...    ${base_dir}/testcases/${left}
     ...    ${base_dir}/testcases/${right}
+    IF     ${side_by_side}
+        Append To List    ${cmd}    --side-by-side
+    END
     ${res} =    Run Process    @{cmd}
     IF    ${res.rc} != 0
         ${cmdline} =    Join Command Line    @{cmd}
