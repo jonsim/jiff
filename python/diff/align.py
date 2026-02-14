@@ -1,8 +1,11 @@
 import difflib
 import math
+import os
+import sys
 from typing import List, Optional, Tuple
 
-debug = False
+debug = os.environ.get("JIFF_DEBUG", "0") == "1"
+
 
 class Point:
     def __init__(self, x: int, y: int) -> None:
@@ -30,9 +33,9 @@ class AlignmentNode:
 
     def __repr__(self) -> str:
         if debug:
-            return f"{self.id}: "\
-                f"\U0001D464={self.weight}, "\
-                f"\U0001D451={self.relax_weight}, "\
+            return f"Alignment Node {self.id}: "\
+                f"\U0001D464={self.weight:3}, "\
+                f"\U0001D451={self.relax_weight:3}, "\
                 f"\U0001D70B={self.relax_parent}"
         else:
             return f"{self.id}: {self.weight}"
@@ -77,11 +80,15 @@ class AlignmentMatrix:
                 elif aligned_x and aligned_y:
                     line_b = lines_b[x // 2]
                     line_a = lines_a[y // 2]
-                    changeset = difflib.ndiff(line_b, line_a)
+                    changeset = list(difflib.ndiff(line_b, line_a))
                     edit_dist = sum(1 for _ in changeset if _[0] != ' ')
                     operations = sum(1 for _ in changeset if _[0] in ['+', '-'])
+                    if debug: print(f"  Changeset for {line_b!r} -> {line_a!r}:\n    {common}", file=sys.stderr)
+                    operations = len(line_b) + len(line_a) - 2 * len(common)
+                    if debug: print(f"    Edit distance: {edit_dist}, operations: {operations}", file=sys.stderr)
                     weight = edit_dist * ((operations + 1) // 2)
                 row.append(AlignmentNode(x, y, weight))
+                if debug: print(f"  Initialised: {row[-1]}", file=sys.stderr)
             self.line_matrix.append(row)
 
     def __repr__(self) -> str:
@@ -170,7 +177,9 @@ class AlignmentMatrix:
 
 def align(lines_b: List[str], lines_a: List[str]) -> List[Tuple[Optional[str], Optional[str]]]:
     matrix = AlignmentMatrix(lines_b, lines_a)
+    if debug: print(f"  Initialised: {matrix}", file=sys.stderr)
     path = matrix.shortest_path()
+    if debug: print(f"  Shortest path: {path}", file=sys.stderr)
     alignment: List[Tuple[Optional[str], Optional[str]]] = []
     for point in path:
         before = lines_b[point.x // 2] if point.x % 2 else None

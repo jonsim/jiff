@@ -1,7 +1,12 @@
-
 use difference::Changeset;
 use std::fmt;
+use std::sync::LazyLock;
 use std::vec::Vec;
+
+pub static DEBUG: LazyLock<bool> = LazyLock::new(|| {
+    matches!(std::env::var("JIFF_DEBUG").as_deref(), Ok("1"))
+});
+
 
 #[derive(Clone)]
 struct Point {
@@ -53,7 +58,7 @@ impl fmt::Display for AlignmentNode {
 }
 impl fmt::Debug for AlignmentNode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}: \u{1D464}={},\u{1D451}={},\u{1D70B}={}", self.id,
+        write!(f, "Alignment Node {}: \u{1D464}={:3}, \u{1D451}={:3}, \u{1D70B}={}", self.id,
                self.weight, self.relax_weight, self.relax_parent)
     }
 }
@@ -101,10 +106,13 @@ impl AlignmentMatrix {
                         let changeset = Changeset::new(line_b, line_a, "");
                         let edit_dist = changeset.distance;
                         let operations = changeset.diffs.len() as i32;
+                        if *DEBUG { eprintln!("  Changeset for {} -> {}: {}", line_b, line_a, changeset) };
+                        if *DEBUG { eprintln!("    Edit distance: {}, operations: {}", edit_dist, operations) };
                         edit_dist * ((operations+1) / 2)
                     },
                 };
                 row.push(AlignmentNode::new(x, y, weight));
+                if *DEBUG { eprintln!("  Initialized: {:?}", row.last().unwrap()) };
             }
             line_matrix.push(row);
         }
@@ -221,7 +229,9 @@ impl fmt::Display for AlignmentMatrix {
 pub fn align<'a>(lines_b: &Vec<&'a str>, lines_a: &Vec<&'a str>) ->
         Vec<(Option<&'a str>, Option<&'a str>)> {
     let mut matrix = AlignmentMatrix::new(lines_b, lines_a);
+    if *DEBUG { eprintln!("  Initialised: {}", matrix) };
     let path = matrix.shortest_path();
+    if *DEBUG { eprintln!("  Shortest path: {:?}", path) };
     let mut alignment = Vec::with_capacity(lines_b.len() + lines_a.len());
     for point in path {
         let before;

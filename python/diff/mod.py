@@ -5,17 +5,19 @@ import difflib
 import enum
 import itertools
 import math
+import os
 import shutil
-import textwrap
+import sys
 
 from rich.console import Console
 from rich.text import Text
-from rich.style import Style, Color
+from rich.style import Style
 
 from .align import align
 
 
 console = Console()
+debug = os.environ.get("JIFF_DEBUG", "0") == "1"
 
 
 # =========================
@@ -204,6 +206,7 @@ def print_diffs_side_by_side(diffs: List[Diff], max_line_count: int):
     lineno_r = 1
     empty_lineno = " " * (lineno_width + 1)
     for change in diffs:
+        if debug: print(f"Diff: {change}", file=sys.stderr)
         if change.kind == DiffType.SAME:
             for line in change.left.split("\n"):
                 lineno_l_fmt = f"{lineno_l:>{lineno_width}}:"
@@ -253,6 +256,7 @@ def print_diffs_side_by_side(diffs: List[Diff], max_line_count: int):
             lines_a = change.right.split("\n")
             alignment = align(lines_b, lines_a)
             for line_l, line_r in alignment:
+                if debug: print(f"  Aligned: {line_l!r}, {line_r!r}", file=sys.stderr)
                 if line_l is None and line_r is not None:
                     lineno_r_fmt = f"{lineno_r:>{lineno_width}}:"
                     _print_side_by_side_line(

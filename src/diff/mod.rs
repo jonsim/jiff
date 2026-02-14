@@ -8,7 +8,13 @@ use ansi_term::Style;
 use difference::{Changeset, Difference};
 use itertools::EitherOrBoth;
 use itertools::Itertools;
+use std::sync::LazyLock;
 use wrap::{wrap_str, wrap_ansistrings};
+
+pub static DEBUG: LazyLock<bool> = LazyLock::new(|| {
+    matches!(std::env::var("JIFF_DEBUG").as_deref(), Ok("1"))
+});
+
 
 #[derive(Debug)]
 pub enum Diff {
@@ -323,6 +329,7 @@ pub fn print_diffs_side_by_side(diffs: &Vec<Diff>, max_line_count: usize,
     let mut lineno_r = 1;
     let empty_lineno = " ".repeat(lineno_width + 1);
     for change in diffs {
+        if *DEBUG { eprintln!("Diff: {:?}", change) };
         match change {
             Diff::Same(same) => {
                 for line in same.split('\n') {
@@ -373,6 +380,7 @@ pub fn print_diffs_side_by_side(diffs: &Vec<Diff>, max_line_count: usize,
                 let lines_a = after.split('\n').collect();
                 let alignment = align(&lines_b, &lines_a);
                 for aligned in alignment {
+                    if *DEBUG { eprintln!("  Aligned: {:?}", aligned) };
                     match aligned {
                         (Some(line_l), None) => {
                             let lineno_l_fmt = format!("{:w$}:", lineno_l, w=lineno_width);
