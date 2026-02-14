@@ -10,3 +10,8 @@ Cargo.lock
 **/*.rs.bk
 
 **/__pycache__/
+**.pyc
+.venv/
+log.html
+report.html
+output.xml
