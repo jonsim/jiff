@@ -225,8 +225,8 @@ fn _print_side_by_side_line(lineno_l: ANSIString,
                             separator: &str) {
     let mut margin_l = &lineno_l;
     let mut margin_r = &lineno_r;
-    let line_l_iter = wrap_ansistrings(line_l, line_width.0);
-    let line_r_iter = wrap_ansistrings(line_r, line_width.1);
+    let line_l_iter = wrap_ansistrings(line_l, line_width.0, true);
+    let line_r_iter = wrap_ansistrings(line_r, line_width.1, false);
     let mut first_iteration = true;
     for zipped in line_l_iter.zip_longest(line_r_iter) {
         let (wrapped_l, wrapped_r) = match zipped {
@@ -307,11 +307,14 @@ pub fn print_diffs_side_by_side(diffs: &Vec<Diff>, max_line_count: usize,
     let lineno_width = (max_line_count as f32).log(10.0).floor() as usize + 1;
     let line_width = match term_size::dimensions_stdout() {
         Some((term_width, _)) => {
-            let line_width = ((term_width - sep_width) / 2) - (lineno_width + 2);
+            let line_width = ((term_width - sep_width) / 2) - (lineno_width + 1);
             (line_width, line_width)
         },
         None => {
-            calc_max_line_width(diffs)
+            // let line_width = calc_max_line_width(diffs);
+            // (line_width.0, sep_width + line_width.1)
+            let line_width = ((120 - sep_width) / 2) - (lineno_width + 1);
+            (line_width, line_width)
         },
     };
 
