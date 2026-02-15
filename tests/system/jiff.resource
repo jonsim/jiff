@@ -9,27 +9,23 @@ Jiff Files
     ...    files, checking the output matches the expectation file and
     ...    checks for successful execution.
     [Arguments]    ${left}    ${right}    ${expectation}    ${side_by_side}=False
-    Remove Environment Variable    JIFF_DEBUG
     VAR    ${base_dir}    ${CURDIR}/../..
-    VAR    @{cmd}    python3
-    ...    ${base_dir}/python/jiff.py
+    VAR    @{args}
     ...    ${base_dir}/testcases/${left}
     ...    ${base_dir}/testcases/${right}
     IF     ${side_by_side}
-        Append To List    ${cmd}    --side-by-side
+        Append To List    ${args}    --side-by-side
     END
-    ${res} =    Run Process    @{cmd}
-    IF    ${res.rc} != 0
-        ${cmdline} =    Join Command Line    @{cmd}
-        VAR    ${error}
-        ...    Jiff failed with return code ${res.rc}
-        ...    \n\nCommand:\n${cmdline}
-        ...    \n\nStandard Output:\n${res.stdout}
-        ...    \n\nStandard Error:\n${res.stderr}
-        Fail    ${error}
-    END
+    # Check the Python implementation's output.
+    ${res} =    Run Python Jiff    @{args}
     ${expectation_str} =    Get File    ${base_dir}/testcases/${expectation}
-    Should Be Equal    ${res.stdout}    ${expectation_str}
+    Should Be Equal    ${res.stdout}    ${expectation_str}    Python implementation produced incorrect output
+
+    # Check the Rust implementation's output.
+    ${res} =    Run Rust Jiff    @{args}
+    ${expectation_str} =    Get File    ${base_dir}/testcases/${expectation}
+    Should Be Equal    ${res.stdout}    ${expectation_str}    Rust implementation produced incorrect output
+
 
 Jiff Strings
     [Documentation]    Writes the left and right strings to temporary files,
@@ -42,3 +38,45 @@ Jiff Strings
     Jiff Files     ${TEMPDIR}/left.txt
     ...            ${TEMPDIR}/right.txt
     ...            ${TEMPDIR}/expectation.txt
+
+Run Python Jiff
+    [Documentation]    Runs the Python version of `jiff` with the given
+    ...    arguments, checks for successful execution and returns the result
+    ...    object.
+    [Arguments]    @{args}
+    Remove Environment Variable    JIFF_DEBUG
+    VAR    @{cmd}    python3
+    ...    ${CURDIR}/../../python/jiff.py
+    ...    @{args}
+    ${res} =    Run Process Check Output   @{cmd}
+    RETURN    ${res}
+
+Run Rust Jiff
+    [Documentation]    Runs the Rust version of `jiff` with the given
+    ...    arguments, checks for successful execution and returns the result
+    ...    object.
+    [Arguments]    @{args}
+    Remove Environment Variable    JIFF_DEBUG
+    VAR    @{cmd}    cargo
+    ...    run
+    ...    --manifest-path=${CURDIR}/../../Cargo.toml
+    ...    --
+    ...    @{args}
+    ${res} =    Run Process Check Output    @{cmd}
+    RETURN    ${res}
+
+Run Process Check Output
+    [Documentation]    Runs a process with the given command and arguments,
+    ...    checks for successful execution and returns the result object.
+    [Arguments]    @{cmd}
+    ${res} =    Run Process    @{cmd}
+    IF    ${res.rc} != 0
+        ${cmdline} =    Join Command Line    @{cmd}
+        VAR    ${error}
+        ...    Process failed with return code ${res.rc}
+        ...    \n\nCommand:\n${cmdline}
+        ...    \n\nStandard Output:\n${res.stdout}
+        ...    \n\nStandard Error:\n${res.stderr}
+        Fail    ${error}
+    END
+    RETURN    ${res}

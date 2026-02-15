@@ -2,6 +2,7 @@ mod diff;
 
 use std::cmp::max;
 use std::fs;
+use std::io::IsTerminal;
 use std::process;
 use clap::{Arg, App};
 
@@ -44,12 +45,20 @@ fn main() {
                     .get_matches();
     let lpath = matches.value_of("file1").expect("file1 is required");
     let rpath = matches.value_of("file2").expect("file2 is required");
-    let color = !matches.is_present("no-color");
+    let mut color = !matches.is_present("no-color");
     let side_by_side = matches.is_present("side-by-side");
     let lfile = read_file_or_die(lpath);
     let rfile = read_file_or_die(rpath);
     let max_line_count = max(lfile.matches('\n').count(), rfile.matches('\n').count());
     //println!("lpath: {}\n{}\nrpath: {}\n{}\n", lpath, lfile, rpath, rfile);
+
+    // If colorization is enabled, determine whether or not to automatically
+    // disable it.
+    if color {
+        let force_color = std::env::var("RICH_FORCE_TERMINAL").is_ok();
+        let is_tty = std::io::stdout().is_terminal();
+        color = force_color || is_tty;
+    }
 
     // Calculate the changeset.
     let diffs = diff::calculate_line_diff(&lfile, &rfile);

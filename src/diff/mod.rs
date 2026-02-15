@@ -107,19 +107,39 @@ fn calculate_diff(left: &str, right: &str, split: &str) -> Vec<Diff> {
 }
 
 pub fn print_diffs(diffs: &Vec<Diff>, context: usize, color: bool) {
-    let margin_styling = DiffStyling {
-        same:             Style::default(),
-        add:              Style::default(),
-        add_highlight:    Style::default(),
-        remove:           Style::default(),
-        remove_highlight: Style::default(),
+    let line_styling = if color {
+        DiffStyling {
+            same:             Style::default(),
+            add:              Green.normal(),
+            add_highlight:    Black.on(Green),
+            remove:           Red.normal(),
+            remove_highlight: Black.on(Red),
+        }
+    } else {
+        DiffStyling {
+            same:             Style::default(),
+            add:              Style::default(),
+            add_highlight:    Style::default(),
+            remove:           Style::default(),
+            remove_highlight: Style::default(),
+        }
     };
-    let line_styling = DiffStyling {
-        same:             Style::default(),
-        add:              Green.normal(),
-        add_highlight:    Black.on(Green),
-        remove:           Red.normal(),
-        remove_highlight: Black.on(Red),
+    let margin_styling = if color {
+        DiffStyling {
+            same:             Style::default(),
+            add:              Style::default(),
+            add_highlight:    Style::default(),
+            remove:           Style::default(),
+            remove_highlight: Style::default(),
+        }
+    } else {
+        DiffStyling {
+            same:             Style::default(),
+            add:              Style::default(),
+            add_highlight:    Style::default(),
+            remove:           Style::default(),
+            remove_highlight: Style::default(),
+        }
     };
 
     for change in diffs {
@@ -278,31 +298,51 @@ fn _style_diff_line<'u>(before: &'u str, after: &'u str, styling: &DiffStyling,
 pub fn print_diffs_side_by_side(diffs: &Vec<Diff>, max_line_count: usize,
                                 context: usize, color: bool) {
     // Define styling constants.
-    let lineno_styling = DiffStyling {
-        same:             Black.bold(),
-        add:              Green.bold(),
-        add_highlight:    Green.bold(),
-        remove:           Red.bold(),
-        remove_highlight: Red.bold(),
+    let lineno_styling = if color {
+        DiffStyling {
+            same:             Black.bold(),
+            add:              Green.bold(),
+            add_highlight:    Green.bold(),
+            remove:           Red.bold(),
+            remove_highlight: Red.bold(),
+        }
+    } else {
+        DiffStyling {
+            same:             Style::default(),
+            add:              Style::default(),
+            add_highlight:    Style::default(),
+            remove:           Style::default(),
+            remove_highlight: Style::default(),
+        }
     };
-    let line_styling = DiffStyling {
-        same:             Style::default(),
-        // add:              Fixed(10).normal(),
-        // remove:           Fixed( 9).normal(),
-        // add_highlight:    Style::default().on(Fixed(22)),
-        // remove_highlight: Style::default().on(Fixed(88)),
+    let line_styling = if color {
+        DiffStyling {
+            same:             Style::default(),
+            // add:              Fixed(10).normal(),
+            // remove:           Fixed( 9).normal(),
+            // add_highlight:    Style::default().on(Fixed(22)),
+            // remove_highlight: Style::default().on(Fixed(88)),
 
-        // add:              Black.on(Fixed(114)),
-        // remove:           Black.on(Fixed(203)),
-        // add_highlight:    Black.on(Fixed( 40)),
-        // remove_highlight: Black.on(Fixed(160)),
+            // add:              Black.on(Fixed(114)),
+            // remove:           Black.on(Fixed(203)),
+            // add_highlight:    Black.on(Fixed( 40)),
+            // remove_highlight: Black.on(Fixed(160)),
 
-        add:              Fixed(157).normal(), // 194
-        remove:           Fixed(217).normal(), // 224
-        // add_highlight:    Fixed( 40).on(Fixed(235)),
-        // remove_highlight: Fixed(160).on(Fixed(235)),
-        add_highlight:    Fixed(157).reverse(),
-        remove_highlight: Fixed(217).reverse(),
+            add:              Fixed(157).normal(), // 194
+            remove:           Fixed(217).normal(), // 224
+            // add_highlight:    Fixed( 40).on(Fixed(235)),
+            // remove_highlight: Fixed(160).on(Fixed(235)),
+            add_highlight:    Fixed(157).reverse(),
+            remove_highlight: Fixed(217).reverse(),
+        }
+    } else {
+        DiffStyling {
+            same:             Style::default(),
+            add:              Style::default(),
+            add_highlight:    Style::default(),
+            remove:           Style::default(),
+            remove_highlight: Style::default(),
+        }
     };
 
     // Define separation characters.
