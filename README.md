@@ -54,3 +54,18 @@ Optionally, the Rust tests can be skipped with:
 ```sh
 robot -v SKIP_RUST_TESTS:True tests
 ```
+
+## Developing
+
+### Setting up a development environment
+
+Install pre-commit, then install the git hooks with:
+```sh
+pre-commit install
+```
+
+Once the hooks are installed they will run automatically on commit. You can run
+pre-commit manually with:
+```sh
+pre-commit run
+```
