@@ -40,6 +40,12 @@ robot -v SKIP_PYTHON_TESTS:True tests
 
 ### Python
 
+#### Running
+
+```sh
+uv run jiff FILE1 FILE2
+```
+
 #### Testing
 
 Unit tests:
@@ -59,13 +65,14 @@ robot -v SKIP_RUST_TESTS:True tests
 
 ### Setting up a development environment
 
-Install pre-commit, then install the git hooks with:
+Create the development environment and install the git hooks with:
 ```sh
-pre-commit install
+uv sync
+uv run pre-commit install
 ```
 
 Once the hooks are installed they will run automatically on commit. You can run
 pre-commit manually with:
 ```sh
-pre-commit run
+uv run pre-commit run --all-files
 ```

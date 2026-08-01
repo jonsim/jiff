@@ -11,6 +11,7 @@ Cargo.lock
 
 **/__pycache__/
 **.pyc
+**/*.egg-info/
 .venv/
 log.html
 report.html

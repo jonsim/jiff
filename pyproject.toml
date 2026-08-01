@@ -1,0 +1,21 @@
+[project]
+name = "jiff-dev"
+version = "0.1.0"
+requires-python = ">=3.9"
+dependencies = [
+    "jiff",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+jiff = { workspace = true }
+
+[tool.uv.workspace]
+members = ["python"]
