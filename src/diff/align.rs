@@ -1,12 +1,9 @@
 use difference::Changeset;
 use std::fmt;
 use std::sync::LazyLock;
-use std::vec::Vec;
 
-pub static DEBUG: LazyLock<bool> = LazyLock::new(|| {
-    matches!(std::env::var("JIFF_DEBUG").as_deref(), Ok("1"))
-});
-
+pub static DEBUG: LazyLock<bool> =
+    LazyLock::new(|| matches!(std::env::var("JIFF_DEBUG").as_deref(), Ok("1")));
 
 #[derive(Clone)]
 struct Point {
@@ -36,8 +33,8 @@ impl AlignmentNode {
     fn new(x: usize, y: usize, weight: i32) -> AlignmentNode {
         AlignmentNode {
             id: Point { x, y },
-            weight: weight,
-            relax_weight: std::i32::MAX,
+            weight,
+            relax_weight: i32::MAX,
             relax_parent: Point { x: 0, y: 0 },
         }
     }
@@ -58,8 +55,11 @@ impl fmt::Display for AlignmentNode {
 }
 impl fmt::Debug for AlignmentNode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Alignment Node {}: \u{1D464}={:3}, \u{1D451}={:3}, \u{1D70B}={}", self.id,
-               self.weight, self.relax_weight, self.relax_parent)
+        write!(
+            f,
+            "Alignment Node {}: \u{1D464}={:3}, \u{1D451}={:3}, \u{1D70B}={}",
+            self.id, self.weight, self.relax_weight, self.relax_parent
+        )
     }
 }
 
@@ -70,7 +70,7 @@ struct AlignmentMatrix {
 }
 
 impl AlignmentMatrix {
-    fn new(lines_b: &Vec<&str>, lines_a: &Vec<&str>) -> AlignmentMatrix {
+    fn new(lines_b: &[&str], lines_a: &[&str]) -> AlignmentMatrix {
         let lines_b_len = lines_b.len();
         let lines_a_len = lines_a.len();
         let line_matrix_x_len = lines_b_len * 2 + 1;
@@ -98,36 +98,48 @@ impl AlignmentMatrix {
                 let aligned_y = y & 1 != 0;
                 let weight: i32 = match (aligned_x, aligned_y) {
                     (false, false) => -1,
-                    (true, false) => unalign_b_weights[x/2],
-                    (false, true) => unalign_a_weights[y/2],
+                    (true, false) => unalign_b_weights[x / 2],
+                    (false, true) => unalign_a_weights[y / 2],
                     (true, true) => {
-                        let line_b = lines_b[x/2];
-                        let line_a = lines_a[y/2];
+                        let line_b = lines_b[x / 2];
+                        let line_a = lines_a[y / 2];
                         let changeset = Changeset::new(line_b, line_a, "");
                         let edit_dist = changeset.distance;
                         let operations = changeset.diffs.len() as i32;
-                        if *DEBUG { eprintln!("  Changeset for {} -> {}: {}", line_b, line_a, changeset) };
-                        if *DEBUG { eprintln!("    Edit distance: {}, operations: {}", edit_dist, operations) };
-                        edit_dist * ((operations+1) / 2)
-                    },
+                        if *DEBUG {
+                            eprintln!("  Changeset for {} -> {}: {}", line_b, line_a, changeset)
+                        };
+                        if *DEBUG {
+                            eprintln!(
+                                "    Edit distance: {}, operations: {}",
+                                edit_dist, operations
+                            )
+                        };
+                        edit_dist * ((operations + 1) / 2)
+                    }
                 };
                 row.push(AlignmentNode::new(x, y, weight));
-                if *DEBUG { eprintln!("  Initialized: {:?}", row.last().unwrap()) };
+                if *DEBUG {
+                    eprintln!("  Initialized: {:?}", row.last().unwrap())
+                };
             }
             line_matrix.push(row);
         }
         // Chuck it in a struct and ship it.
-        AlignmentMatrix { line_matrix,
-                          line_matrix_x_len, line_matrix_y_len }
+        AlignmentMatrix {
+            line_matrix,
+            line_matrix_x_len,
+            line_matrix_y_len,
+        }
     }
 
     fn root_adjacency(&self) -> Vec<Point> {
-        let mut adjacency = Vec::with_capacity(3);
-        adjacency.push(Point { x: 0, y: 1 });
-        adjacency.push(Point { x: 1, y: 0 });
-        adjacency.push(Point { x: 1, y: 1 });
         // The nodes in the output are guaranteed to be in topological order.
-        return adjacency;
+        vec![
+            Point { x: 0, y: 1 },
+            Point { x: 1, y: 0 },
+            Point { x: 1, y: 1 },
+        ]
     }
 
     fn adjacency(&self, node: &AlignmentNode) -> Vec<Point> {
@@ -139,16 +151,25 @@ impl AlignmentMatrix {
         let next_x_aligned = next_x + 1; // might not exist
         let next_y_aligned = next_y + 1; // might not exist
         if next_x_aligned < self.line_matrix_x_len {
-            adjacency.push(Point { x: next_x_aligned, y: next_y });
+            adjacency.push(Point {
+                x: next_x_aligned,
+                y: next_y,
+            });
         }
         if next_y_aligned < self.line_matrix_y_len {
-            adjacency.push(Point { x: next_x, y: next_y_aligned });
+            adjacency.push(Point {
+                x: next_x,
+                y: next_y_aligned,
+            });
         }
         if next_x_aligned < self.line_matrix_x_len && next_y_aligned < self.line_matrix_y_len {
-            adjacency.push(Point { x: next_x_aligned, y: next_y_aligned });
+            adjacency.push(Point {
+                x: next_x_aligned,
+                y: next_y_aligned,
+            });
         }
         // The nodes in the output are guaranteed to be in topological order.
-        return adjacency;
+        adjacency
     }
 
     fn walk_path(&self, exit: &AlignmentNode) -> Vec<Point> {
@@ -160,7 +181,7 @@ impl AlignmentMatrix {
             pos = &self.line_matrix[next.x][next.y];
         }
         path.reverse();
-        return path;
+        path
     }
 
     fn shortest_path(&mut self) -> Vec<Point> {
@@ -200,53 +221,61 @@ impl AlignmentMatrix {
         // Derive the shortest path from the walk.
         // There are three legal exit points, so choose the best of these and
         // walk its parents backwards.
-        let exit_xy = &self.line_matrix[self.line_matrix_x_len-2][self.line_matrix_y_len-2];
-        let exit_x  = &self.line_matrix[self.line_matrix_x_len-2][self.line_matrix_y_len-1];
-        let exit_y  = &self.line_matrix[self.line_matrix_x_len-1][self.line_matrix_y_len-2];
+        let exit_xy = &self.line_matrix[self.line_matrix_x_len - 2][self.line_matrix_y_len - 2];
+        let exit_x = &self.line_matrix[self.line_matrix_x_len - 2][self.line_matrix_y_len - 1];
+        let exit_y = &self.line_matrix[self.line_matrix_x_len - 1][self.line_matrix_y_len - 2];
         if exit_x.relax_weight < exit_y.relax_weight && exit_x.relax_weight < exit_xy.relax_weight {
-            return self.walk_path(exit_x);
+            self.walk_path(exit_x)
         } else if exit_y.relax_weight < exit_xy.relax_weight {
-            return self.walk_path(exit_y);
+            self.walk_path(exit_y)
         } else {
-            return self.walk_path(exit_xy);
+            self.walk_path(exit_xy)
         }
     }
 }
 
 impl fmt::Display for AlignmentMatrix {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Alignment matrix ({} x {}):\n", self.line_matrix_x_len, self.line_matrix_y_len)?;
+        writeln!(
+            f,
+            "Alignment matrix ({} x {}):",
+            self.line_matrix_x_len, self.line_matrix_y_len
+        )?;
         for x in 0..self.line_matrix_x_len {
             for y in 0..self.line_matrix_y_len {
                 write!(f, " {:4}", self.line_matrix[x][y].weight)?;
             }
-            write!(f, "\n")?;
+            writeln!(f)?;
         }
         Ok(())
     }
 }
 
-pub fn align<'a>(lines_b: &Vec<&'a str>, lines_a: &Vec<&'a str>) ->
-        Vec<(Option<&'a str>, Option<&'a str>)> {
+pub fn align<'a>(
+    lines_b: &[&'a str],
+    lines_a: &[&'a str],
+) -> Vec<(Option<&'a str>, Option<&'a str>)> {
     let mut matrix = AlignmentMatrix::new(lines_b, lines_a);
-    if *DEBUG { eprintln!("  Initialised: {}", matrix) };
+    if *DEBUG {
+        eprintln!("  Initialised: {}", matrix)
+    };
     let path = matrix.shortest_path();
-    if *DEBUG { eprintln!("  Shortest path: {:?}", path) };
+    if *DEBUG {
+        eprintln!("  Shortest path: {:?}", path)
+    };
     let mut alignment = Vec::with_capacity(lines_b.len() + lines_a.len());
     for point in path {
-        let before;
-        let after;
-        if point.x & 1 > 0 {
-            before = Some(lines_b[point.x / 2]);
+        let before = if point.x & 1 > 0 {
+            Some(lines_b[point.x / 2])
         } else {
-            before = None;
-        }
-        if point.y & 1 > 0 {
-            after = Some(lines_a[point.y / 2]);
+            None
+        };
+        let after = if point.y & 1 > 0 {
+            Some(lines_a[point.y / 2])
         } else {
-            after = None;
-        }
+            None
+        };
         alignment.push((before, after));
     }
-    return alignment;
+    alignment
 }
