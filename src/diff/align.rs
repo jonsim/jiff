@@ -279,3 +279,98 @@ pub fn align<'a>(
     }
     alignment
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn aligns_identical_lines() {
+        // Exact matches should keep their input order and pair every line.
+        let before = ["Kermit", "Fozzie"];
+        let after = ["Kermit", "Fozzie"];
+
+        let alignment = align(&before, &after);
+
+        assert_eq!(
+            vec![
+                (Some("Kermit"), Some("Kermit")),
+                (Some("Fozzie"), Some("Fozzie"))
+            ],
+            alignment
+        );
+    }
+
+    #[test]
+    fn aligns_insertions_around_an_exact_match() {
+        // A stable line is a better anchor than pairing it with either neighbour.
+        let before = ["Kermit"];
+        let after = ["Statler", "Kermit", "Waldorf"];
+
+        let alignment = align(&before, &after);
+
+        assert_eq!(
+            vec![
+                (None, Some("Statler")),
+                (Some("Kermit"), Some("Kermit")),
+                (None, Some("Waldorf")),
+            ],
+            alignment
+        );
+    }
+
+    #[test]
+    fn aligns_removals_around_an_exact_match() {
+        // The same anchoring rule applies when the extra lines are on the left.
+        let before = ["Statler", "Kermit", "Waldorf"];
+        let after = ["Kermit"];
+
+        let alignment = align(&before, &after);
+
+        assert_eq!(
+            vec![
+                (Some("Statler"), None),
+                (Some("Kermit"), Some("Kermit")),
+                (Some("Waldorf"), None),
+            ],
+            alignment
+        );
+    }
+
+    #[test]
+    fn pairs_a_small_change_between_exact_matches() {
+        // Similar changed lines should stay together so their character diff is useful.
+        let before = ["Kermit", "Fozzie Bear", "Gonzo"];
+        let after = ["Kermit", "Fozzie Brown Bear", "Gonzo"];
+
+        let alignment = align(&before, &after);
+
+        assert_eq!(
+            vec![
+                (Some("Kermit"), Some("Kermit")),
+                (Some("Fozzie Bear"), Some("Fozzie Brown Bear")),
+                (Some("Gonzo"), Some("Gonzo")),
+            ],
+            alignment
+        );
+    }
+
+    #[test]
+    fn keeps_dissimilar_lines_unpaired_between_exact_matches() {
+        // Pairing unrelated lines produces noisy character highlighting.
+        let before = ["Kermit", "Fozzie", "Gonzo"];
+        let after = ["Kermit", "Swedish Chef", "Gonzo"];
+
+        let alignment = align(&before, &after);
+
+        assert_eq!(
+            vec![
+                (Some("Kermit"), Some("Kermit")),
+                (None, Some("Swedish Chef")),
+                (Some("Fozzie"), None),
+                (Some("Gonzo"), Some("Gonzo")),
+            ],
+            alignment
+        );
+    }
+}
