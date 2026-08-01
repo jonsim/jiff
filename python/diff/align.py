@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import difflib
 import math
 import os
 import sys
-from typing import List, Literal, Optional, Tuple
+from typing import Literal
 
 debug = os.environ.get("JIFF_DEBUG", "0") == "1"
 
@@ -33,10 +35,12 @@ class AlignmentNode:
 
     def __repr__(self) -> str:
         if debug:
-            return f"Alignment Node {self.id}: "\
-                f"\U0001D464={self.weight:3}, "\
-                f"\U0001D451={self.relax_weight:3}, "\
-                f"\U0001D70B={self.relax_parent}"
+            return (
+                f"Alignment Node {self.id}: "
+                f"\U0001d464={self.weight:3}, "
+                f"\U0001d451={self.relax_weight:3}, "
+                f"\U0001d70b={self.relax_parent}"
+            )
         else:
             return f"{self.id}: {self.weight}"
 
@@ -48,7 +52,7 @@ class AlignmentNode:
 
 
 class AlignmentMatrix:
-    def __init__(self, lines_b: List[str], lines_a: List[str]) -> None:
+    def __init__(self, lines_b: list[str], lines_a: list[str]) -> None:
         lines_b_len = len(lines_b)
         lines_a_len = len(lines_a)
         self.line_matrix_x_len = lines_b_len * 2 + 1
@@ -70,7 +74,7 @@ class AlignmentMatrix:
             row = []
             for y in range(self.line_matrix_y_len):
                 aligned_y = y % 2 != 0
-                weight: Optional[int] = None
+                weight: int | None = None
                 if not aligned_x and not aligned_y:
                     weight = -1
                 elif aligned_x and not aligned_y:
@@ -80,14 +84,25 @@ class AlignmentMatrix:
                 elif aligned_x and aligned_y:
                     line_b = lines_b[x // 2]
                     line_a = lines_a[y // 2]
-                    matcher = difflib.SequenceMatcher(None, line_b, line_a, autojunk=False)
+                    matcher = difflib.SequenceMatcher(
+                        None, line_b, line_a, autojunk=False
+                    )
                     changeset = list(matcher.get_opcodes())
                     edit_dist, operations = compute_edit_distance(changeset)
-                    if debug: print(f"  Changeset for {line_b!r} -> {line_a!r}:\n    {changeset}", file=sys.stderr)
-                    if debug: print(f"    Edit distance: {edit_dist}, operations: {operations}", file=sys.stderr)
+                    if debug:
+                        print(
+                            f"  Changeset for {line_b!r} -> {line_a!r}:\n    {changeset}",
+                            file=sys.stderr,
+                        )
+                    if debug:
+                        print(
+                            f"    Edit distance: {edit_dist}, operations: {operations}",
+                            file=sys.stderr,
+                        )
                     weight = edit_dist * ((operations + 1) // 2)
                 row.append(AlignmentNode(x, y, weight))
-                if debug: print(f"  Initialised: {row[-1]}", file=sys.stderr)
+                if debug:
+                    print(f"  Initialised: {row[-1]}", file=sys.stderr)
             self.line_matrix.append(row)
 
     def __repr__(self) -> str:
@@ -98,29 +113,32 @@ class AlignmentMatrix:
             s += "\n"
         return s
 
-    def root_adjacency(self) -> List[Point]:
+    def root_adjacency(self) -> list[Point]:
         # The nodes in the output are guaranteed to be in topological order.
         return [Point(0, 1), Point(1, 0), Point(1, 1)]
 
-    def adjacency(self, node: AlignmentNode) -> List[Point]:
+    def adjacency(self, node: AlignmentNode) -> list[Point]:
         # If I just paired node.id.x and node.id.y, what are the remaining
         # valid alignments?
-        adjacency: List[Point] = []
-        next_x = node.id.x + (node.id.x % 2) # will exist
-        next_y = node.id.y + (node.id.y % 2) # will exist
-        next_x_aligned = next_x + 1 # might not exist
-        next_y_aligned = next_y + 1 # might not exist
+        adjacency: list[Point] = []
+        next_x = node.id.x + (node.id.x % 2)  # will exist
+        next_y = node.id.y + (node.id.y % 2)  # will exist
+        next_x_aligned = next_x + 1  # might not exist
+        next_y_aligned = next_y + 1  # might not exist
         if next_x_aligned < self.line_matrix_x_len:
             adjacency.append(Point(next_x_aligned, next_y))
         if next_y_aligned < self.line_matrix_y_len:
             adjacency.append(Point(next_x, next_y_aligned))
-        if next_x_aligned < self.line_matrix_x_len and next_y_aligned < self.line_matrix_y_len:
+        if (
+            next_x_aligned < self.line_matrix_x_len
+            and next_y_aligned < self.line_matrix_y_len
+        ):
             adjacency.append(Point(next_x_aligned, next_y_aligned))
         # The nodes in the output are guaranteed to be in topological order.
         return adjacency
 
-    def walk_path(self, exit: AlignmentNode) -> List[Point]:
-        path: List[Point] = []
+    def walk_path(self, exit: AlignmentNode) -> list[Point]:
+        path: list[Point] = []
         pos = exit
         while pos.id.x > 0 or pos.id.y > 0:
             path.append(pos.id)
@@ -129,7 +147,7 @@ class AlignmentMatrix:
         path.reverse()
         return path
 
-    def shortest_path(self) -> List[Point]:
+    def shortest_path(self) -> list[Point]:
         # Initialize the root adjacency nodes (i.e. those accessible from
         # the single source node).
         for adj in self.root_adjacency():
@@ -163,10 +181,19 @@ class AlignmentMatrix:
         # Derive the shortest path from the walk.
         # There are three legal exit points, so choose the best of these and
         # walk its parents backwards.
-        exit_xy = self.line_matrix[self.line_matrix_x_len - 2][self.line_matrix_y_len - 2]
-        exit_x  = self.line_matrix[self.line_matrix_x_len - 2][self.line_matrix_y_len - 1]
-        exit_y  = self.line_matrix[self.line_matrix_x_len - 1][self.line_matrix_y_len - 2]
-        if exit_x.relax_weight < exit_y.relax_weight and exit_x.relax_weight < exit_xy.relax_weight:
+        exit_xy = self.line_matrix[self.line_matrix_x_len - 2][
+            self.line_matrix_y_len - 2
+        ]
+        exit_x = self.line_matrix[self.line_matrix_x_len - 2][
+            self.line_matrix_y_len - 1
+        ]
+        exit_y = self.line_matrix[self.line_matrix_x_len - 1][
+            self.line_matrix_y_len - 2
+        ]
+        if (
+            exit_x.relax_weight < exit_y.relax_weight
+            and exit_x.relax_weight < exit_xy.relax_weight
+        ):
             return self.walk_path(exit_x)
         elif exit_y.relax_weight < exit_xy.relax_weight:
             return self.walk_path(exit_y)
@@ -174,33 +201,40 @@ class AlignmentMatrix:
             return self.walk_path(exit_xy)
 
 
-def align(lines_b: List[str], lines_a: List[str]) -> List[Tuple[Optional[str], Optional[str]]]:
+def align(
+    lines_b: list[str], lines_a: list[str]
+) -> list[tuple[str | None, str | None]]:
     matrix = AlignmentMatrix(lines_b, lines_a)
-    if debug: print(f"  Initialised: {matrix}", file=sys.stderr)
+    if debug:
+        print(f"  Initialised: {matrix}", file=sys.stderr)
     path = matrix.shortest_path()
-    if debug: print(f"  Shortest path: {path}", file=sys.stderr)
-    alignment: List[Tuple[Optional[str], Optional[str]]] = []
+    if debug:
+        print(f"  Shortest path: {path}", file=sys.stderr)
+    alignment: list[tuple[str | None, str | None]] = []
     for point in path:
         before = lines_b[point.x // 2] if point.x % 2 else None
-        after  = lines_a[point.y // 2] if point.y % 2 else None
+        after = lines_a[point.y // 2] if point.y % 2 else None
         alignment.append((before, after))
     return alignment
 
 
-def compute_edit_distance(matches: list[tuple[Literal['replace', 'delete', 'insert', 'equal'], int, int, int, int]]) \
-    -> Tuple[int, int]:
+def compute_edit_distance(
+    matches: list[
+        tuple[Literal["replace", "delete", "insert", "equal"], int, int, int, int]
+    ],
+) -> tuple[int, int]:
     operations = 0
     edit_distance = 0
     for match in matches:
-        if match[0] == 'replace':
+        if match[0] == "replace":
             operations += 2
             edit_distance += (match[2] - match[1]) + (match[4] - match[3])
-        elif match[0] == 'delete':
+        elif match[0] == "delete":
             operations += 1
             edit_distance += match[2] - match[1]
-        elif match[0] == 'insert':
+        elif match[0] == "insert":
             operations += 1
             edit_distance += match[4] - match[3]
-        elif match[0] == 'equal':
-            operations += 1 # TODO: bodge for consistency with
+        elif match[0] == "equal":
+            operations += 1  # TODO: bodge for consistency with
     return edit_distance, operations
