@@ -14,7 +14,7 @@ use wrap::wrap_ansistrings;
 pub static DEBUG: LazyLock<bool> =
     LazyLock::new(|| matches!(std::env::var("JIFF_DEBUG").as_deref(), Ok("1")));
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum Diff {
     Same(String),
     Add(String),
@@ -438,5 +438,76 @@ pub fn print_diffs_side_by_side(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn line_diff_preserves_unchanged_text() {
+        // An unchanged file should remain one chunk rather than disappearing.
+        let diffs = calculate_line_diff("Kermit\nFozzie", "Kermit\nFozzie");
+
+        assert_eq!(vec![Diff::Same("Kermit\nFozzie".to_string())], diffs);
+    }
+
+    #[test]
+    fn line_diff_reports_an_insertion() {
+        // A line inserted between two anchors should be one addition.
+        let diffs = calculate_line_diff("Kermit\nGonzo", "Kermit\nFozzie\nGonzo");
+
+        assert_eq!(
+            vec![
+                Diff::Same("Kermit".to_string()),
+                Diff::Add("Fozzie".to_string()),
+                Diff::Same("Gonzo".to_string()),
+            ],
+            diffs
+        );
+    }
+
+    #[test]
+    fn line_diff_reports_a_removal() {
+        // A line removed between two anchors should be one removal.
+        let diffs = calculate_line_diff("Kermit\nFozzie\nGonzo", "Kermit\nGonzo");
+
+        assert_eq!(
+            vec![
+                Diff::Same("Kermit".to_string()),
+                Diff::Remove("Fozzie".to_string()),
+                Diff::Same("Gonzo".to_string()),
+            ],
+            diffs
+        );
+    }
+
+    #[test]
+    fn line_diff_combines_adjacent_removal_and_addition() {
+        // Changed runs belong in one replacement so line alignment can refine them.
+        let diffs = calculate_line_diff("Kermit\nFozzie", "Kermit\nGonzo");
+
+        assert_eq!(
+            vec![
+                Diff::Same("Kermit".to_string()),
+                Diff::Replace("Fozzie".to_string(), "Gonzo".to_string()),
+            ],
+            diffs
+        );
+    }
+
+    #[test]
+    fn char_diff_handles_unicode_as_characters() {
+        // A multi-byte character should be replaced as a whole character.
+        let diffs = calculate_char_diff("café", "cafe");
+
+        assert_eq!(
+            vec![
+                Diff::Same("caf".to_string()),
+                Diff::Replace("é".to_string(), "e".to_string()),
+            ],
+            diffs
+        );
     }
 }
