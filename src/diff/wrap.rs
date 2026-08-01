@@ -136,7 +136,7 @@ mod tests {
     fn wrap_ansi_empty() {
         let s = vec![Red.paint("")];
         let s_fmt = vec![format!("{}", ANSIStrings(&s))];
-        let wrapped: Vec<String> = wrap_ansistrings(&s, 0).collect();
+        let wrapped: Vec<String> = wrap_ansistrings(&s, 0, true).collect();
         assert_eq!(1, wrapped.len());
         assert_eq!(s_fmt, wrapped);
     }
@@ -145,7 +145,7 @@ mod tests {
     fn wrap_ansi_single_line_under() {
         let s = vec![Red.paint("hel"), Red.paint("lo")];
         let s_fmt = vec![format!("{}     ", ANSIStrings(&s))];
-        let wrapped: Vec<String> = wrap_ansistrings(&s, 10).collect();
+        let wrapped: Vec<String> = wrap_ansistrings(&s, 10, true).collect();
         assert_eq!(1, wrapped.len());
         assert_eq!(s_fmt, wrapped);
     }
@@ -154,7 +154,7 @@ mod tests {
     fn wrap_ansi_single_line_exact() {
         let s = vec![Red.paint("hel"), Green.paint("lo")];
         let s_fmt = vec![format!("{}", ANSIStrings(&s))];
-        let wrapped: Vec<String> = wrap_ansistrings(&s, 5).collect();
+        let wrapped: Vec<String> = wrap_ansistrings(&s, 5, true).collect();
         assert_eq!(1, wrapped.len());
         assert_eq!(s_fmt, wrapped);
     }
@@ -163,7 +163,7 @@ mod tests {
     fn wrap_ansi_multi_line_under() {
         let s = vec![Red.paint("hello "), Green.paint("world")];
         let s_fmt = vec![format!("{}", s[0]), format!("{} ", s[1])];
-        let wrapped: Vec<String> = wrap_ansistrings(&s, 6).collect();
+        let wrapped: Vec<String> = wrap_ansistrings(&s, 6, true).collect();
         assert_eq!(2, wrapped.len());
         assert_eq!(s_fmt, wrapped);
     }
@@ -176,7 +176,7 @@ mod tests {
                          format!("{}", Red.paint("l")),
                          format!("{}", Red.paint("l")),
                          format!("{}", Red.paint("o"))];
-        let wrapped: Vec<String> = wrap_ansistrings(&s, 1).collect();
+        let wrapped: Vec<String> = wrap_ansistrings(&s, 1, true).collect();
         assert_eq!(5, wrapped.len());
         assert_eq!(s_fmt, wrapped);
     }
