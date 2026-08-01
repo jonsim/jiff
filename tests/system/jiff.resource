@@ -16,15 +16,24 @@ Jiff Files
     IF     ${side_by_side}
         Append To List    ${args}    --side-by-side
     END
-    # Check the Python implementation's output.
-    ${res} =    Run Python Jiff    @{args}
-    ${expectation_str} =    Get File    ${base_dir}/testcases/${expectation}
-    Should Be Equal    ${res.stdout}    ${expectation_str}    Python implementation produced incorrect output
 
-    # Check the Rust implementation's output.
-    ${res} =    Run Rust Jiff    @{args}
-    ${expectation_str} =    Get File    ${base_dir}/testcases/${expectation}
-    Should Be Equal    ${res.stdout}    ${expectation_str}    Rust implementation produced incorrect output
+    ${skip_python} =    Get Variable Value  ${SKIP_PYTHON_TESTS}  ${False}
+    IF    not ${skip_python}
+        # Check the Python implementation's output.
+        ${res} =    Run Python Jiff    @{args}
+        ${expectation_str} =    Get File    ${base_dir}/testcases/${expectation}
+        Should Be Equal    ${res.stdout}    ${expectation_str}
+        ...    Python implementation produced incorrect output
+    END
+
+    ${skip_rust} =    Get Variable Value  ${SKIP_RUST_TESTS}  ${False}
+    IF    not ${skip_rust}
+        # Check the Rust implementation's output.
+        ${res} =    Run Rust Jiff    @{args}
+        ${expectation_str} =    Get File    ${base_dir}/testcases/${expectation}
+        Should Be Equal    ${res.stdout}    ${expectation_str}
+        ...    Rust implementation produced incorrect output
+    END
 
 
 Jiff Strings

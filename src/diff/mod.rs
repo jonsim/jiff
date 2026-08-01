@@ -9,7 +9,7 @@ use difference::{Changeset, Difference};
 use itertools::EitherOrBoth;
 use itertools::Itertools;
 use std::sync::LazyLock;
-use wrap::{wrap_str, wrap_ansistrings};
+use wrap::wrap_ansistrings;
 
 pub static DEBUG: LazyLock<bool> = LazyLock::new(|| {
     matches!(std::env::var("JIFF_DEBUG").as_deref(), Ok("1"))
@@ -106,7 +106,7 @@ fn calculate_diff(left: &str, right: &str, split: &str) -> Vec<Diff> {
     diffs
 }
 
-pub fn print_diffs(diffs: &Vec<Diff>, context: usize, color: bool) {
+pub fn print_diffs(diffs: &Vec<Diff>, _context: usize, color: bool) {
     let line_styling = if color {
         DiffStyling {
             same:             Style::default(),
@@ -296,7 +296,7 @@ fn _style_diff_line<'u>(before: &'u str, after: &'u str, styling: &DiffStyling,
 }
 
 pub fn print_diffs_side_by_side(diffs: &Vec<Diff>, max_line_count: usize,
-                                context: usize, color: bool) {
+                                _context: usize, color: bool) {
     // Define styling constants.
     let lineno_styling = if color {
         DiffStyling {
