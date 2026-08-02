@@ -214,7 +214,7 @@ fn _print_side_by_side_line(
         if first_iteration {
             margin_l = &wrapno_l;
             margin_r = &wrapno_r;
-            first_iteration = true;
+            first_iteration = false;
         }
     }
 }
