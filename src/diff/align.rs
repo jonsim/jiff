@@ -255,6 +255,13 @@ pub fn align<'a>(
     lines_b: &[&'a str],
     lines_a: &[&'a str],
 ) -> Vec<(Option<&'a str>, Option<&'a str>)> {
+    if lines_b.is_empty() {
+        return lines_a.iter().map(|line| (None, Some(*line))).collect();
+    }
+    if lines_a.is_empty() {
+        return lines_b.iter().map(|line| (Some(*line), None)).collect();
+    }
+
     let mut matrix = AlignmentMatrix::new(lines_b, lines_a);
     if *DEBUG {
         eprintln!("  Initialised: {}", matrix)
@@ -384,6 +391,38 @@ mod tests {
 
         assert_eq!(
             vec![(Some("aXaXaXa"), None), (None, Some("aYaYaYa"))],
+            alignment
+        );
+    }
+
+    #[test]
+    fn aligns_two_empty_inputs() {
+        // No input lines means there are no alignment operations to report.
+        assert_eq!(Vec::<(Option<&str>, Option<&str>)>::new(), align(&[], &[]));
+    }
+
+    #[test]
+    fn aligns_an_empty_before_input() {
+        // With no left lines, every right line is an insertion in input order.
+        let after = ["Kermit", "Gonzo"];
+
+        let alignment = align(&[], &after);
+
+        assert_eq!(
+            vec![(None, Some("Kermit")), (None, Some("Gonzo"))],
+            alignment
+        );
+    }
+
+    #[test]
+    fn aligns_an_empty_after_input() {
+        // With no right lines, every left line is a removal in input order.
+        let before = ["Kermit", "Gonzo"];
+
+        let alignment = align(&before, &[]);
+
+        assert_eq!(
+            vec![(Some("Kermit"), None), (Some("Gonzo"), None)],
             alignment
         );
     }
