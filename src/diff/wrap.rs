@@ -1,7 +1,27 @@
 use ansi_term::{ANSIString, ANSIStrings};
-#[cfg(test)]
-use std::cmp::min;
 use std::iter::Iterator;
+use unicode_width::UnicodeWidthChar;
+
+fn split_at_width(s: &str, width: usize) -> (usize, usize) {
+    let mut byte_len = 0;
+    let mut display_width = 0;
+    for character in s.chars() {
+        let character_width = character.width().unwrap_or(0);
+        if byte_len > 0 && display_width + character_width > width {
+            break;
+        }
+
+        // A double-width character still has to be consumed in a one-column
+        // terminal, otherwise the iterator can never make progress.
+        byte_len += character.len_utf8();
+        display_width += character_width;
+        if display_width > width {
+            break;
+        }
+    }
+
+    (byte_len, display_width)
+}
 
 #[cfg(test)]
 pub struct WrappedStrIter<'a> {
@@ -22,7 +42,8 @@ impl<'a> Iterator for WrappedStrIter<'a> {
         }
         self.output_once = true;
         let start_pos = self.cur_pos;
-        self.cur_pos = min(self.cur_pos + self.wrap_at, self.len);
+        let (byte_len, _) = split_at_width(&self.s[start_pos..], self.wrap_at);
+        self.cur_pos += byte_len;
         Some(&self.s[start_pos..self.cur_pos])
     }
 }
@@ -40,7 +61,7 @@ pub fn wrap_str(s: &str, width: usize) -> WrappedStrIter<'_> {
 
 pub struct WrappedANSIStringsIter<'u> {
     s_ansi: ANSIStrings<'u>,
-    unstyled_len: usize,
+    unstyled: String,
     wrap_at: usize,
     cur_pos: usize,
     output_once: bool,
@@ -51,33 +72,28 @@ impl<'u> Iterator for WrappedANSIStringsIter<'u> {
     type Item = String;
 
     fn next(&mut self) -> Option<String> {
-        if self.output_once && self.cur_pos >= self.unstyled_len {
+        if self.output_once && self.cur_pos >= self.unstyled.len() {
             return None;
         }
         self.output_once = true;
-        let start_pos = self.cur_pos;
-        if self.unstyled_len <= self.wrap_at {
-            self.cur_pos = self.unstyled_len;
-            let padding_required = if self.pad {
-                self.wrap_at - self.unstyled_len
-            } else {
-                0
-            };
-            let fmt = format!("{}{:w$}", self.s_ansi, "", w = padding_required);
-            Some(fmt)
-        } else {
-            let split = ansi_term::sub_string(start_pos, self.wrap_at, &self.s_ansi);
-            let split_fmt = ANSIStrings(split.as_slice());
-            let split_len = ansi_term::unstyled_len(&split_fmt);
-            self.cur_pos += split_len;
-            let padding_required = if self.pad {
-                self.wrap_at - split_len
-            } else {
-                0
-            };
-            let fmt = format!("{}{:w$}", split_fmt, "", w = padding_required);
-            Some(fmt)
+
+        if self.unstyled.is_empty() {
+            let padding_required = if self.pad { self.wrap_at } else { 0 };
+            return Some(format!("{}{:w$}", self.s_ansi, "", w = padding_required));
         }
+
+        let start_pos = self.cur_pos;
+        let (byte_len, display_width) = split_at_width(&self.unstyled[start_pos..], self.wrap_at);
+        self.cur_pos += byte_len;
+
+        let split = ansi_term::sub_string(start_pos, byte_len, &self.s_ansi);
+        let split_fmt = ANSIStrings(split.as_slice());
+        let padding_required = if self.pad {
+            self.wrap_at.saturating_sub(display_width)
+        } else {
+            0
+        };
+        Some(format!("{}{:w$}", split_fmt, "", w = padding_required))
     }
 }
 
@@ -89,17 +105,18 @@ pub fn wrap_ansistrings<'s, 'u>(
 where
     'u: 's,
 {
-    let unstyled_len = ansi_term::unstyled_len(&ANSIStrings(s));
+    let unstyled = ansi_term::unstyle(&ANSIStrings(s));
+    let wrap_at = if unstyled.is_empty() {
+        width
+    } else {
+        width.max(1)
+    };
     WrappedANSIStringsIter {
         s_ansi: ANSIStrings(s),
-        unstyled_len,
+        unstyled,
         // A zero-width terminal is not useful, but it can be reported while a
-        // terminal is being resized. Advancing one byte avoids looping forever.
-        wrap_at: if unstyled_len == 0 {
-            width
-        } else {
-            width.max(1)
-        },
+        // terminal is being resized. Advancing one column avoids looping forever.
+        wrap_at,
         cur_pos: 0,
         output_once: false,
         pad,
@@ -165,6 +182,14 @@ mod tests {
     }
 
     #[test]
+    fn wrap_str_uses_unicode_display_width() {
+        // The accent is one column and the emoji is two, despite their UTF-8 sizes.
+        let wrapped: Vec<&str> = wrap_str("é🙂a", 2).collect();
+
+        assert_eq!(vec!["é", "🙂", "a"], wrapped);
+    }
+
+    #[test]
     fn wrap_ansi_empty() {
         let s = vec![Red.paint("")];
         let s_fmt = vec![format!("{}", ANSIStrings(&s))];
@@ -225,5 +250,21 @@ mod tests {
         let wrapped: Vec<String> = wrap_ansistrings(&s, 1, true).collect();
         assert_eq!(5, wrapped.len());
         assert_eq!(s_fmt, wrapped);
+    }
+
+    #[test]
+    fn wrap_ansi_uses_unicode_display_width() {
+        // Wrapping must preserve styles while splitting at UTF-8 boundaries.
+        let s = vec![Red.paint("é"), Green.paint("🙂a")];
+        let wrapped: Vec<String> = wrap_ansistrings(&s, 2, true).collect();
+
+        assert_eq!(
+            vec![
+                format!("{} ", Red.paint("é")),
+                format!("{}", Green.paint("🙂")),
+                format!("{} ", Green.paint("a")),
+            ],
+            wrapped
+        );
     }
 }
