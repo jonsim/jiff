@@ -208,11 +208,16 @@ fn _print_side_by_side_line(
             EitherOrBoth::Right(r) => (" ".repeat(line_width.0), r),
         };
 
-        // TODO: optimize to expoit ANSIStrings
-        println!(
-            "{} {}{}{} {}",
-            margin_l, wrapped_l, separator, margin_r, wrapped_r
-        );
+        // A missing right line has no line number or text worth padding. Stop
+        // at the separator so redirected output does not contain whitespace.
+        if margin_r.trim().is_empty() && wrapped_r.is_empty() {
+            println!("{} {}{}", margin_l, wrapped_l, separator);
+        } else {
+            println!(
+                "{} {}{}{} {}",
+                margin_l, wrapped_l, separator, margin_r, wrapped_r
+            );
+        }
         if first_iteration {
             margin_l = &wrapno_l;
             margin_r = &wrapno_r;

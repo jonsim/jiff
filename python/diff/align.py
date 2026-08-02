@@ -148,11 +148,11 @@ class AlignmentMatrix:
         return path
 
     def shortest_path(self) -> list[Point]:
-        # Initialize the root adjacency nodes (i.e. those accessible from
-        # the single source node).
+        # Each root neighbour represents the first real operation. Starting
+        # it at zero would make the first insertion, removal or pairing free.
         for adj in self.root_adjacency():
             vertex = self.line_matrix[adj.x][adj.y]
-            vertex.relax_weight = 0
+            vertex.relax_weight = vertex.weight
 
         # Walk all nodes.
         # The line matrix is iterated in topological order, line by line, since

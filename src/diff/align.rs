@@ -185,11 +185,11 @@ impl AlignmentMatrix {
     }
 
     fn shortest_path(&mut self) -> Vec<Point> {
-        // Initialize the root adjacency nodes (i.e. those accessible from
-        // the single source node).
+        // Each root neighbour represents the first real operation. Starting
+        // it at zero would make the first insertion, removal or pairing free.
         for adj in self.root_adjacency() {
             let vertex = &mut self.line_matrix[adj.x][adj.y];
-            vertex.relax_weight = 0;
+            vertex.relax_weight = vertex.weight;
         }
         // Walk all nodes.
         // The line matrix is iterated in topological order, line by line, since
@@ -370,6 +370,20 @@ mod tests {
                 (Some("Fozzie"), None),
                 (Some("Gonzo"), Some("Gonzo")),
             ],
+            alignment
+        );
+    }
+
+    #[test]
+    fn charges_for_the_first_alignment_operation() {
+        // Fragmented changes cost more than removing and adding these two lines.
+        let before = ["aXaXaXa"];
+        let after = ["aYaYaYa"];
+
+        let alignment = align(&before, &after);
+
+        assert_eq!(
+            vec![(Some("aXaXaXa"), None), (None, Some("aYaYaYa"))],
             alignment
         );
     }

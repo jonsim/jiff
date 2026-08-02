@@ -344,17 +344,22 @@ def _print_side_by_side_line(
             wrapped_l = ""
         if wrapped_r is None:
             wrapped_r = ""
-        console.print(
-            margin_l,
-            " ",
-            wrapped_l,
-            " " * (line_width - len(wrapped_l)),
-            separator,
-            margin_r,
-            " ",
-            wrapped_r,
-            sep="",
-        )
+        left_padding = " " * (line_width - len(wrapped_l))
+        if not margin_r.plain.strip() and not wrapped_r.plain:
+            # A missing right line has no line number or text worth padding.
+            console.print(margin_l, " ", wrapped_l, left_padding, separator, sep="")
+        else:
+            console.print(
+                margin_l,
+                " ",
+                wrapped_l,
+                left_padding,
+                separator,
+                margin_r,
+                " ",
+                wrapped_r,
+                sep="",
+            )
         if first_iteration:
             margin_l = wrapno_l
             margin_r = wrapno_r
