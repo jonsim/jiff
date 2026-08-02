@@ -1,4 +1,3 @@
-use difference::Changeset;
 use std::sync::LazyLock;
 
 static DEBUG: LazyLock<bool> =
@@ -12,18 +11,66 @@ enum AlignmentOperation {
     Pair,
 }
 
-fn pair_cost(before: &str, after: &str) -> usize {
-    let changeset = Changeset::new(before, after, "");
-    let edit_distance = changeset.distance as usize;
-    let operations = changeset.diffs.len();
-    let cost = edit_distance * operations.div_ceil(2);
-
-    if *DEBUG {
-        eprintln!("  Changeset for {before} -> {after}: {changeset}");
-        eprintln!("    Edit distance: {edit_distance}, operations: {operations}, cost: {cost}");
+fn lcs_distance(before: &[char], after: &[char], lengths: &mut Vec<usize>) -> usize {
+    let common_prefix = before
+        .iter()
+        .zip(after)
+        .take_while(|(before, after)| before == after)
+        .count();
+    let mut common_suffix = 0;
+    while common_suffix < before.len() - common_prefix
+        && common_suffix < after.len() - common_prefix
+        && before[before.len() - common_suffix - 1] == after[after.len() - common_suffix - 1]
+    {
+        common_suffix += 1;
     }
 
-    cost
+    let before = &before[common_prefix..before.len() - common_suffix];
+    let after = &after[common_prefix..after.len() - common_suffix];
+    let (rows, columns) = if before.len() >= after.len() {
+        (before, after)
+    } else {
+        (after, before)
+    };
+
+    lengths.clear();
+    lengths.resize(columns.len() + 1, 0);
+    for row in rows {
+        let mut diagonal = 0;
+        for (column_index, column) in columns.iter().enumerate() {
+            let previous_row = lengths[column_index + 1];
+            lengths[column_index + 1] = if row == column {
+                diagonal + 1
+            } else {
+                lengths[column_index].max(previous_row)
+            };
+            diagonal = previous_row;
+        }
+    }
+
+    before.len() + after.len() - 2 * lengths[columns.len()]
+}
+
+fn pair_cost(before: &[char], after: &[char], lengths: &mut Vec<usize>) -> usize {
+    if before == after {
+        return 0;
+    }
+
+    let unpaired_cost = before.len() + after.len();
+    let length_difference = before.len().abs_diff(after.len());
+
+    // A sufficiently large length difference cannot pass the similarity
+    // cutoff, regardless of how the shorter line is arranged.
+    if 2 * length_difference >= unpaired_cost {
+        return unpaired_cost + 1;
+    }
+
+    let distance = lcs_distance(before, after, lengths);
+    if 2 * distance >= unpaired_cost {
+        unpaired_cost + 1
+    } else {
+        distance
+    }
 }
 
 fn choose_operation(pair: usize, remove: usize, add: usize) -> (usize, AlignmentOperation) {
@@ -42,7 +89,8 @@ fn choose_operation(pair: usize, remove: usize, add: usize) -> (usize, Alignment
 ///
 /// Each output entry consumes a line from `lines_b`, `lines_a`, or both. The
 /// dynamic programme chooses the lowest-cost path, where an unpaired line costs
-/// its byte length and a pair costs its character diff score.
+/// its character length. Lines are paired only when their insertion/deletion
+/// distance is less than half their combined length.
 pub(super) fn align<'a>(
     lines_b: &[&'a str],
     lines_a: &[&'a str],
@@ -51,23 +99,34 @@ pub(super) fn align<'a>(
     let mut operations = vec![AlignmentOperation::Start; (lines_b.len() + 1) * width];
     let mut previous_costs = vec![0; width];
     let mut current_costs = vec![0; width];
+    let before_chars: Vec<Vec<char>> = lines_b.iter().map(|line| line.chars().collect()).collect();
+    let after_chars: Vec<Vec<char>> = lines_a.iter().map(|line| line.chars().collect()).collect();
+    let mut lcs_lengths = Vec::new();
 
     // The first row and column describe paths which can only add or remove.
-    for (after_index, after) in lines_a.iter().enumerate() {
+    for (after_index, after) in after_chars.iter().enumerate() {
         previous_costs[after_index + 1] = previous_costs[after_index] + after.len();
         operations[after_index + 1] = AlignmentOperation::Add;
     }
 
-    for (before_index, before) in lines_b.iter().enumerate() {
+    for (before_index, before) in before_chars.iter().enumerate() {
         current_costs[0] = previous_costs[0] + before.len();
         operations[(before_index + 1) * width] = AlignmentOperation::Remove;
 
-        for (after_index, after) in lines_a.iter().enumerate() {
+        for (after_index, after) in after_chars.iter().enumerate() {
             let column = after_index + 1;
-            let pair = previous_costs[column - 1] + pair_cost(before, after);
+            let score = pair_cost(before, after, &mut lcs_lengths);
+            let pair = previous_costs[column - 1] + score;
             let remove = previous_costs[column] + before.len();
             let add = current_costs[column - 1] + after.len();
             let (cost, operation) = choose_operation(pair, remove, add);
+
+            if *DEBUG {
+                eprintln!(
+                    "  Pair score for {} -> {}: {}",
+                    lines_b[before_index], lines_a[after_index], score
+                );
+            }
 
             current_costs[column] = cost;
             operations[(before_index + 1) * width + column] = operation;
@@ -203,16 +262,38 @@ mod tests {
 
     #[test]
     fn charges_for_the_first_alignment_operation() {
-        // Fragmented changes cost more than removing and adding these two lines.
+        // Unrelated first lines cost more to pair than to remove and add.
+        let before = ["Kermit"];
+        let after = ["Gonzo"];
+
+        let alignment = align(&before, &after);
+
+        assert_eq!(
+            vec![(Some("Kermit"), None), (None, Some("Gonzo"))],
+            alignment
+        );
+    }
+
+    #[test]
+    fn pairs_fragmented_changes_when_the_line_is_still_similar() {
+        // Several small edits should not outweigh the characters which still match.
         let before = ["aXaXaXa"];
         let after = ["aYaYaYa"];
 
         let alignment = align(&before, &after);
 
-        assert_eq!(
-            vec![(Some("aXaXaXa"), None), (None, Some("aYaYaYa"))],
-            alignment
-        );
+        assert_eq!(vec![(Some("aXaXaXa"), Some("aYaYaYa"))], alignment);
+    }
+
+    #[test]
+    fn uses_character_lengths_for_unicode_lines() {
+        // UTF-8 byte length must not make unrelated non-ASCII lines cheaper to pair.
+        let before = ["éé"];
+        let after = ["zz"];
+
+        let alignment = align(&before, &after);
+
+        assert_eq!(vec![(Some("éé"), None), (None, Some("zz"))], alignment);
     }
 
     #[test]
