@@ -5,9 +5,9 @@ use align::align;
 use ansi_term::Color::{Black, Fixed, Green, Red};
 use ansi_term::Style;
 use ansi_term::{ANSIString, ANSIStrings};
-use difference::{Changeset, Difference};
 use itertools::EitherOrBoth;
 use itertools::Itertools;
+use similar::{capture_diff_slices, Algorithm, DiffTag, TextDiff};
 use std::sync::LazyLock;
 use wrap::wrap_ansistrings;
 
@@ -31,67 +31,60 @@ struct DiffStyling {
 }
 
 pub fn calculate_line_diff(left: &str, right: &str) -> Vec<Diff> {
-    calculate_diff(left, right, "\n")
+    let old_lines: Vec<&str> = if left.is_empty() {
+        Vec::new()
+    } else {
+        left.split('\n').collect()
+    };
+    let new_lines: Vec<&str> = if right.is_empty() {
+        Vec::new()
+    } else {
+        right.split('\n').collect()
+    };
+
+    capture_diff_slices(Algorithm::Myers, &old_lines, &new_lines)
+        .iter()
+        .map(|operation| {
+            let old = old_lines[operation.old_range()].join("\n");
+            let new = new_lines[operation.new_range()].join("\n");
+            make_diff(operation.tag(), old, new)
+        })
+        .collect()
 }
 
 pub fn calculate_char_diff(left: &str, right: &str) -> Vec<Diff> {
-    calculate_diff(left, right, "")
+    let diff = TextDiff::configure()
+        .algorithm(Algorithm::Myers)
+        .diff_chars(left, right);
+
+    diff.ops()
+        .iter()
+        .map(|operation| {
+            let old = operation
+                .old_range()
+                .fold(String::new(), |mut text, index| {
+                    text.push_str(diff.old_slice(index).expect("diff old range is valid"));
+                    text
+                });
+            let new = operation
+                .new_range()
+                .fold(String::new(), |mut text, index| {
+                    text.push_str(diff.new_slice(index).expect("diff new range is valid"));
+                    text
+                });
+
+            make_diff(operation.tag(), old, new)
+        })
+        .collect()
 }
 
-fn calculate_diff(left: &str, right: &str, split: &str) -> Vec<Diff> {
-    let mut changeset = Changeset::new(left, right, split);
-    let mut diffs = Vec::new();
-    let mut previous: Option<Difference> = None;
-
-    for change in changeset.diffs.drain(..) {
-        match change {
-            Difference::Same(same) => {
-                if let Some(last_change) = previous {
-                    diffs.push(match last_change {
-                        Difference::Same(_) => panic!("Invalid state"),
-                        Difference::Add(add) => Diff::Add(add),
-                        Difference::Rem(rem) => Diff::Remove(rem),
-                    });
-                    previous = None;
-                }
-                diffs.push(Diff::Same(same));
-            }
-            Difference::Add(add) => match previous {
-                Some(last_change) => {
-                    diffs.push(match last_change {
-                        Difference::Same(_) => panic!("Invalid state"),
-                        Difference::Add(_) => panic!("Invalid state"),
-                        Difference::Rem(rem) => Diff::Replace(rem, add),
-                    });
-                    previous = None;
-                }
-                None => {
-                    previous = Some(Difference::Add(add));
-                }
-            },
-            Difference::Rem(rem) => match previous {
-                Some(last_change) => {
-                    diffs.push(match last_change {
-                        Difference::Same(_) => panic!("Invalid state"),
-                        Difference::Add(add) => Diff::Replace(rem, add),
-                        Difference::Rem(_) => panic!("Invalid state"),
-                    });
-                    previous = None;
-                }
-                None => {
-                    previous = Some(Difference::Rem(rem));
-                }
-            },
-        }
+fn make_diff(tag: DiffTag, old: String, new: String) -> Diff {
+    match tag {
+        DiffTag::Equal => Diff::Same(old),
+        DiffTag::Delete => Diff::Remove(old),
+        DiffTag::Insert => Diff::Add(new),
+        DiffTag::Replace => Diff::Replace(old, new),
     }
-    if let Some(uncommitted) = previous {
-        diffs.push(match uncommitted {
-            Difference::Same(_) => panic!("Invalid state"),
-            Difference::Add(add) => Diff::Add(add),
-            Difference::Rem(rem) => Diff::Remove(rem),
-        });
-    }
-    diffs
 }
 
 pub fn print_diffs(diffs: &[Diff], _context: usize, color: bool) {
@@ -470,6 +463,21 @@ mod tests {
                 Diff::Same("Kermit".to_string()),
                 Diff::Add("Fozzie".to_string()),
                 Diff::Same("Gonzo".to_string()),
+            ],
+            diffs
+        );
+    }
+
+    #[test]
+    fn line_diff_matches_a_final_line_with_an_interior_line() {
+        // Line endings are separators, so they must not prevent this exact match.
+        let diffs = calculate_line_diff("first", "before\nfirst\nafter");
+
+        assert_eq!(
+            vec![
+                Diff::Add("before".to_string()),
+                Diff::Same("first".to_string()),
+                Diff::Add("after".to_string()),
             ],
             diffs
         );
