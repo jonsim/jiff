@@ -32,7 +32,7 @@ pub fn wrap_str(s: &str, width: usize) -> WrappedStrIter<'_> {
     WrappedStrIter {
         s,
         len: s.len(),
-        wrap_at: width,
+        wrap_at: if s.is_empty() { width } else { width.max(1) },
         cur_pos: 0,
         output_once: false,
     }
@@ -89,10 +89,17 @@ pub fn wrap_ansistrings<'s, 'u>(
 where
     'u: 's,
 {
+    let unstyled_len = ansi_term::unstyled_len(&ANSIStrings(s));
     WrappedANSIStringsIter {
         s_ansi: ANSIStrings(s),
-        unstyled_len: ansi_term::unstyled_len(&ANSIStrings(s)),
-        wrap_at: width,
+        unstyled_len,
+        // A zero-width terminal is not useful, but it can be reported while a
+        // terminal is being resized. Advancing one byte avoids looping forever.
+        wrap_at: if unstyled_len == 0 {
+            width
+        } else {
+            width.max(1)
+        },
         cur_pos: 0,
         output_once: false,
         pad,
@@ -110,6 +117,14 @@ mod tests {
         let wrapped: Vec<&str> = wrap_str(s, 0).collect();
         assert_eq!(1, wrapped.len());
         assert_eq!("", wrapped[0]);
+    }
+
+    #[test]
+    fn wrap_str_nonempty_at_zero_width() {
+        // A transient zero-width terminal must still make forward progress.
+        let wrapped: Vec<&str> = wrap_str("hi", 0).collect();
+
+        assert_eq!(vec!["h", "i"], wrapped);
     }
 
     #[test]
@@ -156,6 +171,18 @@ mod tests {
         let wrapped: Vec<String> = wrap_ansistrings(&s, 0, true).collect();
         assert_eq!(1, wrapped.len());
         assert_eq!(s_fmt, wrapped);
+    }
+
+    #[test]
+    fn wrap_ansi_nonempty_at_zero_width() {
+        // ANSI wrapping uses the same one-column fallback as plain text.
+        let s = vec![Red.paint("hi")];
+        let wrapped: Vec<String> = wrap_ansistrings(&s, 0, false).collect();
+
+        assert_eq!(
+            vec![format!("{}", Red.paint("h")), format!("{}", Red.paint("i"))],
+            wrapped
+        );
     }
 
     #[test]
