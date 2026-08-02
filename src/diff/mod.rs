@@ -253,6 +253,15 @@ fn _style_diff_line<'u>(
     }
 }
 
+fn side_by_side_line_width(term_width: usize, lineno_width: usize, separator: &str) -> usize {
+    let separator_width = separator.chars().count();
+    let fixed_width = separator_width + 2 * (lineno_width + 2);
+
+    // Some terminals briefly report tiny dimensions while being resized. A
+    // one-column line still lets the wrapping iterator make progress.
+    term_width.saturating_sub(fixed_width).div_euclid(2).max(1)
+}
+
 pub fn print_diffs_side_by_side(
     diffs: &[Diff],
     max_line_count: usize,
@@ -308,20 +317,13 @@ pub fn print_diffs_side_by_side(
 
     // Define separation characters.
     let sep = "\u{2502}";
-    let sep_width = sep.len();
-
-    // Caclulcate widths to draw to.
+    // Calculate widths to draw to.
     let lineno_width = (max_line_count as f32).log(10.0).floor() as usize + 1;
-    let line_width = match term_size::dimensions_stdout() {
-        Some((term_width, _)) => {
-            let line_width = ((term_width - sep_width) / 2) - (lineno_width + 1);
-            (line_width, line_width)
-        }
-        None => {
-            let line_width = ((120 - sep_width) / 2) - (lineno_width + 1);
-            (line_width, line_width)
-        }
-    };
+    let term_width = term_size::dimensions_stdout()
+        .map(|(term_width, _)| term_width)
+        .unwrap_or(120);
+    let line_width = side_by_side_line_width(term_width, lineno_width, sep);
+    let line_width = (line_width, line_width);
 
     // Print all diffs.
     let mut lineno_l = 1;
@@ -514,5 +516,17 @@ mod tests {
             ],
             diffs
         );
+    }
+
+    #[test]
+    fn side_by_side_width_accounts_for_fixed_columns() {
+        // A 120-column terminal leaves 56 text columns on each side.
+        assert_eq!(56, side_by_side_line_width(120, 1, "│"));
+    }
+
+    #[test]
+    fn side_by_side_width_survives_a_tiny_terminal() {
+        // Terminal resizing can report less width than the margins require.
+        assert_eq!(1, side_by_side_line_width(4, 3, "│"));
     }
 }
