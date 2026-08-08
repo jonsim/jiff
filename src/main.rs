@@ -20,6 +20,14 @@ fn read_file_or_die(path: &str) -> String {
     content
 }
 
+fn line_count(content: &str) -> usize {
+    if content.is_empty() {
+        0
+    } else {
+        content.matches('\n').count() + 1
+    }
+}
+
 fn main() {
     // Handle command line.
     let matches = App::new("jiff")
@@ -51,7 +59,7 @@ fn main() {
     let side_by_side = matches.is_present("side-by-side");
     let lfile = read_file_or_die(lpath);
     let rfile = read_file_or_die(rpath);
-    let max_line_count = max(lfile.matches('\n').count(), rfile.matches('\n').count());
+    let max_line_count = max(line_count(&lfile), line_count(&rfile));
     //println!("lpath: {}\n{}\nrpath: {}\n{}\n", lpath, lfile, rpath, rfile);
 
     // If colorization is enabled, determine whether or not to automatically
@@ -70,5 +78,30 @@ fn main() {
         diff::print_diffs_side_by_side(&diffs, max_line_count, 0, color);
     } else {
         diff::print_diffs(&diffs, 0, color);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_content_has_no_lines() {
+        // An empty file should not reserve a real line number.
+        assert_eq!(0, line_count(""));
+    }
+
+    #[test]
+    fn content_without_a_separator_has_one_line() {
+        // A line exists even when there is no newline separator.
+        assert_eq!(1, line_count("Kermit"));
+    }
+
+    #[test]
+    fn line_count_includes_the_text_after_each_separator() {
+        // This boundary decides when side-by-side line numbers gain a digit.
+        let content = "1\n2\n3\n4\n5\n6\n7\n8\n9\n10";
+
+        assert_eq!(10, line_count(content));
     }
 }
