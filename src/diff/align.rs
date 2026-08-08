@@ -170,6 +170,32 @@ pub(super) fn align<'a>(
 mod tests {
     use super::*;
 
+    fn characters(s: &str) -> Vec<char> {
+        s.chars().collect()
+    }
+
+    #[test]
+    fn lcs_distance_ignores_a_common_prefix_and_suffix() {
+        // Trimming anchors must leave the same distance as diffing the full line.
+        let before = characters("abcXYZdef");
+        let after = characters("abcX123YZdef");
+
+        let distance = lcs_distance(&before, &after, &mut Vec::new());
+
+        assert_eq!(3, distance);
+    }
+
+    #[test]
+    fn pair_cost_rejects_lines_at_the_similarity_boundary() {
+        // One changed character in a two-character line is too little context.
+        let before = characters("ab");
+        let after = characters("ac");
+
+        let cost = pair_cost(&before, &after, &mut Vec::new());
+
+        assert!(cost > before.len() + after.len());
+    }
+
     #[test]
     fn aligns_identical_lines() {
         // Exact matches should keep their input order and pair every line.
