@@ -12,6 +12,10 @@ the other in Python. The Rust version is expected to be faster, but the Python
 version is more portable. Tests assert that the two versions are functionally
 identical.
 
+Long output from either implementation is sent to `$PAGER`, using `less` by
+default. Output which fits in the terminal, or is redirected to another
+command, is printed directly. Pass `--no-pager` to always print directly.
+
 ### Rust
 
 #### Building
@@ -57,7 +61,9 @@ uv run jiff --inline FILE1 FILE2
 #### Testing
 
 Unit tests:
-- Currently no unit tests for the Python code - TBD.
+```sh
+uv run python -m unittest discover -s python/tests
+```
 
 System tests:
 ```sh

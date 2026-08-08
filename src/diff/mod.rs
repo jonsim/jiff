@@ -8,6 +8,7 @@ use ansi_term::{ANSIString, ANSIStrings};
 use itertools::EitherOrBoth;
 use itertools::Itertools;
 use similar::{capture_diff_slices, Algorithm, DiffTag, TextDiff};
+use std::fmt::Write;
 use std::sync::LazyLock;
 use unicode_width::UnicodeWidthStr;
 use wrap::wrap_ansistrings;
@@ -133,10 +134,11 @@ fn make_diff(tag: DiffTag, old: String, new: String) -> Diff {
     }
 }
 
-/// Prints a unified diff, including character highlighting for paired lines.
-pub(super) fn print_diffs(diffs: &[Diff], color: bool) {
+/// Renders a unified diff, including character highlighting for paired lines.
+pub(super) fn render_diffs(diffs: &[Diff], color: bool) -> String {
     let line_styling = line_styling(color);
     let margin_styling = indicator_styling(color);
+    let mut output = String::new();
 
     for change in diffs {
         match change {
@@ -144,21 +146,24 @@ pub(super) fn print_diffs(diffs: &[Diff], color: bool) {
                 for line in same.split('\n') {
                     let margin = margin_styling.same.paint("  ");
                     let fmt = line_styling.same.paint(line);
-                    println!("{}{}", margin, fmt);
+                    writeln!(&mut output, "{}{}", margin, fmt)
+                        .expect("writing to a String cannot fail");
                 }
             }
             Diff::Add(add) => {
                 for line in add.split('\n') {
                     let margin = margin_styling.add.paint("+ ");
                     let fmt = line_styling.add.paint(line);
-                    println!("{}{}", margin, fmt);
+                    writeln!(&mut output, "{}{}", margin, fmt)
+                        .expect("writing to a String cannot fail");
                 }
             }
             Diff::Remove(rem) => {
                 for line in rem.split('\n') {
                     let margin = margin_styling.remove.paint("- ");
                     let fmt = line_styling.remove.paint(line);
-                    println!("{}{}", margin, fmt);
+                    writeln!(&mut output, "{}{}", margin, fmt)
+                        .expect("writing to a String cannot fail");
                 }
             }
             Diff::Replace(before, after) => {
@@ -195,16 +200,21 @@ pub(super) fn print_diffs(diffs: &[Diff], color: bool) {
                         (None, None) => unreachable!("alignment cannot omit both lines"),
                     }
                 }
-                print!("{}", ANSIStrings(&fmts_b));
-                print!("{}", ANSIStrings(&fmts_a));
+                write!(&mut output, "{}", ANSIStrings(&fmts_b))
+                    .expect("writing to a String cannot fail");
+                write!(&mut output, "{}", ANSIStrings(&fmts_a))
+                    .expect("writing to a String cannot fail");
             }
         }
     }
+
+    output
 }
 
 // These arguments deliberately mirror the left and right output columns.
 #[allow(clippy::too_many_arguments)]
-fn _print_side_by_side_line(
+fn _render_side_by_side_line(
+    output: &mut String,
     lineno_l: ANSIString,
     lineno_r: ANSIString,
     wrapno_l: ANSIString,
@@ -229,12 +239,15 @@ fn _print_side_by_side_line(
         // A missing right line has no line number or text worth padding. Stop
         // at the separator so redirected output does not contain whitespace.
         if margin_r.trim().is_empty() && wrapped_r.is_empty() {
-            println!("{} {}{}", margin_l, wrapped_l, separator);
+            writeln!(output, "{} {}{}", margin_l, wrapped_l, separator)
+                .expect("writing to a String cannot fail");
         } else {
-            println!(
+            writeln!(
+                output,
                 "{} {}{}{} {}",
                 margin_l, wrapped_l, separator, margin_r, wrapped_r
-            );
+            )
+            .expect("writing to a String cannot fail");
         }
         if first_iteration {
             margin_l = &wrapno_l;
@@ -280,10 +293,15 @@ fn side_by_side_line_width(term_width: usize, lineno_width: usize, separator: &s
     term_width.saturating_sub(fixed_width).div_euclid(2).max(1)
 }
 
-/// Prints a two-column diff sized to the current terminal.
-pub(super) fn print_diffs_side_by_side(diffs: &[Diff], max_line_count: usize, color: bool) {
+/// Renders a two-column diff sized to the current terminal.
+pub(super) fn render_diffs_side_by_side(
+    diffs: &[Diff],
+    max_line_count: usize,
+    color: bool,
+) -> String {
     let lineno_styling = indicator_styling(color);
     let line_styling = line_styling(color);
+    let mut output = String::new();
 
     let sep = "\u{2502}";
     let lineno_width = max_line_count.max(1).to_string().len();
@@ -305,7 +323,8 @@ pub(super) fn print_diffs_side_by_side(diffs: &[Diff], max_line_count: usize, co
                 for line in same.split('\n') {
                     let lineno_l_fmt = format!("{:w$}:", lineno_l, w = lineno_width);
                     let lineno_r_fmt = format!("{:w$}:", lineno_r, w = lineno_width);
-                    _print_side_by_side_line(
+                    _render_side_by_side_line(
+                        &mut output,
                         lineno_styling.same.paint(&lineno_l_fmt),
                         lineno_styling.same.paint(&lineno_r_fmt),
                         lineno_styling.same.paint(&empty_lineno),
@@ -322,7 +341,8 @@ pub(super) fn print_diffs_side_by_side(diffs: &[Diff], max_line_count: usize, co
             Diff::Add(add) => {
                 for line_r in add.split('\n') {
                     let lineno_r_fmt = format!("{:w$}:", lineno_r, w = lineno_width);
-                    _print_side_by_side_line(
+                    _render_side_by_side_line(
+                        &mut output,
                         lineno_styling.same.paint(&empty_lineno),
                         lineno_styling.add_highlight.paint(&lineno_r_fmt),
                         lineno_styling.same.paint(&empty_lineno),
@@ -338,7 +358,8 @@ pub(super) fn print_diffs_side_by_side(diffs: &[Diff], max_line_count: usize, co
             Diff::Remove(rem) => {
                 for line_l in rem.split('\n') {
                     let lineno_l_fmt = format!("{:w$}:", lineno_l, w = lineno_width);
-                    _print_side_by_side_line(
+                    _render_side_by_side_line(
+                        &mut output,
                         lineno_styling.remove_highlight.paint(&lineno_l_fmt),
                         lineno_styling.same.paint(&empty_lineno),
                         lineno_styling.remove_highlight.paint(&empty_lineno),
@@ -362,7 +383,8 @@ pub(super) fn print_diffs_side_by_side(diffs: &[Diff], max_line_count: usize, co
                     match aligned {
                         (Some(line_l), None) => {
                             let lineno_l_fmt = format!("{:w$}:", lineno_l, w = lineno_width);
-                            _print_side_by_side_line(
+                            _render_side_by_side_line(
+                                &mut output,
                                 lineno_styling.remove_highlight.paint(&lineno_l_fmt),
                                 lineno_styling.same.paint(&empty_lineno),
                                 lineno_styling.remove_highlight.paint(&empty_lineno),
@@ -376,7 +398,8 @@ pub(super) fn print_diffs_side_by_side(diffs: &[Diff], max_line_count: usize, co
                         }
                         (None, Some(line_r)) => {
                             let lineno_r_fmt = format!("{:w$}:", lineno_r, w = lineno_width);
-                            _print_side_by_side_line(
+                            _render_side_by_side_line(
+                                &mut output,
                                 lineno_styling.same.paint(&empty_lineno),
                                 lineno_styling.add_highlight.paint(&lineno_r_fmt),
                                 lineno_styling.same.paint(&empty_lineno),
@@ -394,7 +417,8 @@ pub(super) fn print_diffs_side_by_side(diffs: &[Diff], max_line_count: usize, co
                             let mut fmt_l = Vec::new();
                             let mut fmt_r = Vec::new();
                             _style_diff_line(line_l, line_r, &line_styling, &mut fmt_l, &mut fmt_r);
-                            _print_side_by_side_line(
+                            _render_side_by_side_line(
+                                &mut output,
                                 lineno_styling.remove.paint(&lineno_l_fmt),
                                 lineno_styling.add.paint(&lineno_r_fmt),
                                 lineno_styling.remove.paint(&empty_lineno),
@@ -413,6 +437,8 @@ pub(super) fn print_diffs_side_by_side(diffs: &[Diff], max_line_count: usize, co
             }
         }
     }
+
+    output
 }
 
 #[cfg(test)]

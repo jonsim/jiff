@@ -1,4 +1,5 @@
 mod diff;
+mod pager;
 
 use clap::{App, Arg};
 use std::cmp::max;
@@ -53,12 +54,18 @@ fn main() {
                 .long("no-color")
                 .help("Disables colorization of the output"),
         )
+        .arg(
+            Arg::with_name("no-pager")
+                .long("no-pager")
+                .help("Disables paging of long output"),
+        )
         .arg(Arg::with_name("file1").required(true).help("Left file"))
         .arg(Arg::with_name("file2").required(true).help("Right file"))
         .get_matches();
     let lpath = matches.value_of("file1").expect("file1 is required");
     let rpath = matches.value_of("file2").expect("file2 is required");
     let mut color = !matches.is_present("no-color");
+    let no_pager = matches.is_present("no-pager");
     let inline = matches.is_present("inline");
     let lfile = read_file_or_die(lpath);
     let rfile = read_file_or_die(rpath);
@@ -74,10 +81,15 @@ fn main() {
 
     let diffs = diff::calculate_line_diff(&lfile, &rfile);
 
-    if inline {
-        diff::print_diffs(&diffs, color);
+    let output = if inline {
+        diff::render_diffs(&diffs, color)
     } else {
-        diff::print_diffs_side_by_side(&diffs, max_line_count, color);
+        diff::render_diffs_side_by_side(&diffs, max_line_count, color)
+    };
+
+    if let Err(error) = pager::display(&output, no_pager) {
+        eprintln!("Could not display diff: {error}");
+        process::exit(1);
     }
 }
 

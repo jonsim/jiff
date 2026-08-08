@@ -168,6 +168,12 @@ def print_diffs(diffs: list[Diff], color: bool = True) -> None:
             console.print(text_a, end="")
 
 
+def render_diffs(diffs: list[Diff], color: bool = True) -> str:
+    with console.capture() as capture:
+        print_diffs(diffs, color)
+    return capture.get()
+
+
 # =========================
 # Character-Level Styling
 # =========================
@@ -320,6 +326,14 @@ def print_diffs_side_by_side(
                     lineno_r += 1
 
 
+def render_diffs_side_by_side(
+    diffs: list[Diff], max_line_count: int, color: bool = True
+) -> str:
+    with console.capture() as capture:
+        print_diffs_side_by_side(diffs, max_line_count, color)
+    return capture.get()
+
+
 def _print_side_by_side_line(
     lineno_l: Text,
     lineno_r: Text,
@@ -337,9 +351,9 @@ def _print_side_by_side_line(
     first_iteration = True
     for wrapped_l, wrapped_r in itertools.zip_longest(lines_l, lines_r):
         if wrapped_l is None:
-            wrapped_l = ""
+            wrapped_l = Text()
         if wrapped_r is None:
-            wrapped_r = ""
+            wrapped_r = Text()
         left_padding = " " * (line_width - len(wrapped_l))
         if not margin_r.plain.strip() and not wrapped_r.plain:
             # A missing right line has no line number or text worth padding.
