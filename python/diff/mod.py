@@ -50,6 +50,34 @@ class DiffStyling:
     remove_highlight: Style
 
 
+def _line_styling(color: bool) -> DiffStyling:
+    if not color:
+        return DiffStyling(Style(), Style(), Style(), Style(), Style())
+
+    return DiffStyling(
+        same=Style(),
+        add=Style(color="green"),
+        add_highlight=Style(color="black", bgcolor="green"),
+        remove=Style(color="red"),
+        remove_highlight=Style(color="black", bgcolor="red"),
+    )
+
+
+def _indicator_styling(color: bool) -> DiffStyling:
+    if not color:
+        return DiffStyling(Style(), Style(), Style(), Style(), Style())
+
+    # Bold change indicators remain legible beside highlighted text without
+    # introducing a second colour scheme for margins and line numbers.
+    return DiffStyling(
+        same=Style(),
+        add=Style(color="green", bold=True),
+        add_highlight=Style(color="green", bold=True),
+        remove=Style(color="red", bold=True),
+        remove_highlight=Style(color="red", bold=True),
+    )
+
+
 # =========================
 # Diff Calculation
 # =========================
@@ -95,43 +123,28 @@ def calculate_diff(left: str, right: str, split: str) -> list[Diff]:
 # =========================
 
 
-def print_diffs(diffs: list[Diff]) -> None:
-    # Define styling constants.
-    margin_styling = DiffStyling(
-        same=Style(),
-        add=Style(),
-        add_highlight=Style(),
-        remove=Style(),
-        remove_highlight=Style(),
-    )
-    line_styling = DiffStyling(
-        same=Style(),
-        add=Style(color="green"),
-        add_highlight=Style(color="black", bgcolor="green"),
-        remove=Style(color="red"),
-        remove_highlight=Style(color="black", bgcolor="red"),
-    )
+def print_diffs(diffs: list[Diff], color: bool = True) -> None:
+    margin_styling = _indicator_styling(color)
+    lines = _line_styling(color)
 
     for change in diffs:
         if change.kind == DiffType.SAME:
             for line in change.left.split("\n"):
                 console.print(
-                    Text("  ", style=margin_styling.same)
-                    + Text(line, style=line_styling.same)
+                    Text("  ", style=margin_styling.same) + Text(line, style=lines.same)
                 )
 
         elif change.kind == DiffType.ADD:
             for line in change.left.split("\n"):
                 console.print(
-                    Text("+ ", style=margin_styling.add)
-                    + Text(line, style=line_styling.add)
+                    Text("+ ", style=margin_styling.add) + Text(line, style=lines.add)
                 )
 
         elif change.kind == DiffType.REMOVE:
             for line in change.left.split("\n"):
                 console.print(
                     Text("- ", style=margin_styling.remove)
-                    + Text(line, style=line_styling.remove)
+                    + Text(line, style=lines.remove)
                 )
 
         elif change.kind == DiffType.REPLACE:
@@ -143,16 +156,14 @@ def print_diffs(diffs: list[Diff]) -> None:
             for before, after in alignment:
                 if before is None and after is not None:
                     text_a.append("+ ", style=margin_styling.add_highlight)
-                    text_a.append(after + "\n", style=line_styling.add_highlight)
+                    text_a.append(after + "\n", style=lines.add_highlight)
                 elif before is not None and after is None:
                     text_b.append("- ", style=margin_styling.remove_highlight)
-                    text_b.append(before + "\n", style=line_styling.remove_highlight)
+                    text_b.append(before + "\n", style=lines.remove_highlight)
                 elif before is not None and after is not None:
                     text_b.append("- ", style=margin_styling.remove_highlight)
                     text_a.append("+ ", style=margin_styling.add_highlight)
-                    _style_diff_line(
-                        before + "\n", after + "\n", line_styling, text_b, text_a
-                    )
+                    _style_diff_line(before + "\n", after + "\n", lines, text_b, text_a)
             console.print(text_b, end="")
             console.print(text_a, end="")
 
@@ -187,22 +198,11 @@ def _style_diff_line(
 # =========================
 
 
-def print_diffs_side_by_side(diffs: list[Diff], max_line_count: int):
-    # Define styling constants.
-    lineno_styling = DiffStyling(
-        same=Style(color="black", bold=True),
-        add=Style(color="green", bold=True),
-        add_highlight=Style(color="green", bold=True),
-        remove=Style(color="red", bold=True),
-        remove_highlight=Style(color="red", bold=True),
-    )
-    line_styling = DiffStyling(
-        same=Style(color="black"),
-        add=Style(color="color(157)"),
-        add_highlight=Style(color="color(157)", reverse=True),
-        remove=Style(color="color(217)"),
-        remove_highlight=Style(color="color(217)", reverse=True),
-    )
+def print_diffs_side_by_side(
+    diffs: list[Diff], max_line_count: int, color: bool = True
+) -> None:
+    lineno_styling = _indicator_styling(color)
+    lines = _line_styling(color)
 
     # Define separator.
     sep = "\u2502"
@@ -229,8 +229,8 @@ def print_diffs_side_by_side(diffs: list[Diff], max_line_count: int):
                     Text(lineno_r_fmt, style=lineno_styling.same),
                     Text(empty_lineno, style=lineno_styling.same),
                     Text(empty_lineno, style=lineno_styling.same),
-                    Text(line, style=line_styling.same),
-                    Text(line, style=line_styling.same),
+                    Text(line, style=lines.same),
+                    Text(line, style=lines.same),
                     line_width,
                     sep,
                 )
@@ -245,8 +245,8 @@ def print_diffs_side_by_side(diffs: list[Diff], max_line_count: int):
                     Text(lineno_r_fmt, style=lineno_styling.add_highlight),
                     Text(empty_lineno, style=lineno_styling.same),
                     Text(empty_lineno, style=lineno_styling.add_highlight),
-                    Text("", style=line_styling.same),
-                    Text(line, style=line_styling.add_highlight),
+                    Text("", style=lines.same),
+                    Text(line, style=lines.add_highlight),
                     line_width,
                     sep,
                 )
@@ -260,8 +260,8 @@ def print_diffs_side_by_side(diffs: list[Diff], max_line_count: int):
                     Text(empty_lineno, style=lineno_styling.same),
                     Text(empty_lineno, style=lineno_styling.remove_highlight),
                     Text(empty_lineno, style=lineno_styling.same),
-                    Text(line, style=line_styling.remove_highlight),
-                    Text("", style=line_styling.same),
+                    Text(line, style=lines.remove_highlight),
+                    Text("", style=lines.same),
                     line_width,
                     sep,
                 )
@@ -281,8 +281,8 @@ def print_diffs_side_by_side(diffs: list[Diff], max_line_count: int):
                         Text(lineno_r_fmt, style=lineno_styling.add_highlight),
                         Text(empty_lineno, style=lineno_styling.same),
                         Text(empty_lineno, style=lineno_styling.add_highlight),
-                        Text("", style=line_styling.same),
-                        Text(line_r, style=line_styling.add_highlight),
+                        Text("", style=lines.same),
+                        Text(line_r, style=lines.add_highlight),
                         line_width,
                         sep,
                     )
@@ -294,8 +294,8 @@ def print_diffs_side_by_side(diffs: list[Diff], max_line_count: int):
                         Text(empty_lineno, style=lineno_styling.same),
                         Text(empty_lineno, style=lineno_styling.remove_highlight),
                         Text(empty_lineno, style=lineno_styling.same),
-                        Text(line_l, style=line_styling.remove_highlight),
-                        Text("", style=line_styling.same),
+                        Text(line_l, style=lines.remove_highlight),
+                        Text("", style=lines.same),
                         line_width,
                         sep,
                     )
@@ -305,11 +305,7 @@ def print_diffs_side_by_side(diffs: list[Diff], max_line_count: int):
                     lineno_r_fmt = f"{lineno_r:>{lineno_width}}:"
                     line_l_text = Text()
                     line_r_text = Text()
-                    _style_diff_line(
-                        line_l, line_r, line_styling, line_l_text, line_r_text
-                    )
-                    # line_l_text = Text(line_l, style=line_styling.remove)
-                    # line_r_text = Text(line_r, style=line_styling.add)
+                    _style_diff_line(line_l, line_r, lines, line_l_text, line_r_text)
                     _print_side_by_side_line(
                         Text(lineno_l_fmt, style=lineno_styling.remove),
                         Text(lineno_r_fmt, style=lineno_styling.add),

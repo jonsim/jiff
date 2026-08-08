@@ -2,7 +2,7 @@ mod align;
 mod wrap;
 
 use align::align;
-use ansi_term::Color::{Black, Fixed, Green, Red};
+use ansi_term::Color::{Black, Green, Red};
 use ansi_term::Style;
 use ansi_term::{ANSIString, ANSIStrings};
 use itertools::EitherOrBoth;
@@ -24,12 +24,43 @@ pub(super) enum Diff {
     Replace(String, String),
 }
 
+#[derive(Default)]
 struct DiffStyling {
     same: Style,
     add: Style,
     add_highlight: Style,
     remove: Style,
     remove_highlight: Style,
+}
+
+fn line_styling(color: bool) -> DiffStyling {
+    if !color {
+        return DiffStyling::default();
+    }
+
+    DiffStyling {
+        same: Style::default(),
+        add: Green.normal(),
+        add_highlight: Black.on(Green),
+        remove: Red.normal(),
+        remove_highlight: Black.on(Red),
+    }
+}
+
+fn indicator_styling(color: bool) -> DiffStyling {
+    if !color {
+        return DiffStyling::default();
+    }
+
+    // Bold change indicators remain legible beside highlighted text without
+    // introducing a second colour scheme for margins and line numbers.
+    DiffStyling {
+        same: Style::default(),
+        add: Green.bold(),
+        add_highlight: Green.bold(),
+        remove: Red.bold(),
+        remove_highlight: Red.bold(),
+    }
 }
 
 /// Calculates changes between newline-separated line contents.
@@ -104,30 +135,8 @@ fn make_diff(tag: DiffTag, old: String, new: String) -> Diff {
 
 /// Prints a unified diff, including character highlighting for paired lines.
 pub(super) fn print_diffs(diffs: &[Diff], color: bool) {
-    let line_styling = if color {
-        DiffStyling {
-            same: Style::default(),
-            add: Green.normal(),
-            add_highlight: Black.on(Green),
-            remove: Red.normal(),
-            remove_highlight: Black.on(Red),
-        }
-    } else {
-        DiffStyling {
-            same: Style::default(),
-            add: Style::default(),
-            add_highlight: Style::default(),
-            remove: Style::default(),
-            remove_highlight: Style::default(),
-        }
-    };
-    let margin_styling = DiffStyling {
-        same: Style::default(),
-        add: Style::default(),
-        add_highlight: Style::default(),
-        remove: Style::default(),
-        remove_highlight: Style::default(),
-    };
+    let line_styling = line_styling(color);
+    let margin_styling = indicator_styling(color);
 
     for change in diffs {
         match change {
@@ -273,40 +282,8 @@ fn side_by_side_line_width(term_width: usize, lineno_width: usize, separator: &s
 
 /// Prints a two-column diff sized to the current terminal.
 pub(super) fn print_diffs_side_by_side(diffs: &[Diff], max_line_count: usize, color: bool) {
-    let lineno_styling = if color {
-        DiffStyling {
-            same: Black.bold(),
-            add: Green.bold(),
-            add_highlight: Green.bold(),
-            remove: Red.bold(),
-            remove_highlight: Red.bold(),
-        }
-    } else {
-        DiffStyling {
-            same: Style::default(),
-            add: Style::default(),
-            add_highlight: Style::default(),
-            remove: Style::default(),
-            remove_highlight: Style::default(),
-        }
-    };
-    let line_styling = if color {
-        DiffStyling {
-            same: Style::default(),
-            add: Fixed(157).normal(),
-            remove: Fixed(217).normal(),
-            add_highlight: Fixed(157).reverse(),
-            remove_highlight: Fixed(217).reverse(),
-        }
-    } else {
-        DiffStyling {
-            same: Style::default(),
-            add: Style::default(),
-            add_highlight: Style::default(),
-            remove: Style::default(),
-            remove_highlight: Style::default(),
-        }
-    };
+    let lineno_styling = indicator_styling(color);
+    let line_styling = line_styling(color);
 
     let sep = "\u{2502}";
     let lineno_width = max_line_count.max(1).to_string().len();

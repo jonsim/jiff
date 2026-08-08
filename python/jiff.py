@@ -39,10 +39,11 @@ def main():
 
     diffs = diff.calculate_line_diff(lfile, rfile)
 
+    color = not args.no_color
     if args.inline:
-        diff.print_diffs(diffs)
+        diff.print_diffs(diffs, color)
     else:
-        diff.print_diffs_side_by_side(diffs, max_line_count)
+        diff.print_diffs_side_by_side(diffs, max_line_count, color)
 
 
 if __name__ == "__main__":

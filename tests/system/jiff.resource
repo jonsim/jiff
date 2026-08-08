@@ -74,11 +74,48 @@ Run Rust Jiff
     ${res} =    Run Process Check Output    @{cmd}
     RETURN    ${res}
 
+Run Python Jiff With Colour
+    [Documentation]    Runs the Python version with terminal colour forced on.
+    [Arguments]    @{args}
+    VAR    @{cmd}    python3
+    ...    ${CURDIR}/../../python/jiff.py
+    ...    @{args}
+    ${res} =    Run Process Check Coloured Output    @{cmd}
+    RETURN    ${res}
+
+Run Rust Jiff With Colour
+    [Documentation]    Runs the Rust version with terminal colour forced on.
+    [Arguments]    @{args}
+    VAR    @{cmd}    cargo
+    ...    run
+    ...    --manifest-path=${CURDIR}/../../Cargo.toml
+    ...    --
+    ...    @{args}
+    ${res} =    Run Process Check Coloured Output    @{cmd}
+    RETURN    ${res}
+
 Run Process Check Output
     [Documentation]    Runs a process with the given command and arguments,
     ...    checks for successful execution and returns the result object.
     [Arguments]    @{cmd}
     ${res} =    Run Process    @{cmd}
+    Process Should Succeed    ${res}    @{cmd}
+    RETURN    ${res}
+
+Run Process Check Coloured Output
+    [Documentation]    Runs a process as a colour-capable terminal at a stable width.
+    [Arguments]    @{cmd}
+    ${res} =    Run Process    @{cmd}
+    ...    env:NO_COLOR=${EMPTY}
+    ...    env:FORCE_COLOR=1
+    ...    env:RICH_FORCE_TERMINAL=1
+    ...    env:COLUMNS=120
+    Process Should Succeed    ${res}    @{cmd}
+    RETURN    ${res}
+
+Process Should Succeed
+    [Documentation]    Reports a failed process with its command and captured output.
+    [Arguments]    ${res}    @{cmd}
     IF    ${res.rc} != 0
         ${cmdline} =    Join Command Line    @{cmd}
         VAR    ${error}
@@ -88,4 +125,3 @@ Run Process Check Output
         ...    \n\nStandard Error:\n${res.stderr}
         Fail    ${error}
     END
-    RETURN    ${res}
