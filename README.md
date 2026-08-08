@@ -42,8 +42,16 @@ robot -v SKIP_PYTHON_TESTS:True tests
 
 #### Running
 
+Jiff displays a side-by-side diff by default:
+
 ```sh
 uv run jiff FILE1 FILE2
+```
+
+Use `-i` or `--inline` for inline output:
+
+```sh
+uv run jiff --inline FILE1 FILE2
 ```
 
 #### Testing

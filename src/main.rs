@@ -43,10 +43,10 @@ fn main() {
                 .help("Enable git diff mode"),
         )
         .arg(
-            Arg::with_name("side-by-side")
-                .short("s")
-                .long("side-by-side")
-                .help("Enable side-by-side diffing"),
+            Arg::with_name("inline")
+                .short("i")
+                .long("inline")
+                .help("Display the diff inline"),
         )
         .arg(
             Arg::with_name("no-color")
@@ -59,7 +59,7 @@ fn main() {
     let lpath = matches.value_of("file1").expect("file1 is required");
     let rpath = matches.value_of("file2").expect("file2 is required");
     let mut color = !matches.is_present("no-color");
-    let side_by_side = matches.is_present("side-by-side");
+    let inline = matches.is_present("inline");
     let lfile = read_file_or_die(lpath);
     let rfile = read_file_or_die(rpath);
     let max_line_count = max(line_count(&lfile), line_count(&rfile));
@@ -74,10 +74,10 @@ fn main() {
 
     let diffs = diff::calculate_line_diff(&lfile, &rfile);
 
-    if side_by_side {
-        diff::print_diffs_side_by_side(&diffs, max_line_count, color);
-    } else {
+    if inline {
         diff::print_diffs(&diffs, color);
+    } else {
+        diff::print_diffs_side_by_side(&diffs, max_line_count, color);
     }
 }
 

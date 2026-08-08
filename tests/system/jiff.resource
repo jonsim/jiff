@@ -5,16 +5,16 @@ Library    Process
 
 *** Keywords ***
 Jiff Files
-    [Documentation]    Runs the jiff.py script with the given left and right
-    ...    files, checking the output matches the expectation file and
-    ...    checks for successful execution.
-    [Arguments]    ${left}    ${right}    ${expectation}    ${side_by_side}=False
+    [Documentation]    Runs both Jiff implementations for the given files and
+    ...    checks their output against the expectation. Side-by-side cases use
+    ...    the default mode; inline cases pass `--inline`.
+    [Arguments]    ${left}    ${right}    ${expectation}    ${expect_side_by_side}=False
     VAR    ${base_dir}    ${CURDIR}/../..
     VAR    @{args}
     ...    ${base_dir}/testcases/${left}
     ...    ${base_dir}/testcases/${right}
-    IF     ${side_by_side}
-        Append To List    ${args}    --side-by-side
+    IF    not ${expect_side_by_side}
+        Append To List    ${args}    --inline
     END
 
     ${skip_python} =    Get Variable Value  ${SKIP_PYTHON_TESTS}  ${False}

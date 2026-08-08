@@ -21,7 +21,7 @@ def main():
         "-g", "--git-diff", action="store_true", help="Enable git diff mode"
     )
     parser.add_argument(
-        "-s", "--side-by-side", action="store_true", help="Enable side-by-side diffing"
+        "-i", "--inline", action="store_true", help="Display the diff inline"
     )
     parser.add_argument(
         "--no-color", action="store_true", help="Disables colorization of the output"
@@ -32,8 +32,6 @@ def main():
 
     lpath = args.file1
     rpath = args.file2
-    side_by_side = args.side_by_side
-
     lfile = read_file_or_die(lpath)
     rfile = read_file_or_die(rpath)
 
@@ -41,10 +39,10 @@ def main():
 
     diffs = diff.calculate_line_diff(lfile, rfile)
 
-    if side_by_side:
-        diff.print_diffs_side_by_side(diffs, max_line_count)
-    else:
+    if args.inline:
         diff.print_diffs(diffs)
+    else:
+        diff.print_diffs_side_by_side(diffs, max_line_count)
 
 
 if __name__ == "__main__":
