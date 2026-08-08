@@ -1,20 +1,25 @@
 use ansi_term::{ANSIString, ANSIStrings};
 use std::iter::Iterator;
-use unicode_width::UnicodeWidthChar;
+use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthStr;
 
 fn split_at_width(s: &str, width: usize) -> (usize, usize) {
     let mut byte_len = 0;
     let mut display_width = 0;
-    for character in s.chars() {
-        let character_width = character.width().unwrap_or(0);
-        if byte_len > 0 && display_width + character_width > width {
+    for grapheme in s.graphemes(true) {
+        let grapheme_width = if grapheme == "\t" {
+            4
+        } else {
+            grapheme.width()
+        };
+        if byte_len > 0 && display_width + grapheme_width > width {
             break;
         }
 
-        // A double-width character still has to be consumed in a one-column
+        // An oversized grapheme still has to be consumed in a narrow
         // terminal, otherwise the iterator can never make progress.
-        byte_len += character.len_utf8();
-        display_width += character_width;
+        byte_len += grapheme.len();
+        display_width += grapheme_width;
         if display_width > width {
             break;
         }
@@ -190,6 +195,22 @@ mod tests {
     }
 
     #[test]
+    fn wrap_str_keeps_joined_emoji_together() {
+        // A ZWJ sequence is one terminal glyph and must not be split internally.
+        let wrapped: Vec<&str> = wrap_str("👩‍💻a", 2).collect();
+
+        assert_eq!(vec!["👩‍💻", "a"], wrapped);
+    }
+
+    #[test]
+    fn wrap_str_counts_tabs_as_four_columns() {
+        // Match Rich's four-column tab setting used by the Python implementation.
+        let wrapped: Vec<&str> = wrap_str("\tA", 4).collect();
+
+        assert_eq!(vec!["\t", "A"], wrapped);
+    }
+
+    #[test]
     fn wrap_ansi_empty() {
         let s = vec![Red.paint("")];
         let s_fmt = vec![format!("{}", ANSIStrings(&s))];
@@ -263,6 +284,21 @@ mod tests {
                 format!("{} ", Red.paint("é")),
                 format!("{}", Green.paint("🙂")),
                 format!("{} ", Green.paint("a")),
+            ],
+            wrapped
+        );
+    }
+
+    #[test]
+    fn wrap_ansi_keeps_joined_emoji_together() {
+        // ANSI substring offsets must also land at grapheme boundaries.
+        let s = vec![Red.paint("👩‍💻a")];
+        let wrapped: Vec<String> = wrap_ansistrings(&s, 2, false).collect();
+
+        assert_eq!(
+            vec![
+                format!("{}", Red.paint("👩‍💻")),
+                format!("{}", Red.paint("a")),
             ],
             wrapped
         );
