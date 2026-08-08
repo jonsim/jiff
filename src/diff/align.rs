@@ -4,6 +4,7 @@ static DEBUG: LazyLock<bool> =
     LazyLock::new(|| matches!(std::env::var("JIFF_DEBUG").as_deref(), Ok("1")));
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
 enum AlignmentOperation {
     Start,
     Remove,
@@ -12,6 +13,9 @@ enum AlignmentOperation {
 }
 
 fn lcs_distance(before: &[char], after: &[char], lengths: &mut Vec<usize>) -> usize {
+    // Shared ends can always participate in an optimal subsequence. Removing
+    // them leaves the same edit distance and keeps the quadratic part small for
+    // the common case of a local change in an otherwise stable line.
     let common_prefix = before
         .iter()
         .zip(after)
@@ -38,6 +42,9 @@ fn lcs_distance(before: &[char], after: &[char], lengths: &mut Vec<usize>) -> us
     for row in rows {
         let mut diagonal = 0;
         for (column_index, column) in columns.iter().enumerate() {
+            // `lengths[j]` is the LCS length for the rows processed so far and
+            // the first `j` columns. Keep the overwritten value and diagonal
+            // so this row can be calculated in place.
             let previous_row = lengths[column_index + 1];
             lengths[column_index + 1] = if row == column {
                 diagonal + 1
@@ -57,17 +64,20 @@ fn pair_cost(before: &[char], after: &[char], lengths: &mut Vec<usize>) -> usize
     }
 
     let unpaired_cost = before.len() + after.len();
+    // One more than remove-plus-add makes a dissimilar pair strictly worse
+    // without introducing a separate "not a candidate" value in the main DP.
+    let dissimilar_cost = unpaired_cost + 1;
     let length_difference = before.len().abs_diff(after.len());
 
     // A sufficiently large length difference cannot pass the similarity
     // cutoff, regardless of how the shorter line is arranged.
     if 2 * length_difference >= unpaired_cost {
-        return unpaired_cost + 1;
+        return dissimilar_cost;
     }
 
     let distance = lcs_distance(before, after, lengths);
     if 2 * distance >= unpaired_cost {
-        unpaired_cost + 1
+        dissimilar_cost
     } else {
         distance
     }
@@ -75,6 +85,8 @@ fn pair_cost(before: &[char], after: &[char], lengths: &mut Vec<usize>) -> usize
 
 fn choose_operation(pair: usize, remove: usize, add: usize) -> (usize, AlignmentOperation) {
     if pair <= remove && pair <= add {
+        // Prefer a useful side-by-side pairing when it costs exactly the same
+        // as leaving both lines unmatched.
         (pair, AlignmentOperation::Pair)
     } else if add <= remove {
         // Ending with an addition puts removals before additions when two gap
@@ -91,11 +103,19 @@ fn choose_operation(pair: usize, remove: usize, add: usize) -> (usize, Alignment
 /// dynamic programme chooses the lowest-cost path, where an unpaired line costs
 /// its character length. Lines are paired only when their insertion/deletion
 /// distance is less than half their combined length.
+///
+/// Scoring is `O(C_b * C_a)` in the worst case, where `C_b` and `C_a` are the
+/// total character counts on each side. Traceback uses `O(L_b * L_a)` bytes for
+/// `L_b` before lines and `L_a` after lines. Alignment costs keep two line rows,
+/// while every candidate pair reuses one LCS row.
 pub(super) fn align<'a>(
     lines_b: &[&'a str],
     lines_a: &[&'a str],
 ) -> Vec<(Option<&'a str>, Option<&'a str>)> {
     let width = lines_a.len() + 1;
+    // Cell `(i, j)` is the cheapest alignment of the first `i` before lines
+    // and first `j` after lines. Costs need only two rows; `operations` retains
+    // the final transition at every cell so the path can be reconstructed.
     let mut operations = vec![AlignmentOperation::Start; (lines_b.len() + 1) * width];
     let mut previous_costs = vec![0; width];
     let mut current_costs = vec![0; width];
@@ -194,6 +214,12 @@ mod tests {
         let cost = pair_cost(&before, &after, &mut Vec::new());
 
         assert!(cost > before.len() + after.len());
+    }
+
+    #[test]
+    fn equal_total_cost_prefers_pairing() {
+        // A tied pairing keeps the side-by-side result compact and useful.
+        assert_eq!((5, AlignmentOperation::Pair), choose_operation(5, 5, 7));
     }
 
     #[test]

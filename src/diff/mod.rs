@@ -9,13 +9,15 @@ use itertools::EitherOrBoth;
 use itertools::Itertools;
 use similar::{capture_diff_slices, Algorithm, DiffTag, TextDiff};
 use std::sync::LazyLock;
+use unicode_width::UnicodeWidthStr;
 use wrap::wrap_ansistrings;
 
-pub static DEBUG: LazyLock<bool> =
+static DEBUG: LazyLock<bool> =
     LazyLock::new(|| matches!(std::env::var("JIFF_DEBUG").as_deref(), Ok("1")));
 
+/// One contiguous region in a text diff.
 #[derive(Debug, Eq, PartialEq)]
-pub enum Diff {
+pub(super) enum Diff {
     Same(String),
     Add(String),
     Remove(String),
@@ -30,7 +32,14 @@ struct DiffStyling {
     remove_highlight: Style,
 }
 
-pub fn calculate_line_diff(left: &str, right: &str) -> Vec<Diff> {
+/// Calculates changes between newline-separated line contents.
+///
+/// The heuristic Myers algorithm avoids the previous quadratic LCS matrix. It
+/// can choose a non-minimal script when an exact search grows expensive; that
+/// is a deliberate latency trade-off for a command-line tool.
+pub(super) fn calculate_line_diff(left: &str, right: &str) -> Vec<Diff> {
+    // Rust's `split` represents an empty string as one empty item. Jiff treats
+    // empty input as having no lines, consistent with `read_file_or_die`.
     let old_lines: Vec<&str> = if left.is_empty() {
         Vec::new()
     } else {
@@ -42,6 +51,8 @@ pub fn calculate_line_diff(left: &str, right: &str) -> Vec<Diff> {
         right.split('\n').collect()
     };
 
+    // Work from operations rather than individual changes so adjacent removed
+    // and added ranges remain one `Replace` for the line-pairing stage.
     capture_diff_slices(Algorithm::Myers, &old_lines, &new_lines)
         .iter()
         .map(|operation| {
@@ -52,7 +63,8 @@ pub fn calculate_line_diff(left: &str, right: &str) -> Vec<Diff> {
         .collect()
 }
 
-pub fn calculate_char_diff(left: &str, right: &str) -> Vec<Diff> {
+/// Calculates Unicode-scalar changes within a pair of lines.
+pub(super) fn calculate_char_diff(left: &str, right: &str) -> Vec<Diff> {
     let diff = TextDiff::configure()
         .algorithm(Algorithm::Myers)
         .diff_chars(left, right);
@@ -60,6 +72,9 @@ pub fn calculate_char_diff(left: &str, right: &str) -> Vec<Diff> {
     diff.ops()
         .iter()
         .map(|operation| {
+            // Operation ranges index the character tokens held by `TextDiff`,
+            // not byte offsets into the inputs. Reassemble those source slices
+            // to keep every returned string on a valid UTF-8 boundary.
             let old = operation
                 .old_range()
                 .fold(String::new(), |mut text, index| {
@@ -87,7 +102,8 @@ fn make_diff(tag: DiffTag, old: String, new: String) -> Diff {
     }
 }
 
-pub fn print_diffs(diffs: &[Diff], _context: usize, color: bool) {
+/// Prints a unified diff, including character highlighting for paired lines.
+pub(super) fn print_diffs(diffs: &[Diff], color: bool) {
     let line_styling = if color {
         DiffStyling {
             same: Style::default(),
@@ -167,7 +183,7 @@ pub fn print_diffs(diffs: &[Diff], _context: usize, color: bool) {
                             fmts_b.push(Style::default().paint("\n"));
                             fmts_a.push(Style::default().paint("\n"));
                         }
-                        (None, None) => {}
+                        (None, None) => unreachable!("alignment cannot omit both lines"),
                     }
                 }
                 print!("{}", ANSIStrings(&fmts_b));
@@ -247,7 +263,7 @@ fn _style_diff_line<'u>(
 }
 
 fn side_by_side_line_width(term_width: usize, lineno_width: usize, separator: &str) -> usize {
-    let separator_width = separator.chars().count();
+    let separator_width = separator.width();
     let fixed_width = separator_width + 2 * (lineno_width + 2);
 
     // Some terminals briefly report tiny dimensions while being resized. A
@@ -255,13 +271,8 @@ fn side_by_side_line_width(term_width: usize, lineno_width: usize, separator: &s
     term_width.saturating_sub(fixed_width).div_euclid(2).max(1)
 }
 
-pub fn print_diffs_side_by_side(
-    diffs: &[Diff],
-    max_line_count: usize,
-    _context: usize,
-    color: bool,
-) {
-    // Define styling constants.
+/// Prints a two-column diff sized to the current terminal.
+pub(super) fn print_diffs_side_by_side(diffs: &[Diff], max_line_count: usize, color: bool) {
     let lineno_styling = if color {
         DiffStyling {
             same: Black.bold(),
@@ -282,19 +293,8 @@ pub fn print_diffs_side_by_side(
     let line_styling = if color {
         DiffStyling {
             same: Style::default(),
-            // add:              Fixed(10).normal(),
-            // remove:           Fixed( 9).normal(),
-            // add_highlight:    Style::default().on(Fixed(22)),
-            // remove_highlight: Style::default().on(Fixed(88)),
-
-            // add:              Black.on(Fixed(114)),
-            // remove:           Black.on(Fixed(203)),
-            // add_highlight:    Black.on(Fixed( 40)),
-            // remove_highlight: Black.on(Fixed(160)),
-            add: Fixed(157).normal(),    // 194
-            remove: Fixed(217).normal(), // 224
-            // add_highlight:    Fixed( 40).on(Fixed(235)),
-            // remove_highlight: Fixed(160).on(Fixed(235)),
+            add: Fixed(157).normal(),
+            remove: Fixed(217).normal(),
             add_highlight: Fixed(157).reverse(),
             remove_highlight: Fixed(217).reverse(),
         }
@@ -308,17 +308,14 @@ pub fn print_diffs_side_by_side(
         }
     };
 
-    // Define separation characters.
     let sep = "\u{2502}";
-    // Calculate widths to draw to.
-    let lineno_width = (max_line_count as f32).log(10.0).floor() as usize + 1;
+    let lineno_width = max_line_count.max(1).to_string().len();
     let term_width = term_size::dimensions_stdout()
         .map(|(term_width, _)| term_width)
         .unwrap_or(120);
     let line_width = side_by_side_line_width(term_width, lineno_width, sep);
     let line_width = (line_width, line_width);
 
-    // Print all diffs.
     let mut lineno_l = 1;
     let mut lineno_r = 1;
     let empty_lineno = " ".repeat(lineno_width + 1);
@@ -433,7 +430,7 @@ pub fn print_diffs_side_by_side(
                             lineno_l += 1;
                             lineno_r += 1;
                         }
-                        (None, None) => {}
+                        (None, None) => unreachable!("alignment cannot omit both lines"),
                     }
                 }
             }

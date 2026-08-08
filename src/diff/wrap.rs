@@ -3,6 +3,10 @@ use std::iter::Iterator;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
+/// Returns the byte length and display width of the largest leading chunk.
+///
+/// The chunk ends only between graphemes. It may exceed `width` when the first
+/// grapheme cannot fit, since consuming it is the only way to make progress.
 fn split_at_width(s: &str, width: usize) -> (usize, usize) {
     let mut byte_len = 0;
     let mut display_width = 0;
@@ -29,7 +33,7 @@ fn split_at_width(s: &str, width: usize) -> (usize, usize) {
 }
 
 #[cfg(test)]
-pub struct WrappedStrIter<'a> {
+struct WrappedStrIter<'a> {
     s: &'a str,
     len: usize,
     wrap_at: usize,
@@ -54,7 +58,7 @@ impl<'a> Iterator for WrappedStrIter<'a> {
 }
 
 #[cfg(test)]
-pub fn wrap_str(s: &str, width: usize) -> WrappedStrIter<'_> {
+fn wrap_str(s: &str, width: usize) -> WrappedStrIter<'_> {
     WrappedStrIter {
         s,
         len: s.len(),
@@ -64,7 +68,8 @@ pub fn wrap_str(s: &str, width: usize) -> WrappedStrIter<'_> {
     }
 }
 
-pub struct WrappedANSIStringsIter<'u> {
+/// Iterates styled terminal text without splitting its ANSI styles.
+pub(super) struct WrappedANSIStringsIter<'u> {
     s_ansi: ANSIStrings<'u>,
     unstyled: String,
     wrap_at: usize,
@@ -91,6 +96,8 @@ impl<'u> Iterator for WrappedANSIStringsIter<'u> {
         let (byte_len, display_width) = split_at_width(&self.unstyled[start_pos..], self.wrap_at);
         self.cur_pos += byte_len;
 
+        // `ansi_term` takes byte offsets. `split_at_width` guarantees both
+        // offsets are grapheme boundaries in the concatenated unstyled text.
         let split = ansi_term::sub_string(start_pos, byte_len, &self.s_ansi);
         let split_fmt = ANSIStrings(split.as_slice());
         let padding_required = if self.pad {
@@ -102,7 +109,12 @@ impl<'u> Iterator for WrappedANSIStringsIter<'u> {
     }
 }
 
-pub fn wrap_ansistrings<'s, 'u>(
+/// Wraps styled text into terminal-width chunks.
+///
+/// Empty input yields one chunk. A zero width is treated as one column when
+/// there is text to consume, and `pad` fills short chunks to the requested
+/// width without counting ANSI escape sequences.
+pub(super) fn wrap_ansistrings<'s, 'u>(
     s: &'s [ANSIString<'u>],
     width: usize,
     pad: bool,
@@ -111,6 +123,8 @@ where
     'u: 's,
 {
     let unstyled = ansi_term::unstyle(&ANSIStrings(s));
+    // A zero-width terminal can be reported during a resize. Non-empty text
+    // still has to advance, while empty text preserves the requested width.
     let wrap_at = if unstyled.is_empty() {
         width
     } else {
@@ -119,8 +133,6 @@ where
     WrappedANSIStringsIter {
         s_ansi: ANSIStrings(s),
         unstyled,
-        // A zero-width terminal is not useful, but it can be reported while a
-        // terminal is being resized. Advancing one column avoids looping forever.
         wrap_at,
         cur_pos: 0,
         output_once: false,

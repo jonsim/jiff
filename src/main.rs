@@ -14,6 +14,8 @@ fn read_file_or_die(path: &str) -> String {
             process::exit(1);
         }
     };
+    // Renderers add their own newline. Remove one file terminator so it does
+    // not become a spurious empty line in the diff.
     if content.ends_with('\n') {
         content.pop();
     }
@@ -21,6 +23,8 @@ fn read_file_or_die(path: &str) -> String {
 }
 
 fn line_count(content: &str) -> usize {
+    // `read_file_or_die` has already removed a terminal newline, so every
+    // remaining separator introduces another displayed line.
     if content.is_empty() {
         0
     } else {
@@ -29,7 +33,6 @@ fn line_count(content: &str) -> usize {
 }
 
 fn main() {
-    // Handle command line.
     let matches = App::new("jiff")
         .version("1.0")
         .about("Colored diff tool")
@@ -60,24 +63,21 @@ fn main() {
     let lfile = read_file_or_die(lpath);
     let rfile = read_file_or_die(rpath);
     let max_line_count = max(line_count(&lfile), line_count(&rfile));
-    //println!("lpath: {}\n{}\nrpath: {}\n{}\n", lpath, lfile, rpath, rfile);
 
-    // If colorization is enabled, determine whether or not to automatically
-    // disable it.
+    // Match the Python implementation: explicit no-colour wins, otherwise a
+    // non-terminal disables colour unless Rich's force flag is present.
     if color {
         let force_color = std::env::var("RICH_FORCE_TERMINAL").is_ok();
         let is_tty = std::io::stdout().is_terminal();
         color = force_color || is_tty;
     }
 
-    // Calculate the changeset.
     let diffs = diff::calculate_line_diff(&lfile, &rfile);
 
-    // Print the changeset.
     if side_by_side {
-        diff::print_diffs_side_by_side(&diffs, max_line_count, 0, color);
+        diff::print_diffs_side_by_side(&diffs, max_line_count, color);
     } else {
-        diff::print_diffs(&diffs, 0, color);
+        diff::print_diffs(&diffs, color);
     }
 }
 
