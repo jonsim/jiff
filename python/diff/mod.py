@@ -9,6 +9,7 @@ import shutil
 import sys
 from dataclasses import dataclass
 
+from jiff_config import ColorScheme, ColorStyle
 from rich.console import Console
 from rich.style import Style
 from rich.text import Text
@@ -50,32 +51,38 @@ class DiffStyling:
     remove_highlight: Style
 
 
-def _line_styling(color: bool) -> DiffStyling:
-    if not color:
-        return DiffStyling(Style(), Style(), Style(), Style(), Style())
-
+def _line_styling(colors: ColorScheme) -> DiffStyling:
     return DiffStyling(
-        same=Style(),
-        add=Style(color="green"),
-        add_highlight=Style(color="black", bgcolor="green"),
-        remove=Style(color="red"),
-        remove_highlight=Style(color="black", bgcolor="red"),
+        same=colors.same.rich_style(),
+        add=colors.add.rich_style(),
+        add_highlight=colors.add_highlight.rich_style(),
+        remove=colors.remove.rich_style(),
+        remove_highlight=colors.remove_highlight.rich_style(),
     )
 
 
-def _indicator_styling(color: bool) -> DiffStyling:
-    if not color:
-        return DiffStyling(Style(), Style(), Style(), Style(), Style())
+def _indicator_style(style: ColorStyle) -> Style:
+    if style == ColorStyle():
+        return Style()
+    return Style(color=style.color, bgcolor=style.bgcolor, bold=True)
 
+
+def _indicator_styling(colors: ColorScheme) -> DiffStyling:
     # Bold change indicators remain legible beside highlighted text without
     # introducing a second colour scheme for margins and line numbers.
     return DiffStyling(
-        same=Style(),
-        add=Style(color="green", bold=True),
-        add_highlight=Style(color="green", bold=True),
-        remove=Style(color="red", bold=True),
-        remove_highlight=Style(color="red", bold=True),
+        same=_indicator_style(colors.same),
+        add=_indicator_style(colors.add),
+        add_highlight=_indicator_style(colors.add),
+        remove=_indicator_style(colors.remove),
+        remove_highlight=_indicator_style(colors.remove),
     )
+
+
+def _colors(color: bool, colors: ColorScheme | None) -> ColorScheme:
+    if not color:
+        return ColorScheme.plain()
+    return colors or ColorScheme.default()
 
 
 # =========================
@@ -123,9 +130,12 @@ def calculate_diff(left: str, right: str, split: str) -> list[Diff]:
 # =========================
 
 
-def print_diffs(diffs: list[Diff], color: bool = True) -> None:
-    margin_styling = _indicator_styling(color)
-    lines = _line_styling(color)
+def print_diffs(
+    diffs: list[Diff], color: bool = True, colors: ColorScheme | None = None
+) -> None:
+    colors = _colors(color, colors)
+    margin_styling = _indicator_styling(colors)
+    lines = _line_styling(colors)
 
     for change in diffs:
         if change.kind == DiffType.SAME:
@@ -168,9 +178,11 @@ def print_diffs(diffs: list[Diff], color: bool = True) -> None:
             console.print(text_a, end="")
 
 
-def render_diffs(diffs: list[Diff], color: bool = True) -> str:
+def render_diffs(
+    diffs: list[Diff], color: bool = True, colors: ColorScheme | None = None
+) -> str:
     with console.capture() as capture:
-        print_diffs(diffs, color)
+        print_diffs(diffs, color, colors)
     return capture.get()
 
 
@@ -205,10 +217,14 @@ def _style_diff_line(
 
 
 def print_diffs_side_by_side(
-    diffs: list[Diff], max_line_count: int, color: bool = True
+    diffs: list[Diff],
+    max_line_count: int,
+    color: bool = True,
+    colors: ColorScheme | None = None,
 ) -> None:
-    lineno_styling = _indicator_styling(color)
-    lines = _line_styling(color)
+    colors = _colors(color, colors)
+    lineno_styling = _indicator_styling(colors)
+    lines = _line_styling(colors)
 
     # Define separator.
     sep = "\u2502"
@@ -327,10 +343,13 @@ def print_diffs_side_by_side(
 
 
 def render_diffs_side_by_side(
-    diffs: list[Diff], max_line_count: int, color: bool = True
+    diffs: list[Diff],
+    max_line_count: int,
+    color: bool = True,
+    colors: ColorScheme | None = None,
 ) -> str:
     with console.capture() as capture:
-        print_diffs_side_by_side(diffs, max_line_count, color)
+        print_diffs_side_by_side(diffs, max_line_count, color, colors)
     return capture.get()
 
 

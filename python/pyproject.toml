@@ -9,13 +9,14 @@ description = "A terminal diff tool with sub-line and side-by-side output"
 requires-python = ">=3.9"
 dependencies = [
     "rich",
+    "tomli; python_version < '3.11'",
 ]
 
 [project.scripts]
 jiff = "jiff:main"
 
 [tool.setuptools]
-py-modules = ["jiff"]
+py-modules = ["jiff", "jiff_config"]
 
 [tool.setuptools.packages.find]
 where = ["."]

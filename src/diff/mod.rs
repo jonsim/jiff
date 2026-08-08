@@ -1,8 +1,8 @@
 mod align;
 mod wrap;
 
+use crate::config::ColorScheme;
 use align::align;
-use ansi_term::Color::{Black, Green, Red};
 use ansi_term::Style;
 use ansi_term::{ANSIString, ANSIStrings};
 use itertools::EitherOrBoth;
@@ -34,33 +34,23 @@ struct DiffStyling {
     remove_highlight: Style,
 }
 
-fn line_styling(color: bool) -> DiffStyling {
-    if !color {
-        return DiffStyling::default();
+fn indicator_style(mut style: Style) -> Style {
+    if style.is_plain() {
+        return style;
     }
-
-    DiffStyling {
-        same: Style::default(),
-        add: Green.normal(),
-        add_highlight: Black.on(Green),
-        remove: Red.normal(),
-        remove_highlight: Black.on(Red),
-    }
+    style.is_bold = true;
+    style
 }
 
-fn indicator_styling(color: bool) -> DiffStyling {
-    if !color {
-        return DiffStyling::default();
-    }
-
+fn indicator_styling(colors: &ColorScheme) -> DiffStyling {
     // Bold change indicators remain legible beside highlighted text without
     // introducing a second colour scheme for margins and line numbers.
     DiffStyling {
-        same: Style::default(),
-        add: Green.bold(),
-        add_highlight: Green.bold(),
-        remove: Red.bold(),
-        remove_highlight: Red.bold(),
+        same: indicator_style(colors.same),
+        add: indicator_style(colors.add),
+        add_highlight: indicator_style(colors.add),
+        remove: indicator_style(colors.remove),
+        remove_highlight: indicator_style(colors.remove),
     }
 }
 
@@ -135,9 +125,9 @@ fn make_diff(tag: DiffTag, old: String, new: String) -> Diff {
 }
 
 /// Renders a unified diff, including character highlighting for paired lines.
-pub(super) fn render_diffs(diffs: &[Diff], color: bool) -> String {
-    let line_styling = line_styling(color);
-    let margin_styling = indicator_styling(color);
+pub(super) fn render_diffs(diffs: &[Diff], colors: &ColorScheme) -> String {
+    let line_styling = colors;
+    let margin_styling = indicator_styling(colors);
     let mut output = String::new();
 
     for change in diffs {
@@ -187,13 +177,7 @@ pub(super) fn render_diffs(diffs: &[Diff], color: bool) -> String {
                         (Some(before), Some(after)) => {
                             fmts_b.push(margin_styling.remove.paint("- "));
                             fmts_a.push(margin_styling.add.paint("+ "));
-                            _style_diff_line(
-                                before,
-                                after,
-                                &line_styling,
-                                &mut fmts_b,
-                                &mut fmts_a,
-                            );
+                            _style_diff_line(before, after, line_styling, &mut fmts_b, &mut fmts_a);
                             fmts_b.push(Style::default().paint("\n"));
                             fmts_a.push(Style::default().paint("\n"));
                         }
@@ -260,7 +244,7 @@ fn _render_side_by_side_line(
 fn _style_diff_line<'u>(
     before: &'u str,
     after: &'u str,
-    styling: &DiffStyling,
+    styling: &ColorScheme,
     before_fmts: &mut Vec<ANSIString<'u>>,
     after_fmts: &mut Vec<ANSIString<'u>>,
 ) {
@@ -297,10 +281,10 @@ fn side_by_side_line_width(term_width: usize, lineno_width: usize, separator: &s
 pub(super) fn render_diffs_side_by_side(
     diffs: &[Diff],
     max_line_count: usize,
-    color: bool,
+    colors: &ColorScheme,
 ) -> String {
-    let lineno_styling = indicator_styling(color);
-    let line_styling = line_styling(color);
+    let lineno_styling = indicator_styling(colors);
+    let line_styling = colors;
     let mut output = String::new();
 
     let sep = "\u{2502}";
@@ -416,7 +400,7 @@ pub(super) fn render_diffs_side_by_side(
                             let lineno_r_fmt = format!("{:w$}:", lineno_r, w = lineno_width);
                             let mut fmt_l = Vec::new();
                             let mut fmt_r = Vec::new();
-                            _style_diff_line(line_l, line_r, &line_styling, &mut fmt_l, &mut fmt_r);
+                            _style_diff_line(line_l, line_r, line_styling, &mut fmt_l, &mut fmt_r);
                             _render_side_by_side_line(
                                 &mut output,
                                 lineno_styling.remove.paint(&lineno_l_fmt),

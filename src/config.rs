@@ -1,0 +1,352 @@
+use ansi_term::{Color, Style};
+use std::env;
+use std::fmt;
+use std::fs;
+use std::io;
+use std::path::{Path, PathBuf};
+
+const SUPPORTED_COLORS: &str =
+    "default, black, red, green, yellow, blue, magenta, purple, cyan, or white";
+
+#[derive(Clone, Copy)]
+pub(crate) struct ColorScheme {
+    pub(crate) same: Style,
+    pub(crate) add: Style,
+    pub(crate) add_highlight: Style,
+    pub(crate) remove: Style,
+    pub(crate) remove_highlight: Style,
+}
+
+impl ColorScheme {
+    pub(crate) fn plain() -> Self {
+        Self {
+            same: Style::default(),
+            add: Style::default(),
+            add_highlight: Style::default(),
+            remove: Style::default(),
+            remove_highlight: Style::default(),
+        }
+    }
+}
+
+impl Default for ColorScheme {
+    fn default() -> Self {
+        Self {
+            same: Style::default(),
+            add: Color::Green.normal(),
+            add_highlight: Color::Black.on(Color::Green),
+            remove: Color::Red.normal(),
+            remove_highlight: Color::Black.on(Color::Red),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct ConfigError {
+    path: PathBuf,
+    message: String,
+}
+
+impl ConfigError {
+    fn new(path: &Path, message: impl Into<String>) -> Self {
+        Self {
+            path: path.to_path_buf(),
+            message: message.into(),
+        }
+    }
+}
+
+impl fmt::Display for ConfigError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}: {}", self.path.display(), self.message)
+    }
+}
+
+impl std::error::Error for ConfigError {}
+
+pub(crate) fn load_color_scheme() -> Result<ColorScheme, ConfigError> {
+    let Some(path) = find_config_file()? else {
+        return Ok(ColorScheme::default());
+    };
+    let contents = fs::read_to_string(&path)
+        .map_err(|error| ConfigError::new(&path, format!("could not read file: {error}")))?;
+
+    parse_config(&contents, &path)
+}
+
+fn find_config_file() -> Result<Option<PathBuf>, ConfigError> {
+    if let Some(path) = env::var_os("JIFF_CONFIG").filter(|path| !path.is_empty()) {
+        return Ok(Some(PathBuf::from(path)));
+    }
+
+    let candidates = config_candidates(
+        env::var_os("HOME").map(PathBuf::from),
+        env::var_os("XDG_CONFIG_HOME").map(PathBuf::from),
+    );
+
+    for path in candidates {
+        match fs::metadata(&path) {
+            Ok(_) => return Ok(Some(path)),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(ConfigError::new(
+                    &path,
+                    format!("could not inspect file: {error}"),
+                ));
+            }
+        }
+    }
+    Ok(None)
+}
+
+fn config_candidates(home: Option<PathBuf>, xdg_home: Option<PathBuf>) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    match xdg_home {
+        Some(xdg_home) if xdg_home.is_absolute() => {
+            candidates.push(xdg_home.join("jiff/config.toml"));
+        }
+        _ => {
+            if let Some(home) = &home {
+                candidates.push(home.join(".config/jiff/config.toml"));
+            }
+        }
+    }
+    if let Some(home) = home {
+        candidates.push(home.join(".jiffconfig"));
+    }
+    candidates
+}
+
+fn parse_config(contents: &str, path: &Path) -> Result<ColorScheme, ConfigError> {
+    let document = contents
+        .parse::<toml::Table>()
+        .map_err(|error| ConfigError::new(path, format!("invalid TOML: {error}")))?;
+    reject_unknown_fields(&document, &["color"], "root", path)?;
+
+    let Some(color_value) = document.get("color") else {
+        return Ok(ColorScheme::default());
+    };
+    let color = color_value
+        .as_table()
+        .ok_or_else(|| ConfigError::new(path, "color must be a table"))?;
+    reject_unknown_fields(
+        color,
+        &["same", "add", "add_highlight", "remove", "remove_highlight"],
+        "color",
+        path,
+    )?;
+
+    let mut scheme = ColorScheme::default();
+    scheme.same = parse_style(color.get("same"), scheme.same, "color.same", path)?;
+    scheme.add = parse_style(color.get("add"), scheme.add, "color.add", path)?;
+    scheme.add_highlight = parse_style(
+        color.get("add_highlight"),
+        scheme.add_highlight,
+        "color.add_highlight",
+        path,
+    )?;
+    scheme.remove = parse_style(color.get("remove"), scheme.remove, "color.remove", path)?;
+    scheme.remove_highlight = parse_style(
+        color.get("remove_highlight"),
+        scheme.remove_highlight,
+        "color.remove_highlight",
+        path,
+    )?;
+    Ok(scheme)
+}
+
+fn parse_style(
+    value: Option<&toml::Value>,
+    mut style: Style,
+    field: &str,
+    path: &Path,
+) -> Result<Style, ConfigError> {
+    let Some(value) = value else {
+        return Ok(style);
+    };
+    let table = value
+        .as_table()
+        .ok_or_else(|| ConfigError::new(path, format!("{field} must be a table")))?;
+    reject_unknown_fields(table, &["color", "bgcolor", "bold"], field, path)?;
+
+    if let Some(color) = string_field(table, "color", field, path)? {
+        style.foreground = parse_color(color, &format!("{field}.color"), path)?;
+    }
+    if let Some(color) = string_field(table, "bgcolor", field, path)? {
+        style.background = parse_color(color, &format!("{field}.bgcolor"), path)?;
+    }
+    if let Some(bold) = boolean_field(table, "bold", field, path)? {
+        style.is_bold = bold;
+    }
+    Ok(style)
+}
+
+fn string_field<'a>(
+    table: &'a toml::Table,
+    name: &str,
+    parent: &str,
+    path: &Path,
+) -> Result<Option<&'a str>, ConfigError> {
+    match table.get(name) {
+        Some(toml::Value::String(value)) => Ok(Some(value)),
+        Some(_) => Err(ConfigError::new(
+            path,
+            format!("{parent}.{name} must be a string"),
+        )),
+        None => Ok(None),
+    }
+}
+
+fn boolean_field(
+    table: &toml::Table,
+    name: &str,
+    parent: &str,
+    path: &Path,
+) -> Result<Option<bool>, ConfigError> {
+    match table.get(name) {
+        Some(toml::Value::Boolean(value)) => Ok(Some(*value)),
+        Some(_) => Err(ConfigError::new(
+            path,
+            format!("{parent}.{name} must be true or false"),
+        )),
+        None => Ok(None),
+    }
+}
+
+fn parse_color(name: &str, field: &str, path: &Path) -> Result<Option<Color>, ConfigError> {
+    let color = match name.trim().to_ascii_lowercase().as_str() {
+        "default" => None,
+        "black" => Some(Color::Black),
+        "red" => Some(Color::Red),
+        "green" => Some(Color::Green),
+        "yellow" => Some(Color::Yellow),
+        "blue" => Some(Color::Blue),
+        "magenta" | "purple" => Some(Color::Purple),
+        "cyan" => Some(Color::Cyan),
+        "white" => Some(Color::White),
+        _ => {
+            return Err(ConfigError::new(
+                path,
+                format!("{field} has unsupported colour {name:?}; expected {SUPPORTED_COLORS}"),
+            ));
+        }
+    };
+    Ok(color)
+}
+
+fn reject_unknown_fields(
+    table: &toml::Table,
+    expected: &[&str],
+    parent: &str,
+    path: &Path,
+) -> Result<(), ConfigError> {
+    if let Some(field) = table
+        .keys()
+        .find(|field| !expected.contains(&field.as_str()))
+    {
+        return Err(ConfigError::new(
+            path,
+            format!("unknown option {parent}.{field}"),
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(contents: &str) -> Result<ColorScheme, ConfigError> {
+        parse_config(contents, Path::new("/tmp/.jiffconfig"))
+    }
+
+    #[test]
+    fn partial_styles_merge_with_the_default_palette() {
+        let scheme = parse(
+            r#"
+            [color]
+            add = { color = "blue", bold = true }
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(Some(Color::Blue), scheme.add.foreground);
+        assert!(scheme.add.is_bold);
+        assert_eq!(Some(Color::Red), scheme.remove.foreground);
+    }
+
+    #[test]
+    fn default_clears_an_existing_colour() {
+        let scheme = parse(
+            r#"
+            [color.add_highlight]
+            bgcolor = "default"
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(None, scheme.add_highlight.background);
+        assert_eq!(Some(Color::Black), scheme.add_highlight.foreground);
+    }
+
+    #[test]
+    fn unsupported_colours_report_the_field() {
+        let error = parse(
+            r#"
+            [color]
+            add = { color = "orange" }
+            "#,
+        )
+        .err()
+        .expect("orange should be rejected");
+
+        assert!(error.to_string().contains("color.add.color"));
+        assert!(error.to_string().contains("orange"));
+    }
+
+    #[test]
+    fn unknown_options_are_rejected() {
+        let error = parse(
+            r#"
+            [color]
+            kermit = { color = "green" }
+            "#,
+        )
+        .err()
+        .expect("unknown styles should be rejected");
+
+        assert!(error.to_string().contains("unknown option color.kermit"));
+    }
+
+    #[test]
+    fn xdg_config_precedes_the_home_dotfile() {
+        let paths = config_candidates(
+            Some(PathBuf::from("/home/kermit")),
+            Some(PathBuf::from("/configs")),
+        );
+
+        assert_eq!(
+            vec![
+                PathBuf::from("/configs/jiff/config.toml"),
+                PathBuf::from("/home/kermit/.jiffconfig"),
+            ],
+            paths
+        );
+    }
+
+    #[test]
+    fn home_config_is_used_when_xdg_home_is_relative() {
+        let paths = config_candidates(
+            Some(PathBuf::from("/home/fozzie")),
+            Some(PathBuf::from("relative")),
+        );
+
+        assert_eq!(
+            vec![
+                PathBuf::from("/home/fozzie/.config/jiff/config.toml"),
+                PathBuf::from("/home/fozzie/.jiffconfig"),
+            ],
+            paths
+        );
+    }
+}

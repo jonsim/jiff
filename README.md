@@ -16,6 +16,38 @@ Long output from either implementation is sent to `$PAGER`, using `less` by
 default. Output which fits in the terminal, or is redirected to another
 command, is printed directly. Pass `--no-pager` to always print directly.
 
+### Configuration
+
+Jiff uses the first configuration file it finds in this order:
+
+1. The path in `$JIFF_CONFIG`, when set.
+2. `$XDG_CONFIG_HOME/jiff/config.toml`, or `~/.config/jiff/config.toml` when
+   `$XDG_CONFIG_HOME` is not set.
+3. `~/.jiffconfig`.
+
+The file is optional. If it exists, it must contain valid TOML. Colour styles
+are configured under `[color]`; every style and field is optional, and omitted
+values keep the built-in default. For example, this changes additions to a
+blue and yellow palette:
+
+```toml
+[color]
+add = { color = "blue", bold = true }
+add_highlight = { color = "yellow", bgcolor = "blue" }
+```
+
+The supported styles are `same`, `add`, `add_highlight`, `remove` and
+`remove_highlight`. Each accepts `color`, `bgcolor` and `bold`. Line numbers and
+change markers inherit the corresponding `same`, `add` or `remove` colours and
+are shown in bold. The built-in palette uses the terminal default for unchanged
+text, green for additions, red for removals, and black on green or red for
+highlights.
+
+Supported colour names are `default`, `black`, `red`, `green`, `yellow`,
+`blue`, `magenta`, `purple`, `cyan` and `white`. `purple` is an alias for
+`magenta`; `default` clears that foreground or background and lets the terminal
+choose it.
+
 ### Rust
 
 #### Building

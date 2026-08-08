@@ -4,6 +4,7 @@ import shutil
 import subprocess
 import sys
 
+from jiff_config import ConfigError, load_color_scheme
 from rich.cells import cell_len
 from rich.text import Text
 
@@ -105,6 +106,12 @@ def main():
     parser.add_argument("file2", help="Right file")
     args = parser.parse_args()
 
+    try:
+        colors = load_color_scheme()
+    except ConfigError as error:
+        print(f"Could not load config: {error}", file=sys.stderr)
+        sys.exit(1)
+
     lpath = args.file1
     rpath = args.file2
     lfile = read_file_or_die(lpath)
@@ -113,12 +120,11 @@ def main():
     max_line_count = max(lfile.count("\n"), rfile.count("\n"))
 
     diffs = diff.calculate_line_diff(lfile, rfile)
-
     color = not args.no_color
     if args.inline:
-        output = diff.render_diffs(diffs, color)
+        output = diff.render_diffs(diffs, color, colors)
     else:
-        output = diff.render_diffs_side_by_side(diffs, max_line_count, color)
+        output = diff.render_diffs_side_by_side(diffs, max_line_count, color, colors)
 
     try:
         _display(output, args.no_pager)

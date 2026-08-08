@@ -1,3 +1,4 @@
+mod config;
 mod diff;
 mod pager;
 
@@ -67,6 +68,13 @@ fn main() {
     let mut color = !matches.is_present("no-color");
     let no_pager = matches.is_present("no-pager");
     let inline = matches.is_present("inline");
+    let mut colors = match config::load_color_scheme() {
+        Ok(colors) => colors,
+        Err(error) => {
+            eprintln!("Could not load config: {error}");
+            process::exit(1);
+        }
+    };
     let lfile = read_file_or_die(lpath);
     let rfile = read_file_or_die(rpath);
     let max_line_count = max(line_count(&lfile), line_count(&rfile));
@@ -78,13 +86,16 @@ fn main() {
         let is_tty = std::io::stdout().is_terminal();
         color = force_color || is_tty;
     }
+    if !color {
+        colors = config::ColorScheme::plain();
+    }
 
     let diffs = diff::calculate_line_diff(&lfile, &rfile);
 
     let output = if inline {
-        diff::render_diffs(&diffs, color)
+        diff::render_diffs(&diffs, &colors)
     } else {
-        diff::render_diffs_side_by_side(&diffs, max_line_count, color)
+        diff::render_diffs_side_by_side(&diffs, max_line_count, &colors)
     };
 
     if let Err(error) = pager::display(&output, no_pager) {
