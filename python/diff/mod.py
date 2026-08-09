@@ -30,6 +30,7 @@ class DiffType(enum.Enum):
     ADD = enum.auto()
     REMOVE = enum.auto()
     REPLACE = enum.auto()
+    OMITTED = enum.auto()
 
     def __repr__(self) -> str:
         return self.name
@@ -38,8 +39,10 @@ class DiffType(enum.Enum):
 @dataclass
 class Diff:
     kind: DiffType
-    left: str
+    left: str = ""
     right: str | None = None
+    # Only OMITTED diffs set this; their source lines are deliberately absent.
+    omitted_lines: int = 0
 
 
 @dataclass
@@ -138,6 +141,46 @@ def calculate_diff(left: str, right: str, split: str) -> list[Diff]:
     return diffs
 
 
+def limit_context(diffs: list[Diff], context_lines: int) -> list[Diff]:
+    """Limits unchanged regions to the requested lines around each change.
+
+    Omitted regions retain their line count so side-by-side output can continue
+    with the real source line numbers after each gap.
+    """
+    limited: list[Diff] = []
+    for index, change in enumerate(diffs):
+        if change.kind != DiffType.SAME:
+            limited.append(change)
+            continue
+
+        lines = change.left.split("\n")
+        # A leading unchanged region only contributes lines before the first
+        # change; a trailing region only contributes lines after the last.
+        prefix_count = min(context_lines, len(lines)) if index > 0 else 0
+        suffix_count = (
+            min(context_lines, len(lines) - prefix_count)
+            if index + 1 < len(diffs)
+            else 0
+        )
+        omitted_count = len(lines) - prefix_count - suffix_count
+
+        if not omitted_count:
+            limited.append(change)
+            continue
+        if prefix_count:
+            limited.append(Diff(DiffType.SAME, "\n".join(lines[:prefix_count])))
+        limited.append(Diff(DiffType.OMITTED, omitted_lines=omitted_count))
+        if suffix_count:
+            limited.append(Diff(DiffType.SAME, "\n".join(lines[-suffix_count:])))
+
+    return limited
+
+
+def _omission_text(line_count: int) -> str:
+    noun = "line" if line_count == 1 else "lines"
+    return f"... {line_count} unchanged {noun} ..."
+
+
 # =========================
 # Unified Print
 # =========================
@@ -169,6 +212,12 @@ def print_diffs(
                     Text("- ", style=margin_styling.remove)
                     + Text(line, style=lines.remove)
                 )
+
+        elif change.kind == DiffType.OMITTED:
+            console.print(
+                Text("  ", style=margin_styling.same)
+                + Text(_omission_text(change.omitted_lines), style=lines.same)
+            )
 
         elif change.kind == DiffType.REPLACE:
             lines_b = change.left.split("\n")
@@ -222,6 +271,8 @@ def _style_diff_line(
         elif change.kind == DiffType.REPLACE:
             before_text.append(change.left, style=styling.remove_highlight)
             after_text.append(change.right, style=styling.add_highlight)
+        elif change.kind == DiffType.OMITTED:
+            raise AssertionError("character diffs are never context-limited")
 
 
 # =========================
@@ -301,6 +352,21 @@ def print_diffs_side_by_side(
                     sep,
                 )
                 lineno_l += 1
+
+        elif change.kind == DiffType.OMITTED:
+            message = Text(_omission_text(change.omitted_lines), style=lines.same)
+            _print_side_by_side_line(
+                Text(empty_lineno, style=lineno_styling.same),
+                Text(empty_lineno, style=lineno_styling.same),
+                Text(empty_lineno, style=lineno_styling.same),
+                Text(empty_lineno, style=lineno_styling.same),
+                message,
+                message.copy(),
+                line_width,
+                sep,
+            )
+            lineno_l += change.omitted_lines
+            lineno_r += change.omitted_lines
 
         elif change.kind == DiffType.REPLACE:
             lines_b = change.left.split("\n")

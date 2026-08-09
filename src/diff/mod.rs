@@ -23,6 +23,7 @@ pub(super) enum Diff {
     Add(String),
     Remove(String),
     Replace(String, String),
+    Omitted(usize),
 }
 
 #[derive(Default)]
@@ -115,6 +116,56 @@ pub(super) fn calculate_char_diff(left: &str, right: &str) -> Vec<Diff> {
         .collect()
 }
 
+/// Limits unchanged regions to the requested lines around each change.
+///
+/// Omitted regions retain their line count so the side-by-side renderer can
+/// continue with the real source line numbers after each gap.
+pub(super) fn limit_context(diffs: Vec<Diff>, context_lines: usize) -> Vec<Diff> {
+    let diff_count = diffs.len();
+    let mut limited = Vec::new();
+
+    for (index, change) in diffs.into_iter().enumerate() {
+        let Diff::Same(same) = change else {
+            limited.push(change);
+            continue;
+        };
+
+        let lines: Vec<&str> = same.split('\n').collect();
+        // A leading unchanged region only contributes lines before the first
+        // change; a trailing region only contributes lines after the last.
+        let prefix_count = if index > 0 {
+            context_lines.min(lines.len())
+        } else {
+            0
+        };
+        let suffix_count = if index + 1 < diff_count {
+            context_lines.min(lines.len() - prefix_count)
+        } else {
+            0
+        };
+        let omitted_count = lines.len() - prefix_count - suffix_count;
+
+        if omitted_count == 0 {
+            limited.push(Diff::Same(same));
+            continue;
+        }
+        if prefix_count > 0 {
+            limited.push(Diff::Same(lines[..prefix_count].join("\n")));
+        }
+        limited.push(Diff::Omitted(omitted_count));
+        if suffix_count > 0 {
+            limited.push(Diff::Same(lines[lines.len() - suffix_count..].join("\n")));
+        }
+    }
+
+    limited
+}
+
+fn omission_text(line_count: usize) -> String {
+    let noun = if line_count == 1 { "line" } else { "lines" };
+    format!("... {line_count} unchanged {noun} ...")
+}
+
 fn make_diff(tag: DiffTag, old: String, new: String) -> Diff {
     match tag {
         DiffTag::Equal => Diff::Same(old),
@@ -155,6 +206,13 @@ pub(super) fn render_diffs(diffs: &[Diff], colors: &ColorScheme) -> String {
                     writeln!(&mut output, "{}{}", margin, fmt)
                         .expect("writing to a String cannot fail");
                 }
+            }
+            Diff::Omitted(line_count) => {
+                let margin = margin_styling.same.paint("  ");
+                let message = omission_text(*line_count);
+                let fmt = line_styling.same.paint(message);
+                writeln!(&mut output, "{}{}", margin, fmt)
+                    .expect("writing to a String cannot fail");
             }
             Diff::Replace(before, after) => {
                 let lines_b: Vec<&str> = before.split('\n').collect();
@@ -264,6 +322,7 @@ fn _style_diff_line<'u>(
                 before_fmts.push(styling.remove_highlight.paint(rem));
                 after_fmts.push(styling.add_highlight.paint(add));
             }
+            Diff::Omitted(_) => unreachable!("character diffs are never context-limited"),
         }
     }
 }
@@ -355,6 +414,22 @@ pub(super) fn render_diffs_side_by_side(
                     );
                     lineno_l += 1;
                 }
+            }
+            Diff::Omitted(line_count) => {
+                let message = omission_text(*line_count);
+                _render_side_by_side_line(
+                    &mut output,
+                    lineno_styling.same.paint(&empty_lineno),
+                    lineno_styling.same.paint(&empty_lineno),
+                    lineno_styling.same.paint(&empty_lineno),
+                    lineno_styling.same.paint(&empty_lineno),
+                    &[line_styling.same.paint(&message)],
+                    &[line_styling.same.paint(&message)],
+                    line_width,
+                    sep,
+                );
+                lineno_l += line_count;
+                lineno_r += line_count;
             }
             Diff::Replace(before, after) => {
                 let lines_b: Vec<&str> = before.split('\n').collect();
@@ -508,6 +583,80 @@ mod tests {
             ],
             diffs
         );
+    }
+
+    #[test]
+    fn context_keeps_lines_on_each_side_of_a_change() {
+        // Leading and trailing ranges keep the lines nearest the replacement.
+        let diffs = vec![
+            Diff::Same("one\ntwo\nthree\nfour".to_string()),
+            Diff::Replace("Kermit".to_string(), "Fozzie".to_string()),
+            Diff::Same("five\nsix\nseven\neight".to_string()),
+        ];
+
+        let limited = limit_context(diffs, 2);
+
+        assert_eq!(
+            vec![
+                Diff::Omitted(2),
+                Diff::Same("three\nfour".to_string()),
+                Diff::Replace("Kermit".to_string(), "Fozzie".to_string()),
+                Diff::Same("five\nsix".to_string()),
+                Diff::Omitted(2),
+            ],
+            limited
+        );
+    }
+
+    #[test]
+    fn context_joins_nearby_changes_without_an_omission() {
+        // Overlapping context belongs to one continuous hunk.
+        let diffs = vec![
+            Diff::Remove("Kermit".to_string()),
+            Diff::Same("one\ntwo\nthree".to_string()),
+            Diff::Add("Fozzie".to_string()),
+        ];
+
+        let limited = limit_context(diffs, 2);
+
+        assert_eq!(
+            vec![
+                Diff::Remove("Kermit".to_string()),
+                Diff::Same("one\ntwo\nthree".to_string()),
+                Diff::Add("Fozzie".to_string()),
+            ],
+            limited
+        );
+    }
+
+    #[test]
+    fn zero_context_omits_every_unchanged_line() {
+        let diffs = vec![
+            Diff::Same("one\ntwo".to_string()),
+            Diff::Replace("Kermit".to_string(), "Fozzie".to_string()),
+            Diff::Same("three\nfour".to_string()),
+        ];
+
+        let limited = limit_context(diffs, 0);
+
+        assert_eq!(
+            vec![
+                Diff::Omitted(2),
+                Diff::Replace("Kermit".to_string(), "Fozzie".to_string()),
+                Diff::Omitted(2),
+            ],
+            limited
+        );
+    }
+
+    #[test]
+    fn side_by_side_line_numbers_advance_over_omitted_lines() {
+        // The first visible line after a gap keeps its source line number.
+        let diffs = vec![Diff::Omitted(9), Diff::Same("Kermit".to_string())];
+
+        let output = render_diffs_side_by_side(&diffs, 10, &ColorScheme::plain());
+
+        assert!(output.contains("10: Kermit"));
     }
 
     #[test]

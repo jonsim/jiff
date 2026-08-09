@@ -14,6 +14,12 @@ enum FileContents {
     Binary(Vec<u8>),
 }
 
+struct OutputOptions<'a> {
+    repository_path: Option<&'a str>,
+    inline: bool,
+    context_lines: Option<usize>,
+}
+
 impl FileContents {
     fn from_bytes(bytes: Vec<u8>) -> Self {
         // A NUL is the conventional cheap binary-file check. Invalid UTF-8 is
@@ -59,16 +65,15 @@ fn render_output(
     right: &FileContents,
     lpath: &str,
     rpath: &str,
-    repository_path: Option<&str>,
-    inline: bool,
+    options: &OutputOptions,
     colors: &config::ColorScheme,
 ) -> String {
-    let (left_label, right_label) = file_labels(repository_path, lpath, rpath);
+    let (left_label, right_label) = file_labels(options.repository_path, lpath, rpath);
 
     match (left, right) {
         (FileContents::Text(left), FileContents::Text(right)) => {
             let mut output = String::new();
-            if repository_path.is_some() {
+            if options.repository_path.is_some() {
                 output.push_str(&format!(
                     "{}\n{}\n",
                     colors.remove.paint(format!("--- {left_label}")),
@@ -76,8 +81,11 @@ fn render_output(
                 ));
             }
 
-            let diffs = diff::calculate_line_diff(left, right);
-            if inline {
+            let mut diffs = diff::calculate_line_diff(left, right);
+            if let Some(context_lines) = options.context_lines {
+                diffs = diff::limit_context(diffs, context_lines);
+            }
+            if options.inline {
                 output.push_str(&diff::render_diffs(&diffs, colors));
             } else {
                 let max_line_count = max(line_count(left), line_count(right));
@@ -114,6 +122,20 @@ fn main() {
                 .help("Display the diff inline"),
         )
         .arg(
+            Arg::with_name("unified")
+                .short("U")
+                .long("unified")
+                .takes_value(true)
+                .value_name("n")
+                .validator(|value| {
+                    value
+                        .parse::<usize>()
+                        .map(|_| ())
+                        .map_err(|_| "context must be a non-negative integer".to_string())
+                })
+                .help("Show n lines of context around each change"),
+        )
+        .arg(
             Arg::with_name("no-color")
                 .long("no-color")
                 .help("Disables colorization of the output"),
@@ -129,6 +151,9 @@ fn main() {
     let lpath = matches.value_of("file1").expect("file1 is required");
     let rpath = matches.value_of("file2").expect("file2 is required");
     let repository_path = matches.value_of("path");
+    let context_lines = matches
+        .value_of("unified")
+        .map(|value| value.parse().expect("unified was validated"));
     let mut color = !matches.is_present("no-color");
     let no_pager = matches.is_present("no-pager");
     let inline = matches.is_present("inline");
@@ -170,8 +195,11 @@ fn main() {
         &rfile,
         lpath,
         rpath,
-        repository_path,
-        inline,
+        &OutputOptions {
+            repository_path,
+            inline,
+            context_lines,
+        },
         &colors,
     );
 
@@ -243,8 +271,11 @@ mod tests {
             &right,
             "/tmp/local",
             "/tmp/remote",
-            Some("muppet cast.txt"),
-            true,
+            &OutputOptions {
+                repository_path: Some("muppet cast.txt"),
+                inline: true,
+                context_lines: None,
+            },
             &config::ColorScheme::plain(),
         );
 
@@ -261,8 +292,11 @@ mod tests {
             &right,
             "/tmp/local",
             "/tmp/remote",
-            Some("animal.dat"),
-            false,
+            &OutputOptions {
+                repository_path: Some("animal.dat"),
+                inline: false,
+                context_lines: None,
+            },
             &config::ColorScheme::plain(),
         );
 
@@ -282,8 +316,11 @@ mod tests {
             &right,
             "/tmp/kermit.dat",
             "/tmp/kermit-copy.dat",
-            None,
-            false,
+            &OutputOptions {
+                repository_path: None,
+                inline: false,
+                context_lines: None,
+            },
             &config::ColorScheme::plain(),
         );
 

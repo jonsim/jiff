@@ -51,6 +51,7 @@ def render_output(
     inline: bool,
     color: bool,
     colors: ColorScheme,
+    context_lines: int | None = None,
 ) -> str:
     left_label, right_label = file_labels(repository_path, lpath, rpath)
 
@@ -67,6 +68,8 @@ def render_output(
         output += diff.render_file_header(repository_path, color, colors)
 
     diffs = diff.calculate_line_diff(left, right)
+    if context_lines is not None:
+        diffs = diff.limit_context(diffs, context_lines)
     if inline:
         output += diff.render_diffs(diffs, color, colors)
     else:
@@ -145,6 +148,18 @@ def _display(output: str, no_pager: bool) -> None:
             sys.stdout = open(os.devnull, "w")  # noqa: SIM115
 
 
+def _non_negative_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            "context must be a non-negative integer"
+        ) from error
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("context must be a non-negative integer")
+    return parsed
+
+
 def run():
     parser = argparse.ArgumentParser(description="Colored diff tool")
     parser.add_argument(
@@ -154,6 +169,13 @@ def run():
     )
     parser.add_argument(
         "-i", "--inline", action="store_true", help="Display the diff inline"
+    )
+    parser.add_argument(
+        "-U",
+        "--unified",
+        metavar="n",
+        type=_non_negative_int,
+        help="Show n lines of context around each change",
     )
     parser.add_argument(
         "--no-color", action="store_true", help="Disables colorization of the output"
@@ -194,6 +216,7 @@ def run():
         args.inline,
         color,
         colors,
+        args.unified,
     )
 
     try:

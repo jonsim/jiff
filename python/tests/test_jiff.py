@@ -1,8 +1,22 @@
+import argparse
 import unittest
 from unittest import mock
 
 import jiff
 from jiff_config import ColorScheme
+
+
+class CommandLineValueTests(unittest.TestCase):
+    def test_zero_context_is_valid(self):
+        self.assertEqual(0, jiff._non_negative_int("0"))
+
+    def test_negative_context_is_rejected(self):
+        with self.assertRaisesRegex(argparse.ArgumentTypeError, "non-negative integer"):
+            jiff._non_negative_int("-1")
+
+    def test_non_numeric_context_is_rejected(self):
+        with self.assertRaisesRegex(argparse.ArgumentTypeError, "non-negative integer"):
+            jiff._non_negative_int("many")
 
 
 class FileReadingTests(unittest.TestCase):

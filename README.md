@@ -33,6 +33,17 @@ Long output from either implementation is sent to `$PAGER`, using `less` by
 default. Output which fits in the terminal, or is redirected to another
 command, is printed directly. Pass `--no-pager` to always print directly.
 
+By default Jiff shows every unchanged line. Pass `-U<n>` or `--unified=<n>` to
+show at most `<n>` lines of context on either side of each change. For example,
+this shows three context lines:
+
+```sh
+jiff -U3 FILE1 FILE2
+```
+
+Omitted regions are marked with their number of unchanged lines in either
+output layout. `-U0` shows only changed lines and those markers.
+
 ### Configuration
 
 Jiff uses the first configuration file it finds in this order:
