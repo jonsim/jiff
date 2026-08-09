@@ -8,24 +8,37 @@ use std::fs;
 use std::io::IsTerminal;
 use std::process;
 
-fn read_file_or_die(path: &str) -> String {
-    let mut content = match fs::read_to_string(path) {
-        Ok(content) => content,
-        Err(ref error) => {
-            eprintln!("Could not read {}: {}", path, error);
-            process::exit(1);
+#[derive(Debug, Eq, PartialEq)]
+enum FileContents {
+    Text(String),
+    Binary(Vec<u8>),
+}
+
+impl FileContents {
+    fn from_bytes(bytes: Vec<u8>) -> Self {
+        // A NUL is the conventional cheap binary-file check. Invalid UTF-8 is
+        // binary too because Jiff's line and character algorithms operate on
+        // Unicode text rather than arbitrary bytes.
+        if bytes.contains(&0) {
+            return Self::Binary(bytes);
         }
-    };
-    // Renderers add their own newline. Remove one file terminator so it does
-    // not become a spurious empty line in the diff.
-    if content.ends_with('\n') {
-        content.pop();
+
+        match String::from_utf8(bytes) {
+            Ok(mut text) => {
+                // Renderers add their own newline. Remove one file terminator
+                // so it does not become a spurious empty line in the diff.
+                if text.ends_with('\n') {
+                    text.pop();
+                }
+                Self::Text(text)
+            }
+            Err(error) => Self::Binary(error.into_bytes()),
+        }
     }
-    content
 }
 
 fn line_count(content: &str) -> usize {
-    // `read_file_or_die` has already removed a terminal newline, so every
+    // `FileContents` has already removed a terminal newline, so every
     // remaining separator introduces another displayed line.
     if content.is_empty() {
         0
@@ -34,15 +47,65 @@ fn line_count(content: &str) -> usize {
     }
 }
 
+fn file_labels(repository_path: Option<&str>, lpath: &str, rpath: &str) -> (String, String) {
+    match repository_path {
+        Some(path) => (format!("a/{path}"), format!("b/{path}")),
+        None => (lpath.to_string(), rpath.to_string()),
+    }
+}
+
+fn render_output(
+    left: &FileContents,
+    right: &FileContents,
+    lpath: &str,
+    rpath: &str,
+    repository_path: Option<&str>,
+    inline: bool,
+    colors: &config::ColorScheme,
+) -> String {
+    let (left_label, right_label) = file_labels(repository_path, lpath, rpath);
+
+    match (left, right) {
+        (FileContents::Text(left), FileContents::Text(right)) => {
+            let mut output = String::new();
+            if repository_path.is_some() {
+                output.push_str(&format!(
+                    "{}\n{}\n",
+                    colors.remove.paint(format!("--- {left_label}")),
+                    colors.add.paint(format!("+++ {right_label}")),
+                ));
+            }
+
+            let diffs = diff::calculate_line_diff(left, right);
+            if inline {
+                output.push_str(&diff::render_diffs(&diffs, colors));
+            } else {
+                let max_line_count = max(line_count(left), line_count(right));
+                output.push_str(&diff::render_diffs_side_by_side(
+                    &diffs,
+                    max_line_count,
+                    colors,
+                ));
+            }
+            output
+        }
+        (FileContents::Binary(left), FileContents::Binary(right)) if left == right => {
+            format!("Binary files {left_label} and {right_label} are identical\n")
+        }
+        _ => format!("Binary files {left_label} and {right_label} differ\n"),
+    }
+}
+
 fn main() {
     let matches = App::new("jiff")
         .version("1.0")
         .about("Colored diff tool")
         .arg(
-            Arg::with_name("git-diff")
-                .short("g")
-                .long("git-diff")
-                .help("Enable git diff mode"),
+            Arg::with_name("path")
+                .long("path")
+                .takes_value(true)
+                .value_name("PATH")
+                .help("Display Git-style headings for a repository path"),
         )
         .arg(
             Arg::with_name("inline")
@@ -65,6 +128,7 @@ fn main() {
         .get_matches();
     let lpath = matches.value_of("file1").expect("file1 is required");
     let rpath = matches.value_of("file2").expect("file2 is required");
+    let repository_path = matches.value_of("path");
     let mut color = !matches.is_present("no-color");
     let no_pager = matches.is_present("no-pager");
     let inline = matches.is_present("inline");
@@ -75,9 +139,20 @@ fn main() {
             process::exit(1);
         }
     };
-    let lfile = read_file_or_die(lpath);
-    let rfile = read_file_or_die(rpath);
-    let max_line_count = max(line_count(&lfile), line_count(&rfile));
+    let lfile = match fs::read(lpath) {
+        Ok(contents) => FileContents::from_bytes(contents),
+        Err(error) => {
+            eprintln!("Could not read {lpath}: {error}");
+            process::exit(1);
+        }
+    };
+    let rfile = match fs::read(rpath) {
+        Ok(contents) => FileContents::from_bytes(contents),
+        Err(error) => {
+            eprintln!("Could not read {rpath}: {error}");
+            process::exit(1);
+        }
+    };
 
     // Match the Python implementation: explicit no-colour wins, otherwise a
     // non-terminal disables colour unless Rich's force flag is present.
@@ -90,13 +165,15 @@ fn main() {
         colors = config::ColorScheme::plain();
     }
 
-    let diffs = diff::calculate_line_diff(&lfile, &rfile);
-
-    let output = if inline {
-        diff::render_diffs(&diffs, &colors)
-    } else {
-        diff::render_diffs_side_by_side(&diffs, max_line_count, &colors)
-    };
+    let output = render_output(
+        &lfile,
+        &rfile,
+        lpath,
+        rpath,
+        repository_path,
+        inline,
+        &colors,
+    );
 
     if let Err(error) = pager::display(&output, no_pager) {
         eprintln!("Could not display diff: {error}");
@@ -126,5 +203,93 @@ mod tests {
         let content = "1\n2\n3\n4\n5\n6\n7\n8\n9\n10";
 
         assert_eq!(10, line_count(content));
+    }
+
+    #[test]
+    fn text_content_loses_one_terminal_newline() {
+        // The renderer owns line endings, but meaningful blank lines remain.
+        let content = FileContents::from_bytes(b"Kermit\n\n".to_vec());
+
+        assert_eq!(FileContents::Text("Kermit\n".to_string()), content);
+    }
+
+    #[test]
+    fn nul_bytes_mark_a_file_as_binary() {
+        let bytes = b"Kermit\0Fozzie".to_vec();
+
+        assert_eq!(
+            FileContents::Binary(bytes.clone()),
+            FileContents::from_bytes(bytes)
+        );
+    }
+
+    #[test]
+    fn invalid_utf8_marks_a_file_as_binary() {
+        let bytes = vec![0x4b, 0xff, 0x21];
+
+        assert_eq!(
+            FileContents::Binary(bytes.clone()),
+            FileContents::from_bytes(bytes)
+        );
+    }
+
+    #[test]
+    fn repository_path_adds_git_style_headings() {
+        let left = FileContents::Text("Kermit".to_string());
+        let right = FileContents::Text("Fozzie".to_string());
+
+        let output = render_output(
+            &left,
+            &right,
+            "/tmp/local",
+            "/tmp/remote",
+            Some("muppet cast.txt"),
+            true,
+            &config::ColorScheme::plain(),
+        );
+
+        assert!(output.starts_with("--- a/muppet cast.txt\n+++ b/muppet cast.txt\n"));
+    }
+
+    #[test]
+    fn differing_binary_files_are_reported_without_decoding_them() {
+        let left = FileContents::Binary(vec![0, 1]);
+        let right = FileContents::Binary(vec![0, 2]);
+
+        let output = render_output(
+            &left,
+            &right,
+            "/tmp/local",
+            "/tmp/remote",
+            Some("animal.dat"),
+            false,
+            &config::ColorScheme::plain(),
+        );
+
+        assert_eq!(
+            "Binary files a/animal.dat and b/animal.dat differ\n",
+            output
+        );
+    }
+
+    #[test]
+    fn identical_binary_files_are_reported() {
+        let left = FileContents::Binary(vec![0, 1]);
+        let right = FileContents::Binary(vec![0, 1]);
+
+        let output = render_output(
+            &left,
+            &right,
+            "/tmp/kermit.dat",
+            "/tmp/kermit-copy.dat",
+            None,
+            false,
+            &config::ColorScheme::plain(),
+        );
+
+        assert_eq!(
+            "Binary files /tmp/kermit.dat and /tmp/kermit-copy.dat are identical\n",
+            output
+        );
     }
 }

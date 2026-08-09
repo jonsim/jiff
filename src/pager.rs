@@ -17,7 +17,12 @@ pub(super) fn display(output: &str, no_pager: bool) -> io::Result<()> {
         return run_pager(output);
     }
 
-    stdout.lock().write_all(output.as_bytes())
+    match stdout.lock().write_all(output.as_bytes()) {
+        // `jiff ... | head` closes stdout once it has enough output. This is
+        // an ordinary successful pipeline, just like quitting the pager.
+        Err(error) if error.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+        result => result,
+    }
 }
 
 fn should_page(

@@ -4,6 +4,7 @@ from .mod import (
     print_diffs_side_by_side,
     render_diffs,
     render_diffs_side_by_side,
+    render_file_header,
 )
 
 __all__ = [
@@ -12,4 +13,5 @@ __all__ = [
     "print_diffs_side_by_side",
     "render_diffs",
     "render_diffs_side_by_side",
+    "render_file_header",
 ]

@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import argparse
 import os
 import shutil
 import subprocess
 import sys
 
-from jiff_config import ConfigError, load_color_scheme
+from jiff_config import ColorScheme, ConfigError, load_color_scheme
 from rich.cells import cell_len
 from rich.text import Text
 
@@ -14,15 +16,63 @@ DEFAULT_TERMINAL_SIZE = (80, 24)
 TAB_WIDTH = 4
 
 
-def read_file_or_die(path):
+def read_file(path: str) -> str | bytes:
+    with open(path, "rb") as file:
+        content = file.read()
+
+    # A NUL is the conventional cheap binary-file check. Invalid UTF-8 is
+    # binary too because the diff algorithms operate on Unicode text.
+    if b"\0" in content:
+        return content
     try:
-        with open(path, "r", encoding="utf-8") as file:
-            content = file.read()
-            content = content.removesuffix("\n")
-            return content
-    except (OSError, UnicodeError) as error:
-        print(f"Could not read {path}: {error}", file=sys.stderr)
-        sys.exit(1)
+        return content.decode("utf-8").removesuffix("\n")
+    except UnicodeDecodeError:
+        return content
+
+
+def line_count(content: str) -> int:
+    if not content:
+        return 0
+    return content.count("\n") + 1
+
+
+def file_labels(repository_path: str | None, lpath: str, rpath: str) -> tuple[str, str]:
+    if repository_path is not None:
+        return f"a/{repository_path}", f"b/{repository_path}"
+    return lpath, rpath
+
+
+def render_output(
+    left: str | bytes,
+    right: str | bytes,
+    lpath: str,
+    rpath: str,
+    repository_path: str | None,
+    inline: bool,
+    color: bool,
+    colors: ColorScheme,
+) -> str:
+    left_label, right_label = file_labels(repository_path, lpath, rpath)
+
+    if isinstance(left, bytes) or isinstance(right, bytes):
+        relationship = (
+            "are identical"
+            if isinstance(left, bytes) and isinstance(right, bytes) and left == right
+            else "differ"
+        )
+        return f"Binary files {left_label} and {right_label} {relationship}\n"
+
+    output = ""
+    if repository_path is not None:
+        output += diff.render_file_header(repository_path, color, colors)
+
+    diffs = diff.calculate_line_diff(left, right)
+    if inline:
+        output += diff.render_diffs(diffs, color, colors)
+    else:
+        max_line_count = max(line_count(left), line_count(right))
+        output += diff.render_diffs_side_by_side(diffs, max_line_count, color, colors)
+    return output
 
 
 def _display_width(line: str) -> int:
@@ -85,13 +135,22 @@ def _display(output: str, no_pager: bool) -> None:
     ):
         _run_pager(output)
     else:
-        sys.stdout.write(output)
+        try:
+            sys.stdout.write(output)
+            sys.stdout.flush()
+        except BrokenPipeError:
+            # A downstream command such as `head` may deliberately stop
+            # reading early. Redirect the final interpreter flush too.
+            # This deliberately stays open until interpreter shutdown.
+            sys.stdout = open(os.devnull, "w")  # noqa: SIM115
 
 
-def main():
+def run():
     parser = argparse.ArgumentParser(description="Colored diff tool")
     parser.add_argument(
-        "-g", "--git-diff", action="store_true", help="Enable git diff mode"
+        "--path",
+        metavar="PATH",
+        help="Display Git-style headings for a repository path",
     )
     parser.add_argument(
         "-i", "--inline", action="store_true", help="Display the diff inline"
@@ -114,23 +173,42 @@ def main():
 
     lpath = args.file1
     rpath = args.file2
-    lfile = read_file_or_die(lpath)
-    rfile = read_file_or_die(rpath)
+    try:
+        lfile = read_file(lpath)
+    except OSError as error:
+        print(f"Could not read {lpath}: {error}", file=sys.stderr)
+        sys.exit(1)
+    try:
+        rfile = read_file(rpath)
+    except OSError as error:
+        print(f"Could not read {rpath}: {error}", file=sys.stderr)
+        sys.exit(1)
 
-    max_line_count = max(lfile.count("\n"), rfile.count("\n"))
-
-    diffs = diff.calculate_line_diff(lfile, rfile)
     color = not args.no_color
-    if args.inline:
-        output = diff.render_diffs(diffs, color, colors)
-    else:
-        output = diff.render_diffs_side_by_side(diffs, max_line_count, color, colors)
+    output = render_output(
+        lfile,
+        rfile,
+        lpath,
+        rpath,
+        args.path,
+        args.inline,
+        color,
+        colors,
+    )
 
     try:
         _display(output, args.no_pager)
     except (OSError, RuntimeError) as error:
         print(f"Could not display diff: {error}", file=sys.stderr)
         sys.exit(1)
+
+
+def main():
+    try:
+        run()
+    except KeyboardInterrupt:
+        # Match ordinary Unix command behaviour without printing a traceback.
+        sys.exit(130)
 
 
 if __name__ == "__main__":

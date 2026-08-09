@@ -1,6 +1,80 @@
 import unittest
+from unittest import mock
 
 import jiff
+from jiff_config import ColorScheme
+
+
+class FileReadingTests(unittest.TestCase):
+    def test_text_loses_one_terminal_newline(self):
+        # The renderer owns line endings, but meaningful blank lines remain.
+        with mock.patch("builtins.open", mock.mock_open(read_data=b"Kermit\n\n")):
+            content = jiff.read_file("muppet.txt")
+
+        self.assertEqual("Kermit\n", content)
+
+    def test_nul_bytes_mark_a_file_as_binary(self):
+        content = b"Kermit\0Fozzie"
+        with mock.patch("builtins.open", mock.mock_open(read_data=content)):
+            result = jiff.read_file("muppet.dat")
+
+        self.assertEqual(content, result)
+
+    def test_invalid_utf8_marks_a_file_as_binary(self):
+        content = bytes([0x4B, 0xFF, 0x21])
+        with mock.patch("builtins.open", mock.mock_open(read_data=content)):
+            result = jiff.read_file("muppet.dat")
+
+        self.assertEqual(content, result)
+
+
+class OutputTests(unittest.TestCase):
+    def test_repository_path_adds_git_style_headings(self):
+        output = jiff.render_output(
+            "Kermit",
+            "Fozzie",
+            "/tmp/local",
+            "/tmp/remote",
+            "muppet cast.txt",
+            True,
+            False,
+            ColorScheme.plain(),
+        )
+
+        self.assertTrue(
+            output.startswith("--- a/muppet cast.txt\n+++ b/muppet cast.txt\n")
+        )
+
+    def test_differing_binary_files_are_reported_without_decoding_them(self):
+        output = jiff.render_output(
+            bytes([0, 1]),
+            bytes([0, 2]),
+            "/tmp/local",
+            "/tmp/remote",
+            "animal.dat",
+            False,
+            False,
+            ColorScheme.plain(),
+        )
+
+        self.assertEqual("Binary files a/animal.dat and b/animal.dat differ\n", output)
+
+    def test_identical_binary_files_are_reported(self):
+        output = jiff.render_output(
+            bytes([0, 1]),
+            bytes([0, 1]),
+            "/tmp/kermit.dat",
+            "/tmp/kermit-copy.dat",
+            None,
+            False,
+            False,
+            ColorScheme.plain(),
+        )
+
+        self.assertEqual(
+            "Binary files /tmp/kermit.dat and /tmp/kermit-copy.dat are identical\n",
+            output,
+        )
 
 
 class PagerDecisionTests(unittest.TestCase):

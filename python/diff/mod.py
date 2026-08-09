@@ -85,6 +85,17 @@ def _colors(color: bool, colors: ColorScheme | None) -> ColorScheme:
     return colors or ColorScheme.default()
 
 
+def render_file_header(
+    path: str, color: bool = True, colors: ColorScheme | None = None
+) -> str:
+    """Renders Git-style labels for a repository path."""
+    colors = _colors(color, colors)
+    with console.capture() as capture:
+        console.print(Text(f"--- a/{path}", style=colors.remove.rich_style()))
+        console.print(Text(f"+++ b/{path}", style=colors.add.rich_style()))
+    return capture.get()
+
+
 # =========================
 # Diff Calculation
 # =========================
@@ -100,8 +111,10 @@ def calculate_char_diff(left: str, right: str) -> list[Diff]:
 
 def calculate_diff(left: str, right: str, split: str) -> list[Diff]:
     if split:
-        left_parts = left.split(split)
-        right_parts = right.split(split)
+        # An empty file has no lines. `str.split` would otherwise invent one
+        # empty line and make additions and deletions look like replacements.
+        left_parts = left.split(split) if left else []
+        right_parts = right.split(split) if right else []
     else:
         left_parts = list(left)
         right_parts = list(right)
