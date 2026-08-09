@@ -12,6 +12,23 @@ the other in Python. The Rust version is expected to be faster, but the Python
 version is more portable. Tests assert that the two versions are functionally
 identical.
 
+### Installing
+
+Install the Rust implementation with Cargo:
+
+```sh
+cargo install --path .
+```
+
+Or install the Python implementation as a standalone uv tool:
+
+```sh
+uv tool install ./python
+```
+
+Both commands install a `jiff` executable. Only install one implementation at a
+time unless you deliberately arrange their order in `$PATH`.
+
 Long output from either implementation is sent to `$PAGER`, using `less` by
 default. Output which fits in the terminal, or is redirected to another
 command, is printed directly. Pass `--no-pager` to always print directly.
@@ -61,6 +78,49 @@ cp examples/jiffconfig-dark.toml ~/.config/jiff/config.toml
 Use the light variant in the command above when your terminal has a light
 background. Both examples are complete configs, so they are also useful as a
 starting point for your own palette.
+
+### Git difftool
+
+Once `jiff` is installed and available in `$PATH`, configure it as a custom Git
+difftool with:
+
+```sh
+git config --global diff.tool jiff
+git config --global difftool.jiff.cmd 'jiff --path "$MERGED" "$LOCAL" "$REMOTE"'
+git config --global difftool.prompt false
+git config --global difftool.trustExitCode true
+```
+
+`$LOCAL` and `$REMOTE` are Git's temporary before and after files. `$MERGED`
+holds the repository path, which Jiff displays as `a/PATH` and `b/PATH` above
+the diff. Git supplies the source path for a detected rename. Remove `--global`
+from the commands if the configuration should only apply to the current
+repository.
+
+The usual Git forms then work as expected:
+
+```sh
+git difftool
+git difftool --cached
+git difftool HEAD~1 HEAD
+```
+
+For a one-off comparison without changing the Git configuration, use
+`--extcmd`. Git appends the two temporary files to this command and exposes the
+repository path as `$BASE`:
+
+```sh
+git difftool --no-prompt --extcmd='jiff --no-pager --path "$BASE"'
+```
+
+The `--no-pager` in this example avoids opening a pager for each changed file;
+omit it if automatic paging is preferable. Jiff returns zero after displaying a
+text or binary comparison and non-zero when it cannot read, configure or display
+the diff. `difftool.trustExitCode` makes Git report those failures rather than
+silently continuing.
+
+`git difftool --dir-diff` is not supported. That Git mode passes two
+directories, while Jiff currently compares one pair of files per process.
 
 ### Rust
 
