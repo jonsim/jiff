@@ -1,0 +1,7 @@
+# High-contrast colours for terminals with a dark background.
+[color]
+same = { color = "white" }
+add = { color = "cyan", bold = true }
+add_highlight = { color = "black", bgcolor = "cyan", bold = true }
+remove = { color = "yellow", bold = true }
+remove_highlight = { color = "black", bgcolor = "yellow", bold = true }

@@ -48,6 +48,20 @@ Supported colour names are `default`, `black`, `red`, `green`, `yellow`,
 `magenta`; `default` clears that foreground or background and lets the terminal
 choose it.
 
+The repository includes ready-made palettes for
+[light terminals](examples/jiffconfig-light.toml) and
+[dark terminals](examples/jiffconfig-dark.toml). Copy one to the standard XDG
+location to use it:
+
+```sh
+mkdir -p ~/.config/jiff
+cp examples/jiffconfig-dark.toml ~/.config/jiff/config.toml
+```
+
+Use the light variant in the command above when your terminal has a light
+background. Both examples are complete configs, so they are also useful as a
+starting point for your own palette.
+
 ### Rust
 
 #### Building
