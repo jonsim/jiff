@@ -29,6 +29,7 @@ SUPPORTED_COLORS = (
 )
 STYLE_NAMES = (
     "same",
+    "omitted",
     "add",
     "add_highlight",
     "remove",
@@ -58,6 +59,7 @@ class ColorStyle:
 @dataclass(frozen=True)
 class ColorScheme:
     same: ColorStyle
+    omitted: ColorStyle
     add: ColorStyle
     add_highlight: ColorStyle
     remove: ColorStyle
@@ -72,6 +74,7 @@ class ColorScheme:
     def default(cls) -> ColorScheme:
         return cls(
             same=ColorStyle(),
+            omitted=ColorStyle(color="bright_black"),
             add=ColorStyle(color="green"),
             add_highlight=ColorStyle(color="black", bgcolor="green"),
             remove=ColorStyle(color="red"),
@@ -88,6 +91,7 @@ class ColorScheme:
         plain = ColorStyle()
         return cls(
             same=plain,
+            omitted=plain,
             add=plain,
             add_highlight=plain,
             remove=plain,

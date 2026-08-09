@@ -230,7 +230,7 @@ pub(super) fn render_diffs(
             Diff::Omitted(line_count) => {
                 let margin = margin_styling.same.paint("  ");
                 let message = omission_text(*line_count);
-                let fmt = line_styling.same.paint(message);
+                let fmt = line_styling.omitted.paint(message);
                 writeln!(&mut output, "{}{}", margin, fmt)
                     .expect("writing to a String cannot fail");
                 left_index += line_count;
@@ -512,8 +512,8 @@ pub(super) fn render_diffs_side_by_side(
                     lineno_styling.same.paint(&empty_lineno),
                     lineno_styling.same.paint(&empty_lineno),
                     lineno_styling.same.paint(&empty_lineno),
-                    &[line_styling.same.paint(&message)],
-                    &[line_styling.same.paint(&message)],
+                    &[line_styling.omitted.paint(&message)],
+                    &[line_styling.omitted.paint(&message)],
                     line_width,
                     sep,
                 );

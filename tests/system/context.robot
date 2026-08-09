@@ -3,15 +3,15 @@ Resource         jiff.resource
 Test Template    Renderer Limits Unchanged Context
 
 
-*** Test Cases ***    RUNNER
-Python                 Run Python Jiff
-Rust                   Run Rust Jiff
+*** Test Cases ***    RUNNER             COLOUR_RUNNER
+Python                 Run Python Jiff    Run Python Jiff With Colour
+Rust                   Run Rust Jiff      Run Rust Jiff With Colour
 
 
 *** Keywords ***
 Renderer Limits Unchanged Context
     [Documentation]    Checks both option forms and preserves unlimited output by default.
-    [Arguments]    ${runner}
+    [Arguments]    ${runner}    ${colour_runner}
     VAR    ${left}    ${TEMPDIR}/context-left.txt
     VAR    ${right}    ${TEMPDIR}/context-right.txt
     VAR    ${left_contents}     one\ntwo\nthree\nfour\nKermit\nsix\nseven\neight\nnine
@@ -43,7 +43,20 @@ Renderer Limits Unchanged Context
     Should Contain    ${side_by_side.stdout}    5: Fozzie
     Should Not Contain    ${side_by_side.stdout}    4: four
 
+    ${coloured_inline} =    Run Keyword
+    ...    ${colour_runner}    --no-syntax    --inline    -U0    ${left}    ${right}
+    ${coloured_side_by_side} =    Run Keyword
+    ...    ${colour_runner}    --no-syntax    -U0    ${left}    ${right}
+    Omission Uses Muted Colour    ${coloured_inline.stdout}
+    Omission Uses Muted Colour    ${coloured_side_by_side.stdout}
+
     ${unlimited} =    Run Keyword    ${runner}    --inline    ${left}    ${right}
     Should Contain    ${unlimited.stdout}    ${SPACE}${SPACE}one${\n}
     Should Contain    ${unlimited.stdout}    ${SPACE}${SPACE}nine
     Should Not Contain    ${unlimited.stdout}    unchanged lines
+
+Omission Uses Muted Colour
+    [Arguments]    ${output}
+    ${ansi_bright_black} =    Evaluate    chr(27) + "[90m"
+    ${ansi_fixed_gray} =    Evaluate    chr(27) + "[38;5;8m"
+    Should Contain Any    ${output}    ${ansi_bright_black}    ${ansi_fixed_gray}

@@ -49,6 +49,7 @@ class Diff:
 @dataclass
 class DiffStyling:
     same: Style
+    omitted: Style
     add: Style
     add_highlight: Style
     remove: Style
@@ -58,6 +59,7 @@ class DiffStyling:
 def _line_styling(colors: ColorScheme) -> DiffStyling:
     return DiffStyling(
         same=colors.same.rich_style(),
+        omitted=colors.omitted.rich_style(),
         add=colors.add.rich_style(),
         add_highlight=colors.add_highlight.rich_style(),
         remove=colors.remove.rich_style(),
@@ -76,6 +78,7 @@ def _indicator_styling(colors: ColorScheme) -> DiffStyling:
     # introducing a second colour scheme for margins and line numbers.
     return DiffStyling(
         same=_indicator_style(colors.same),
+        omitted=_indicator_style(colors.omitted),
         add=_indicator_style(colors.add),
         add_highlight=_indicator_style(colors.add),
         remove=_indicator_style(colors.remove),
@@ -229,7 +232,7 @@ def print_diffs(
         elif change.kind == DiffType.OMITTED:
             console.print(
                 Text("  ", style=margin_styling.same)
-                + Text(_omission_text(change.omitted_lines), style=lines.same)
+                + Text(_omission_text(change.omitted_lines), style=lines.omitted)
             )
             left_index += change.omitted_lines
             right_index += change.omitted_lines
@@ -424,7 +427,7 @@ def print_diffs_side_by_side(
                 lineno_l += 1
 
         elif change.kind == DiffType.OMITTED:
-            message = Text(_omission_text(change.omitted_lines), style=lines.same)
+            message = Text(_omission_text(change.omitted_lines), style=lines.omitted)
             _print_side_by_side_line(
                 Text(empty_lineno, style=lineno_styling.same),
                 Text(empty_lineno, style=lineno_styling.same),

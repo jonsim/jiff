@@ -96,11 +96,12 @@ add = { color = "blue", bold = true }
 add_highlight = { color = "yellow", bgcolor = "blue" }
 ```
 
-The diff styles are `same`, `add`, `add_highlight`, `remove` and
-`remove_highlight`. Each accepts `color`, `bgcolor` and `bold`. Syntax styles
-are `syntax_comment`, `syntax_keyword`, `syntax_string`, `syntax_number` and
-`syntax_definition`; these accept `color` and `bold`. Syntax backgrounds are
-rejected so they cannot hide the diff.
+The diff styles are `same`, `omitted`, `add`, `add_highlight`, `remove` and
+`remove_highlight`. Each accepts `color`, `bgcolor` and `bold`. `omitted`
+controls the muted markers for unchanged regions hidden by `--unified`.
+Syntax styles are `syntax_comment`, `syntax_keyword`, `syntax_string`,
+`syntax_number` and `syntax_definition`; these accept `color` and `bold`.
+Syntax backgrounds are rejected so they cannot hide the diff.
 
 Line numbers and change markers inherit the corresponding `same`, `add` or
 `remove` colours and are shown in bold. The built-in diff palette uses the

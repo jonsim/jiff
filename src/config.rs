@@ -11,6 +11,7 @@ const SUPPORTED_COLORS: &str =
 #[derive(Clone, Copy)]
 pub(crate) struct ColorScheme {
     pub(crate) same: Style,
+    pub(crate) omitted: Style,
     pub(crate) add: Style,
     pub(crate) add_highlight: Style,
     pub(crate) remove: Style,
@@ -26,6 +27,7 @@ impl ColorScheme {
     pub(crate) fn plain() -> Self {
         Self {
             same: Style::default(),
+            omitted: Style::default(),
             add: Style::default(),
             add_highlight: Style::default(),
             remove: Style::default(),
@@ -43,6 +45,7 @@ impl Default for ColorScheme {
     fn default() -> Self {
         Self {
             same: Style::default(),
+            omitted: Color::Fixed(8).normal(),
             add: Color::Green.normal(),
             add_highlight: Color::Black.on(Color::Green),
             remove: Color::Red.normal(),
@@ -148,6 +151,7 @@ fn parse_config(contents: &str, path: &Path) -> Result<ColorScheme, ConfigError>
         color,
         &[
             "same",
+            "omitted",
             "add",
             "add_highlight",
             "remove",
@@ -164,6 +168,13 @@ fn parse_config(contents: &str, path: &Path) -> Result<ColorScheme, ConfigError>
 
     let mut scheme = ColorScheme::default();
     scheme.same = parse_style(color.get("same"), scheme.same, "color.same", path, true)?;
+    scheme.omitted = parse_style(
+        color.get("omitted"),
+        scheme.omitted,
+        "color.omitted",
+        path,
+        true,
+    )?;
     scheme.add = parse_style(color.get("add"), scheme.add, "color.add", path, true)?;
     scheme.add_highlight = parse_style(
         color.get("add_highlight"),
@@ -344,12 +355,14 @@ mod tests {
             r#"
             [color]
             add = { color = "blue", bold = true }
+            omitted = { color = "cyan" }
             "#,
         )
         .unwrap();
 
         assert_eq!(Some(Color::Blue), scheme.add.foreground);
         assert!(scheme.add.is_bold);
+        assert_eq!(Some(Color::Cyan), scheme.omitted.foreground);
         assert_eq!(Some(Color::Red), scheme.remove.foreground);
     }
 

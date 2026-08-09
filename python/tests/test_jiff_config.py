@@ -8,11 +8,17 @@ import jiff_config
 class ColorConfigTests(unittest.TestCase):
     def test_partial_styles_merge_with_the_default_palette(self):
         scheme = jiff_config._parse_color_scheme(
-            {"color": {"add": {"color": "blue", "bold": True}}}
+            {
+                "color": {
+                    "add": {"color": "blue", "bold": True},
+                    "omitted": {"color": "cyan"},
+                }
+            }
         )
 
         self.assertEqual("blue", scheme.add.color)
         self.assertTrue(scheme.add.bold)
+        self.assertEqual("cyan", scheme.omitted.color)
         self.assertEqual("red", scheme.remove.color)
 
     def test_default_clears_an_existing_colour(self):
