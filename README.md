@@ -180,29 +180,14 @@ silently continuing.
 ### Git diff and Git show
 
 Git's ordinary `diff` command uses a different interface from `git difftool`.
-It calls an external diff once per changed path with seven arguments, while
-Jiff expects the repository path followed by the two files to compare. A small
-adapter translates between the two:
+It calls an external diff once per changed path using its own seven-argument
+protocol. `--git-external-diff` tells Jiff to parse those arguments, retain its
+colours and leave Git in charge of the pager.
+
+Configure Jiff globally, or omit `--global` to use it in one repository:
 
 ```sh
-mkdir -p ~/.local/bin
-cat > ~/.local/bin/jiff-git-diff <<'EOF'
-#!/bin/sh
-export RICH_FORCE_TERMINAL=1
-exec jiff --no-pager --path "$1" "$2" "$5"
-EOF
-chmod +x ~/.local/bin/jiff-git-diff
-```
-
-Git supplies the repository path as `$1`, the old file as `$2` and the new file
-as `$5`. `--no-pager` leaves Git in charge of one pager for the complete diff.
-`RICH_FORCE_TERMINAL` keeps Jiff's colours when its output is going through
-that pager.
-
-Configure the adapter globally, or omit `--global` to use it in one repository:
-
-```sh
-git config --global diff.external "$HOME/.local/bin/jiff-git-diff"
+git config --global diff.external 'jiff --git-external-diff'
 ```
 
 Ordinary diff commands will now use Jiff:
@@ -230,8 +215,8 @@ command `git show` imply `--ext-diff`.
 
 External diff output is intended for people to read; it is not a patch. Use
 `git diff --no-ext-diff` for scripts or anything which needs Git's normal patch
-format. The adapter also does not handle unmerged paths, which Git passes using
-a separate one-argument form. Use `--no-ext-diff` while resolving conflicts.
+format. Git only supplies the path for an unmerged file, so Jiff currently
+prints `Unmerged file: PATH` rather than attempting a three-way diff.
 
 ### Rust
 

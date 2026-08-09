@@ -220,6 +220,11 @@ def run():
         help="Display Git-style headings for a repository path",
     )
     parser.add_argument(
+        "--git-external-diff",
+        action="store_true",
+        help="Parse arguments supplied by Git's external diff protocol",
+    )
+    parser.add_argument(
         "-i", "--inline", action="store_true", help="Display the diff inline"
     )
     parser.add_argument(
@@ -246,9 +251,30 @@ def run():
         action="store_true",
         help="Disables syntax highlighting",
     )
-    parser.add_argument("file1", help="Left file or directory")
-    parser.add_argument("file2", help="Right file or directory")
+    parser.add_argument(
+        "files",
+        nargs="+",
+        metavar="FILE",
+        help="Files to compare, or arguments supplied by Git",
+    )
     args = parser.parse_args()
+
+    if args.git_external_diff and args.path is not None:
+        parser.error("--git-external-diff cannot be used with --path")
+    if args.git_external_diff and len(args.files) == 1:
+        print(f"Unmerged file: {args.files[0]}")
+        return
+    if args.git_external_diff:
+        if len(args.files) != 7:
+            parser.error("--git-external-diff expects one or seven arguments")
+        repository_path = args.files[0]
+        lpath = args.files[1]
+        rpath = args.files[4]
+    else:
+        if len(args.files) != 2:
+            parser.error("jiff expects two files or directories")
+        lpath, rpath = args.files
+        repository_path = args.path or None
 
     try:
         syntax_highlighting.validate_syntax(args.syntax)
@@ -263,8 +289,8 @@ def run():
         sys.exit(1)
 
     color = not args.no_color
-    lpath = args.file1
-    rpath = args.file2
+    if args.git_external_diff and color:
+        diff.force_terminal_colors()
     left_is_directory = Path(lpath).is_dir()
     right_is_directory = Path(rpath).is_dir()
     if left_is_directory != right_is_directory:
@@ -293,7 +319,7 @@ def run():
                 read_file(rpath),
                 lpath,
                 rpath,
-                args.path or None,
+                repository_path,
                 args.inline,
                 color,
                 colors,
@@ -309,7 +335,7 @@ def run():
         sys.exit(1)
 
     try:
-        _display(output, args.no_pager)
+        _display(output, args.no_pager or args.git_external_diff)
     except (OSError, RuntimeError) as error:
         print(f"Could not display diff: {error}", file=sys.stderr)
         sys.exit(1)

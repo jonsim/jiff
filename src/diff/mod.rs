@@ -476,7 +476,10 @@ pub(super) fn render_diffs_side_by_side(
 
     let sep = "\u{2502}";
     let lineno_width = max_line_count.max(1).to_string().len();
-    let term_width = term_size::dimensions_stdout()
+    // Git's external diff protocol sends stdout to Git's pager. Check all
+    // standard streams so an attached stdin or stderr can still provide the
+    // real terminal width.
+    let term_width = term_size::dimensions()
         .map(|(term_width, _)| term_width)
         .unwrap_or(120);
     let line_width = side_by_side_line_width(term_width, lineno_width, sep);

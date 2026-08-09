@@ -1,4 +1,6 @@
+import os
 import unittest
+from unittest import mock
 
 from diff.align import align
 from diff.mod import Diff, DiffType
@@ -16,6 +18,21 @@ class SideBySideRenderingTests(unittest.TestCase):
         output = diff.render_diffs_side_by_side(diffs, 1, False)
 
         self.assertIn("Kermit", output)
+
+    def test_terminal_width_falls_back_to_an_attached_standard_stream(self):
+        # Git sends stdout to its pager, leaving another stream attached to the
+        # terminal which launched it.
+        terminal_size = os.terminal_size((173, 40))
+        with (
+            mock.patch.dict(os.environ, {"COLUMNS": ""}),
+            mock.patch(
+                "diff.mod.os.get_terminal_size",
+                side_effect=[OSError, OSError, terminal_size],
+            ),
+        ):
+            width = diff.mod._terminal_width()
+
+        self.assertEqual(173, width)
 
 
 class LineDiffTests(unittest.TestCase):

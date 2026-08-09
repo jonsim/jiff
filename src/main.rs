@@ -210,6 +210,12 @@ fn main() {
                 .help("Display Git-style headings for a repository path"),
         )
         .arg(
+            Arg::with_name("git-external-diff")
+                .long("git-external-diff")
+                .conflicts_with("path")
+                .help("Parse arguments supplied by Git's external diff protocol"),
+        )
+        .arg(
             Arg::with_name("inline")
                 .short("i")
                 .long("inline")
@@ -254,24 +260,45 @@ fn main() {
                 .help("Disables syntax highlighting"),
         )
         .arg(
-            Arg::with_name("file1")
+            Arg::with_name("files")
                 .required(true)
-                .help("Left file or directory"),
-        )
-        .arg(
-            Arg::with_name("file2")
-                .required(true)
-                .help("Right file or directory"),
+                .multiple(true)
+                .value_name("FILE")
+                .help("Files to compare, or arguments supplied by Git"),
         )
         .get_matches();
-    let lpath = matches.value_of("file1").expect("file1 is required");
-    let rpath = matches.value_of("file2").expect("file2 is required");
-    let repository_path = matches.value_of("path").filter(|path| !path.is_empty());
+    let files: Vec<_> = matches
+        .values_of("files")
+        .expect("at least one file is required")
+        .collect();
+    let git_external_diff = matches.is_present("git-external-diff");
+    if git_external_diff && files.len() == 1 {
+        println!("Unmerged file: {}", files[0]);
+        return;
+    }
+
+    let (lpath, rpath, repository_path) = if git_external_diff {
+        if files.len() != 7 {
+            eprintln!("--git-external-diff expects one or seven arguments");
+            process::exit(2);
+        }
+        (files[1], files[4], Some(files[0]))
+    } else {
+        if files.len() != 2 {
+            eprintln!("jiff expects two files or directories");
+            process::exit(2);
+        }
+        (
+            files[0],
+            files[1],
+            matches.value_of("path").filter(|path| !path.is_empty()),
+        )
+    };
     let context_lines = matches
         .value_of("unified")
         .map(|value| value.parse().expect("unified was validated"));
     let mut color = !matches.is_present("no-color");
-    let no_pager = matches.is_present("no-pager");
+    let no_pager = matches.is_present("no-pager") || git_external_diff;
     let inline = matches.is_present("inline");
     if let Err(error) = syntax::validate_syntax(matches.value_of("syntax")) {
         eprintln!("Could not highlight diff: {error}");
@@ -305,9 +332,9 @@ fn main() {
         process::exit(1);
     }
 
-    // Match the Python implementation: explicit no-colour wins, otherwise a
-    // non-terminal disables colour unless Rich's force flag is present.
-    if color {
+    // Git sends external diff output through its own pager, so it is still
+    // human-facing even though stdout is a pipe from Jiff's point of view.
+    if color && !git_external_diff {
         let force_color = std::env::var("RICH_FORCE_TERMINAL").is_ok();
         let is_tty = std::io::stdout().is_terminal();
         color = force_color || is_tty;

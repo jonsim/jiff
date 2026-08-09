@@ -5,7 +5,6 @@ import enum
 import itertools
 import math
 import os
-import shutil
 import sys
 from dataclasses import dataclass
 
@@ -20,6 +19,30 @@ from .align import align
 
 console = Console()
 debug = os.environ.get("JIFF_DEBUG", "0") == "1"
+
+
+def force_terminal_colors() -> None:
+    """Keeps colours when another program owns the terminal pager."""
+    global console
+    console = Console(force_terminal=True)
+
+
+def _terminal_width() -> int:
+    try:
+        columns = int(os.environ.get("COLUMNS", ""))
+        if columns > 0:
+            return columns
+    except ValueError:
+        pass
+
+    # Git connects stdout to its pager, but stdin or stderr still normally
+    # refers to the terminal which launched Git.
+    for stream in (sys.__stdout__, sys.__stdin__, sys.__stderr__):
+        try:
+            return os.get_terminal_size(stream.fileno()).columns
+        except (AttributeError, OSError, ValueError):
+            continue
+    return 120
 
 
 # =========================
@@ -400,7 +423,7 @@ def print_diffs_side_by_side(
 
     # Calculate widths to draw to.
     lineno_width = int(math.log10(max_line_count)) + 1 if max_line_count > 0 else 1
-    terminal_width = shutil.get_terminal_size((120, 40)).columns
+    terminal_width = _terminal_width()
     line_width = ((terminal_width - sep_width) // 2) - (lineno_width + 2)
 
     # Print all diffs.

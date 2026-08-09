@@ -1,5 +1,6 @@
 from .mod import (
     calculate_line_diff,
+    force_terminal_colors,
     limit_context,
     print_diffs,
     print_diffs_side_by_side,
@@ -10,6 +11,7 @@ from .mod import (
 
 __all__ = [
     "calculate_line_diff",
+    "force_terminal_colors",
     "limit_context",
     "print_diffs",
     "print_diffs_side_by_side",

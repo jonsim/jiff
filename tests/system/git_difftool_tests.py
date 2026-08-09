@@ -52,6 +52,11 @@ class GitDifftoolTests(unittest.TestCase):
         self.git("config", "difftool.prompt", "false")
         self.git("config", "difftool.trustExitCode", "true")
 
+    def configure_external_diff(self) -> None:
+        """Configures Jiff to parse Git's external diff arguments."""
+        command = shlex.join([*JIFF_COMMAND, "--git-external-diff", "--no-color"])
+        self.git("config", "diff.external", command)
+
     def write(self, path: str, content: str | bytes) -> None:
         """Writes text or binary test content below the repository root."""
         destination = self.repository / path
@@ -146,6 +151,68 @@ class GitDifftoolTests(unittest.TestCase):
 
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn("--- a/rowlf.txt\n+++ b/rowlf.txt\n", result.stdout)
+
+    def test_external_diff_mode_supports_git_diff(self) -> None:
+        self.write("kermit.txt", "Green\n")
+        self.commit("Paint Kermit")
+        self.write("kermit.txt", "Still green\n")
+        self.configure_external_diff()
+
+        result = self.git("diff", "HEAD", check=False)
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("--- a/kermit.txt\n+++ b/kermit.txt\n", result.stdout)
+        self.assertIn("Still green", result.stdout)
+
+    def test_external_diff_mode_supports_git_show(self) -> None:
+        self.write("fozzie.txt", "Bear\n")
+        self.commit("Introduce Fozzie")
+        self.write("fozzie.txt", "Funny bear\n")
+        self.commit("Give Fozzie a job")
+        self.configure_external_diff()
+
+        result = self.git("show", "--format=", "--ext-diff", "HEAD", check=False)
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("--- a/fozzie.txt\n+++ b/fozzie.txt\n", result.stdout)
+        self.assertIn("Funny bear", result.stdout)
+
+    def test_external_diff_mode_reports_an_unmerged_path(self) -> None:
+        result = subprocess.run(
+            [*JIFF_COMMAND, "--git-external-diff", "muppet cast.txt"],
+            cwd=self.repository,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual("Unmerged file: muppet cast.txt\n", result.stdout)
+
+    def test_external_diff_mode_keeps_colours_when_git_owns_the_pager(self) -> None:
+        self.write("old.txt", "Kermit\n")
+        self.write("new.txt", "Fozzie\n")
+
+        result = subprocess.run(
+            [
+                *JIFF_COMMAND,
+                "--git-external-diff",
+                "muppet.txt",
+                str(self.repository / "old.txt"),
+                "old-object",
+                "100644",
+                str(self.repository / "new.txt"),
+                "new-object",
+                "100644",
+            ],
+            cwd=self.repository,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("\x1b[", result.stdout)
 
     def test_trusted_tool_failure_reaches_git(self) -> None:
         # Git only reports a custom tool failure when trustExitCode is enabled.
