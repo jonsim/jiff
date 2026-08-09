@@ -145,13 +145,21 @@ the diff. Git supplies the source path for a detected rename. Remove `--global`
 from the commands if the configuration should only apply to the current
 repository.
 
-The usual Git forms then work as expected:
+The usual Git forms work as expected. For changes spanning more than one file,
+use Git's directory mode:
 
 ```sh
 git difftool
 git difftool --cached
 git difftool HEAD~1 HEAD
+git difftool --dir-diff HEAD~1 HEAD
 ```
+
+`--dir-diff` makes Git prepare two temporary directory trees and launch Jiff
+once. Jiff compares their files recursively and sends the complete result to
+one pager, so `q` stops the whole review rather than opening the next file.
+Added and removed files, empty files, nested paths and binary files are all
+handled. The same behaviour is available directly with `jiff DIR1 DIR2`.
 
 For a one-off comparison without changing the Git configuration, use
 `--extcmd`. Git appends the two temporary files to this command and exposes the
@@ -161,14 +169,12 @@ repository path as `$BASE`:
 git difftool --no-prompt --extcmd='jiff --no-pager --path "$BASE"'
 ```
 
-The `--no-pager` in this example avoids opening a pager for each changed file;
-omit it if automatic paging is preferable. Jiff returns zero after displaying a
-text or binary comparison and non-zero when it cannot read, configure or display
-the diff. `difftool.trustExitCode` makes Git report those failures rather than
+The `--no-pager` in this example avoids opening a pager for each changed file.
+For a multi-file comparison with automatic paging, use the configured
+`--dir-diff` form above instead. Jiff returns zero after displaying a text or
+binary comparison and non-zero when it cannot read, configure or display the
+diff. `difftool.trustExitCode` makes Git report those failures rather than
 silently continuing.
-
-`git difftool --dir-diff` is not supported. That Git mode passes two
-directories, while Jiff currently compares one pair of files per process.
 
 ### Rust
 

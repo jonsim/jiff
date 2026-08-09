@@ -1,5 +1,6 @@
 mod config;
 mod diff;
+mod directory;
 mod pager;
 mod syntax;
 
@@ -7,6 +8,7 @@ use clap::{App, Arg};
 use std::cmp::max;
 use std::fs;
 use std::io::IsTerminal;
+use std::path::Path;
 use std::process;
 
 #[derive(Debug, Eq, PartialEq)]
@@ -19,6 +21,13 @@ struct OutputOptions<'a> {
     repository_path: Option<&'a str>,
     inline: bool,
     context_lines: Option<usize>,
+}
+
+#[derive(Clone, Copy)]
+struct HighlightOptions<'a> {
+    color: bool,
+    enabled: bool,
+    syntax_name: Option<&'a str>,
 }
 
 impl FileContents {
@@ -107,6 +116,88 @@ fn render_output(
     }
 }
 
+fn render_comparison(
+    left: &FileContents,
+    right: &FileContents,
+    left_path: &str,
+    right_path: &str,
+    output_options: &OutputOptions,
+    highlight_options: HighlightOptions,
+    colors: &config::ColorScheme,
+) -> Result<String, syntax::HighlightError> {
+    let highlighting = match (left, right) {
+        (FileContents::Text(left), FileContents::Text(right))
+            if highlight_options.color && highlight_options.enabled =>
+        {
+            syntax::highlight_files(
+                left,
+                right,
+                left_path,
+                right_path,
+                output_options.repository_path,
+                highlight_options.syntax_name,
+                colors,
+            )?
+        }
+        _ => syntax::HighlightedFiles::default(),
+    };
+
+    Ok(render_output(
+        left,
+        right,
+        left_path,
+        right_path,
+        output_options,
+        colors,
+        &highlighting,
+    ))
+}
+
+fn render_directory_output(
+    left_root: &Path,
+    right_root: &Path,
+    output_options: &OutputOptions,
+    highlight_options: HighlightOptions,
+    colors: &config::ColorScheme,
+) -> Result<String, String> {
+    let directory_diffs = directory::directory_diffs(left_root, right_root)
+        .map_err(|error| format!("Could not read {error}"))?;
+    let mut output = String::new();
+
+    for directory_diff in directory_diffs {
+        let relative_path = directory_diff
+            .relative_path
+            .iter()
+            .map(|component| component.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("/");
+        let left_path = left_root.join(&directory_diff.relative_path);
+        let right_path = right_root.join(&directory_diff.relative_path);
+        let left = FileContents::from_bytes(directory_diff.left.unwrap_or_default());
+        let right = FileContents::from_bytes(directory_diff.right.unwrap_or_default());
+        let file_options = OutputOptions {
+            repository_path: Some(&relative_path),
+            inline: output_options.inline,
+            context_lines: output_options.context_lines,
+        };
+
+        output.push_str(
+            &render_comparison(
+                &left,
+                &right,
+                &left_path.to_string_lossy(),
+                &right_path.to_string_lossy(),
+                &file_options,
+                highlight_options,
+                colors,
+            )
+            .map_err(|error| format!("Could not highlight diff: {error}"))?,
+        );
+    }
+
+    Ok(output)
+}
+
 fn main() {
     let matches = App::new("jiff")
         .version("1.0")
@@ -162,12 +253,20 @@ fn main() {
                 .conflicts_with("syntax")
                 .help("Disables syntax highlighting"),
         )
-        .arg(Arg::with_name("file1").required(true).help("Left file"))
-        .arg(Arg::with_name("file2").required(true).help("Right file"))
+        .arg(
+            Arg::with_name("file1")
+                .required(true)
+                .help("Left file or directory"),
+        )
+        .arg(
+            Arg::with_name("file2")
+                .required(true)
+                .help("Right file or directory"),
+        )
         .get_matches();
     let lpath = matches.value_of("file1").expect("file1 is required");
     let rpath = matches.value_of("file2").expect("file2 is required");
-    let repository_path = matches.value_of("path");
+    let repository_path = matches.value_of("path").filter(|path| !path.is_empty());
     let context_lines = matches
         .value_of("unified")
         .map(|value| value.parse().expect("unified was validated"));
@@ -185,20 +284,26 @@ fn main() {
             process::exit(1);
         }
     };
-    let lfile = match fs::read(lpath) {
-        Ok(contents) => FileContents::from_bytes(contents),
+    let left_is_directory = match fs::metadata(lpath) {
+        Ok(metadata) => metadata.is_dir(),
         Err(error) => {
             eprintln!("Could not read {lpath}: {error}");
             process::exit(1);
         }
     };
-    let rfile = match fs::read(rpath) {
-        Ok(contents) => FileContents::from_bytes(contents),
+    let right_is_directory = match fs::metadata(rpath) {
+        Ok(metadata) => metadata.is_dir(),
         Err(error) => {
             eprintln!("Could not read {rpath}: {error}");
             process::exit(1);
         }
     };
+    if left_is_directory != right_is_directory {
+        eprintln!(
+            "Could not compare {lpath} and {rpath}: both inputs must be files or both directories"
+        );
+        process::exit(1);
+    }
 
     // Match the Python implementation: explicit no-colour wins, otherwise a
     // non-terminal disables colour unless Rich's force flag is present.
@@ -211,42 +316,61 @@ fn main() {
         colors = config::ColorScheme::plain();
     }
 
-    let highlighting = match (&lfile, &rfile) {
-        (FileContents::Text(left), FileContents::Text(right))
-            if color && !matches.is_present("no-syntax") =>
-        {
-            match syntax::highlight_files(
-                left,
-                right,
-                lpath,
-                rpath,
-                repository_path,
-                matches.value_of("syntax"),
-                &colors,
-            ) {
-                Ok(highlighting) => highlighting,
-                Err(error) => {
-                    eprintln!("Could not highlight diff: {error}");
-                    process::exit(1);
-                }
+    let output_options = OutputOptions {
+        repository_path,
+        inline,
+        context_lines,
+    };
+    let highlight_options = HighlightOptions {
+        color,
+        enabled: !matches.is_present("no-syntax"),
+        syntax_name: matches.value_of("syntax"),
+    };
+    let output = if left_is_directory {
+        match render_directory_output(
+            Path::new(lpath),
+            Path::new(rpath),
+            &output_options,
+            highlight_options,
+            &colors,
+        ) {
+            Ok(output) => output,
+            Err(error) => {
+                eprintln!("{error}");
+                process::exit(1);
             }
         }
-        _ => syntax::HighlightedFiles::default(),
+    } else {
+        let lfile = match fs::read(lpath) {
+            Ok(contents) => FileContents::from_bytes(contents),
+            Err(error) => {
+                eprintln!("Could not read {lpath}: {error}");
+                process::exit(1);
+            }
+        };
+        let rfile = match fs::read(rpath) {
+            Ok(contents) => FileContents::from_bytes(contents),
+            Err(error) => {
+                eprintln!("Could not read {rpath}: {error}");
+                process::exit(1);
+            }
+        };
+        match render_comparison(
+            &lfile,
+            &rfile,
+            lpath,
+            rpath,
+            &output_options,
+            highlight_options,
+            &colors,
+        ) {
+            Ok(output) => output,
+            Err(error) => {
+                eprintln!("Could not highlight diff: {error}");
+                process::exit(1);
+            }
+        }
     };
-
-    let output = render_output(
-        &lfile,
-        &rfile,
-        lpath,
-        rpath,
-        &OutputOptions {
-            repository_path,
-            inline,
-            context_lines,
-        },
-        &colors,
-        &highlighting,
-    );
 
     if let Err(error) = pager::display(&output, no_pager) {
         eprintln!("Could not display diff: {error}");

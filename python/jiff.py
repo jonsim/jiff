@@ -5,7 +5,9 @@ import os
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
+import directory_diff
 import syntax_highlighting
 from jiff_config import ColorScheme, ConfigError, load_color_scheme
 from rich.cells import cell_len
@@ -17,18 +19,23 @@ DEFAULT_TERMINAL_SIZE = (80, 24)
 TAB_WIDTH = 4
 
 
-def read_file(path: str) -> str | bytes:
-    with open(path, "rb") as file:
-        content = file.read()
-
-    # A NUL is the conventional cheap binary-file check. Invalid UTF-8 is
-    # binary too because the diff algorithms operate on Unicode text.
+def file_contents(content: bytes) -> str | bytes:
+    """Decodes text input while retaining binary content as bytes."""
     if b"\0" in content:
         return content
     try:
         return content.decode("utf-8").removesuffix("\n")
     except UnicodeDecodeError:
         return content
+
+
+def read_file(path: str | Path) -> str | bytes:
+    with open(path, "rb") as file:
+        content = file.read()
+
+    # A NUL is the conventional cheap binary-file check. Invalid UTF-8 is
+    # binary too because the diff algorithms operate on Unicode text.
+    return file_contents(content)
 
 
 def line_count(content: str) -> int:
@@ -87,6 +94,40 @@ def render_output(
             diffs, max_line_count, color, colors, highlighting
         )
     return output
+
+
+def render_directory_output(
+    left_root: Path,
+    right_root: Path,
+    inline: bool,
+    color: bool,
+    colors: ColorScheme,
+    context_lines: int | None = None,
+    syntax: str | None = None,
+    syntax_enabled: bool = True,
+) -> str:
+    """Renders all changed files from two directory trees as one diff."""
+    output = []
+    for directory_entry in directory_diff.directory_diffs(left_root, right_root):
+        relative_path = directory_entry.relative_path.as_posix()
+        left_path = left_root / directory_entry.relative_path
+        right_path = right_root / directory_entry.relative_path
+        output.append(
+            render_output(
+                file_contents(directory_entry.left or b""),
+                file_contents(directory_entry.right or b""),
+                str(left_path),
+                str(right_path),
+                relative_path,
+                inline,
+                color,
+                colors,
+                context_lines,
+                syntax,
+                syntax_enabled,
+            )
+        )
+    return "".join(output)
 
 
 def _display_width(line: str) -> int:
@@ -205,8 +246,8 @@ def run():
         action="store_true",
         help="Disables syntax highlighting",
     )
-    parser.add_argument("file1", help="Left file")
-    parser.add_argument("file2", help="Right file")
+    parser.add_argument("file1", help="Left file or directory")
+    parser.add_argument("file2", help="Right file or directory")
     args = parser.parse_args()
 
     try:
@@ -221,34 +262,48 @@ def run():
         print(f"Could not load config: {error}", file=sys.stderr)
         sys.exit(1)
 
+    color = not args.no_color
     lpath = args.file1
     rpath = args.file2
-    try:
-        lfile = read_file(lpath)
-    except OSError as error:
-        print(f"Could not read {lpath}: {error}", file=sys.stderr)
-        sys.exit(1)
-    try:
-        rfile = read_file(rpath)
-    except OSError as error:
-        print(f"Could not read {rpath}: {error}", file=sys.stderr)
+    left_is_directory = Path(lpath).is_dir()
+    right_is_directory = Path(rpath).is_dir()
+    if left_is_directory != right_is_directory:
+        print(
+            f"Could not compare {lpath} and {rpath}: both inputs must be files "
+            "or both directories",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
-    color = not args.no_color
     try:
-        output = render_output(
-            lfile,
-            rfile,
-            lpath,
-            rpath,
-            args.path,
-            args.inline,
-            color,
-            colors,
-            args.unified,
-            args.syntax,
-            not args.no_syntax,
-        )
+        if left_is_directory:
+            output = render_directory_output(
+                Path(lpath),
+                Path(rpath),
+                args.inline,
+                color,
+                colors,
+                args.unified,
+                args.syntax,
+                not args.no_syntax,
+            )
+        else:
+            output = render_output(
+                read_file(lpath),
+                read_file(rpath),
+                lpath,
+                rpath,
+                args.path or None,
+                args.inline,
+                color,
+                colors,
+                args.unified,
+                args.syntax,
+                not args.no_syntax,
+            )
+    except OSError as error:
+        print(f"Could not read input: {error}", file=sys.stderr)
+        sys.exit(1)
     except syntax_highlighting.UnknownSyntaxError as error:
         print(f"Could not highlight diff: {error}", file=sys.stderr)
         sys.exit(1)

@@ -160,17 +160,51 @@ class GitDifftoolTests(unittest.TestCase):
         self.assertNotEqual(0, result.returncode)
         self.assertIn("Could not read", result.stderr)
 
-    def test_directory_inputs_fail_cleanly(self) -> None:
-        # Git's --dir-diff contract is deliberately outside Jiff's file mode.
+    def test_directory_diff_combines_all_changed_files(self) -> None:
+        # Directory mode launches Jiff once, so it must retain each path while
+        # handling additions, removals, empty files and binary content itself.
+        self.write("animal.dat", bytes([0, 1, 2, 3]))
+        self.write("kermit.txt", "Green\n")
+        self.write("statler.txt", "Boo!\n")
+        self.commit("Prepare the theatre")
+        self.write("animal.dat", bytes([0, 1, 2, 4]))
+        self.write("kermit.txt", "Still green\n")
+        (self.repository / "statler.txt").unlink()
+        self.write("nested/muppet cast.txt", "Kermit\nFozzie\n")
+        self.write("empty.txt", "")
+        self.git("add", "--all")
+
+        result = self.difftool("--dir-diff", "--cached")
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn(
+            "Binary files a/animal.dat and b/animal.dat differ\n", result.stdout
+        )
+        self.assertIn("--- a/empty.txt\n+++ b/empty.txt\n", result.stdout)
+        self.assertIn("--- a/kermit.txt\n+++ b/kermit.txt\n", result.stdout)
+        self.assertIn(
+            "--- a/nested/muppet cast.txt\n+++ b/nested/muppet cast.txt\n",
+            result.stdout,
+        )
+        self.assertIn("--- a/statler.txt\n+++ b/statler.txt\n", result.stdout)
+
+    def test_file_and_directory_inputs_fail_cleanly(self) -> None:
+        self.write("kermit.txt", "Green\n")
+
         result = subprocess.run(
-            [*JIFF_COMMAND, "--no-pager", str(self.repository), str(self.repository)],
+            [
+                *JIFF_COMMAND,
+                "--no-pager",
+                str(self.repository),
+                str(self.repository / "kermit.txt"),
+            ],
             text=True,
             capture_output=True,
             check=False,
         )
 
         self.assertEqual(1, result.returncode)
-        self.assertIn("Could not read", result.stderr)
+        self.assertIn("both inputs must be files or both directories", result.stderr)
 
     def test_early_pipe_closure_is_successful(self) -> None:
         # Closing a consumer after one line must not turn a useful diff into a

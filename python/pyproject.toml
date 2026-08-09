@@ -17,7 +17,7 @@ dependencies = [
 jiff = "jiff:main"
 
 [tool.setuptools]
-py-modules = ["jiff", "jiff_config", "syntax_highlighting"]
+py-modules = ["directory_diff", "jiff", "jiff_config", "syntax_highlighting"]
 
 [tool.setuptools.packages.find]
 where = ["."]
