@@ -22,6 +22,11 @@ Jiff Files
         # Check the Python implementation's output.
         ${res} =    Run Python Jiff    @{args}
         ${expectation_str} =    Get File    ${base_dir}/testcases/${expectation}
+        # Process strips one trailing newline from captured output. Match that
+        # behaviour for hand-written fixtures which end in the usual newline.
+        IF    len($expectation_str) and ord($expectation_str[-1]) == 10
+            ${expectation_str} =    Set Variable    ${expectation_str}[0:-1]
+        END
         Should Be Equal    ${res.stdout}    ${expectation_str}
         ...    Python implementation produced incorrect output
     END
@@ -31,6 +36,9 @@ Jiff Files
         # Check the Rust implementation's output.
         ${res} =    Run Rust Jiff    @{args}
         ${expectation_str} =    Get File    ${base_dir}/testcases/${expectation}
+        IF    len($expectation_str) and ord($expectation_str[-1]) == 10
+            ${expectation_str} =    Set Variable    ${expectation_str}[0:-1]
+        END
         Should Be Equal    ${res.stdout}    ${expectation_str}
         ...    Rust implementation produced incorrect output
     END

@@ -10,6 +10,7 @@ import sys
 from dataclasses import dataclass
 
 from jiff_config import ColorScheme, ColorStyle
+from rich.cells import cell_len, chop_cells
 from rich.console import Console
 from rich.style import Style
 from rich.text import Text
@@ -113,7 +114,41 @@ def calculate_line_diff(left: str, right: str) -> list[Diff]:
 
 
 def calculate_char_diff(left: str, right: str) -> list[Diff]:
-    return calculate_diff(left, right, "")
+    return _coalesce_dissimilar_middle(calculate_diff(left, right, ""))
+
+
+def _coalesce_dissimilar_middle(changes: list[Diff]) -> list[Diff]:
+    if len(changes) < 2:
+        return changes
+
+    # Stable ends are useful anchors. Judge the changed middle separately so a
+    # long prefix cannot legitimise coincidental matches in unrelated text.
+    prefix = changes[:1] if changes[0].kind == DiffType.SAME else []
+    suffix = changes[-1:] if changes[-1].kind == DiffType.SAME else []
+    middle = changes[len(prefix) : len(changes) - len(suffix)]
+    before = ""
+    after = ""
+    matched_characters = 0
+
+    for change in middle:
+        if change.kind == DiffType.SAME:
+            matched_characters += len(change.left)
+            before += change.left
+            after += change.left
+        elif change.kind == DiffType.ADD:
+            after += change.left
+        elif change.kind == DiffType.REMOVE:
+            before += change.left
+        elif change.kind == DiffType.REPLACE:
+            before += change.left
+            after += change.right or ""
+        elif change.kind == DiffType.OMITTED:
+            raise AssertionError("character diffs are never context-limited")
+
+    if before and after and matched_characters * 3 < max(len(before), len(after)):
+        middle = [Diff(DiffType.REPLACE, before, after)]
+
+    return prefix + middle + suffix
 
 
 def calculate_diff(left: str, right: str, split: str) -> list[Diff]:
@@ -532,18 +567,26 @@ def _print_side_by_side_line(
 ):
     margin_l = lineno_l
     margin_r = lineno_r
-    lines_l = line_l.wrap(None, line_width, tab_size=4)
-    lines_r = line_r.wrap(None, line_width, tab_size=4)
+    lines_l = _hard_wrap(line_l, line_width)
+    lines_r = _hard_wrap(line_r, line_width)
     first_iteration = True
     for wrapped_l, wrapped_r in itertools.zip_longest(lines_l, lines_r):
         if wrapped_l is None:
             wrapped_l = Text()
         if wrapped_r is None:
             wrapped_r = Text()
-        left_padding = " " * (line_width - len(wrapped_l))
+        left_padding = " " * (line_width - cell_len(wrapped_l.plain))
         if not margin_r.plain.strip() and not wrapped_r.plain:
             # A missing right line has no line number or text worth padding.
-            console.print(margin_l, " ", wrapped_l, left_padding, separator, sep="")
+            console.print(
+                margin_l,
+                " ",
+                wrapped_l,
+                left_padding,
+                separator,
+                sep="",
+                soft_wrap=True,
+            )
         else:
             console.print(
                 margin_l,
@@ -555,8 +598,26 @@ def _print_side_by_side_line(
                 " ",
                 wrapped_r,
                 sep="",
+                soft_wrap=True,
             )
         if first_iteration:
             margin_l = wrapno_l
             margin_r = wrapno_r
             first_iteration = False
+
+
+def _hard_wrap(line: Text, width: int) -> list[Text]:
+    # Side-by-side columns are fixed-width panes rather than paragraphs. Split
+    # at the pane edge so Python and Rust do not move words independently.
+    line = line.copy()
+    line.expand_tabs(4)
+    chunks = chop_cells(line.plain, max(width, 1))
+    if not chunks:
+        return [Text()]
+
+    offset = 0
+    offsets = []
+    for chunk in chunks[:-1]:
+        offset += len(chunk)
+        offsets.append(offset)
+    return list(line.divide(offsets))

@@ -1,0 +1,1 @@
+version is more portable. The core diff behaviour is identical

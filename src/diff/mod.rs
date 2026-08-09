@@ -93,7 +93,8 @@ pub(super) fn calculate_char_diff(left: &str, right: &str) -> Vec<Diff> {
         .algorithm(Algorithm::Myers)
         .diff_chars(left, right);
 
-    diff.ops()
+    let changes = diff
+        .ops()
         .iter()
         .map(|operation| {
             // Operation ranges index the character tokens held by `TextDiff`,
@@ -114,7 +115,59 @@ pub(super) fn calculate_char_diff(left: &str, right: &str) -> Vec<Diff> {
 
             make_diff(operation.tag(), old, new)
         })
-        .collect()
+        .collect();
+
+    coalesce_dissimilar_middle(changes)
+}
+
+fn coalesce_dissimilar_middle(mut changes: Vec<Diff>) -> Vec<Diff> {
+    if changes.len() < 2 {
+        return changes;
+    }
+
+    // The ends are reliable anchors. Similarity inside the changed middle is
+    // judged separately so a long common prefix cannot legitimise accidental
+    // one-character matches across otherwise unrelated text.
+    let suffix = if matches!(changes.last(), Some(Diff::Same(_))) {
+        changes.pop()
+    } else {
+        None
+    };
+    let prefix = if matches!(changes.first(), Some(Diff::Same(_))) {
+        Some(changes.remove(0))
+    } else {
+        None
+    };
+
+    let mut before = String::new();
+    let mut after = String::new();
+    let mut matched_characters = 0;
+    for change in &changes {
+        match change {
+            Diff::Same(same) => {
+                matched_characters += same.chars().count();
+                before.push_str(same);
+                after.push_str(same);
+            }
+            Diff::Add(add) => after.push_str(add),
+            Diff::Remove(remove) => before.push_str(remove),
+            Diff::Replace(remove, add) => {
+                before.push_str(remove);
+                after.push_str(add);
+            }
+            Diff::Omitted(_) => unreachable!("character diffs are never context-limited"),
+        }
+    }
+
+    let middle_length = before.chars().count().max(after.chars().count());
+    if !before.is_empty()
+        && !after.is_empty()
+        && matched_characters.saturating_mul(3) < middle_length
+    {
+        changes = vec![Diff::Replace(before, after)];
+    }
+
+    prefix.into_iter().chain(changes).chain(suffix).collect()
 }
 
 /// Limits unchanged regions to the requested lines around each change.
@@ -687,6 +740,43 @@ mod tests {
             vec![
                 Diff::Same("caf".to_string()),
                 Diff::Replace("é".to_string(), "e".to_string()),
+            ],
+            diffs
+        );
+    }
+
+    #[test]
+    fn char_diff_coalesces_accidental_matches_in_an_unrelated_suffix() {
+        let before = "version is more portable. Tests assert that the two versions are";
+        let after = "version is more portable. The core diff behaviour is identical";
+
+        let diffs = calculate_char_diff(before, after);
+
+        assert_eq!(
+            vec![
+                Diff::Same("version is more portable. T".to_string()),
+                Diff::Replace(
+                    "ests assert that the two versions are".to_string(),
+                    "he core diff behaviour is identical".to_string(),
+                ),
+            ],
+            diffs
+        );
+    }
+
+    #[test]
+    fn char_diff_retains_dense_fragmented_matches() {
+        let diffs = calculate_char_diff("aXaXaXa", "aYaYaYa");
+
+        assert_eq!(
+            vec![
+                Diff::Same("a".to_string()),
+                Diff::Replace("X".to_string(), "Y".to_string()),
+                Diff::Same("a".to_string()),
+                Diff::Replace("X".to_string(), "Y".to_string()),
+                Diff::Same("a".to_string()),
+                Diff::Replace("X".to_string(), "Y".to_string()),
+                Diff::Same("a".to_string()),
             ],
             diffs
         );

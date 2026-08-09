@@ -1,5 +1,6 @@
 import unittest
 
+from diff.align import align
 from diff.mod import Diff, DiffType
 
 import diff
@@ -32,6 +33,59 @@ class LineDiffTests(unittest.TestCase):
         self.assertEqual(1, len(diffs))
         self.assertEqual("REMOVE", diffs[0].kind.name)
         self.assertEqual("Kermit", diffs[0].left)
+
+
+class CharacterDiffTests(unittest.TestCase):
+    def test_coalesces_accidental_matches_in_an_unrelated_suffix(self):
+        before = "version is more portable. Tests assert that the two versions are"
+        after = "version is more portable. The core diff behaviour is identical"
+
+        diffs = diff.mod.calculate_char_diff(before, after)
+
+        self.assertEqual(
+            [
+                Diff(DiffType.SAME, "version is more portable. T"),
+                Diff(
+                    DiffType.REPLACE,
+                    "ests assert that the two versions are",
+                    "he core diff behaviour is identical",
+                ),
+            ],
+            diffs,
+        )
+
+    def test_retains_dense_fragmented_matches(self):
+        diffs = diff.mod.calculate_char_diff("aXaXaXa", "aYaYaYa")
+
+        self.assertEqual(
+            [
+                Diff(DiffType.SAME, "a"),
+                Diff(DiffType.REPLACE, "X", "Y"),
+                Diff(DiffType.SAME, "a"),
+                Diff(DiffType.REPLACE, "X", "Y"),
+                Diff(DiffType.SAME, "a"),
+                Diff(DiffType.REPLACE, "X", "Y"),
+                Diff(DiffType.SAME, "a"),
+            ],
+            diffs,
+        )
+
+
+class LineAlignmentTests(unittest.TestCase):
+    def test_pairs_lines_with_a_shared_prefix_and_unrelated_suffixes(self):
+        # The stable prefix makes these the most useful side-by-side pairing,
+        # even though the remaining text should be one character replacement.
+        before = "version is more portable. Tests assert that the two versions are"
+        after = "version is more portable. The core diff behaviour is identical"
+
+        alignment = align([before], [after])
+
+        self.assertEqual([(before, after)], alignment)
+
+    def test_keeps_unrelated_lines_unpaired(self):
+        alignment = align(["Kermit"], ["Gonzo"])
+
+        self.assertEqual([("Kermit", None), (None, "Gonzo")], alignment)
 
 
 class ContextTests(unittest.TestCase):

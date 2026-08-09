@@ -1,12 +1,71 @@
 from __future__ import annotations
 
-import difflib
 import math
 import os
 import sys
-from typing import Literal
 
 debug = os.environ.get("JIFF_DEBUG", "0") == "1"
+
+
+def _lcs_distance(before: str, after: str) -> int:
+    # Shared ends are reliable anchors and can always belong to an optimal
+    # subsequence. Trimming them avoids the quadratic work for the common case
+    # of a small change in an otherwise stable line.
+    common_prefix = 0
+    for before_char, after_char in zip(before, after, strict=False):
+        if before_char != after_char:
+            break
+        common_prefix += 1
+
+    common_suffix = 0
+    remaining_before = len(before) - common_prefix
+    remaining_after = len(after) - common_prefix
+    while (
+        common_suffix < remaining_before
+        and common_suffix < remaining_after
+        and before[-common_suffix - 1] == after[-common_suffix - 1]
+    ):
+        common_suffix += 1
+
+    before_end = len(before) - common_suffix if common_suffix else len(before)
+    after_end = len(after) - common_suffix if common_suffix else len(after)
+    before = before[common_prefix:before_end]
+    after = after[common_prefix:after_end]
+    rows, columns = (before, after) if len(before) >= len(after) else (after, before)
+
+    lengths = [0] * (len(columns) + 1)
+    for row in rows:
+        diagonal = 0
+        for column_index, column in enumerate(columns):
+            # Keep the value from the previous row before overwriting it so the
+            # LCS row can be updated in place.
+            previous_row = lengths[column_index + 1]
+            if row == column:
+                lengths[column_index + 1] = diagonal + 1
+            else:
+                lengths[column_index + 1] = max(lengths[column_index], previous_row)
+            diagonal = previous_row
+
+    return len(before) + len(after) - 2 * lengths[-1]
+
+
+def _pair_cost(before: str, after: str) -> int:
+    if before == after:
+        return 0
+
+    unpaired_cost = len(before) + len(after)
+    # One more than remove-plus-add makes a dissimilar pair strictly worse
+    # without needing a separate "not a candidate" value in the alignment.
+    dissimilar_cost = unpaired_cost + 1
+    length_difference = abs(len(before) - len(after))
+
+    # A sufficiently large length difference cannot pass the similarity
+    # cutoff, regardless of how the shorter line is arranged.
+    if 2 * length_difference >= unpaired_cost:
+        return dissimilar_cost
+
+    distance = _lcs_distance(before, after)
+    return dissimilar_cost if 2 * distance >= unpaired_cost else distance
 
 
 class Point:
@@ -84,22 +143,12 @@ class AlignmentMatrix:
                 elif aligned_x and aligned_y:
                     line_b = lines_b[x // 2]
                     line_a = lines_a[y // 2]
-                    matcher = difflib.SequenceMatcher(
-                        None, line_b, line_a, autojunk=False
-                    )
-                    changeset = list(matcher.get_opcodes())
-                    edit_dist, operations = compute_edit_distance(changeset)
+                    weight = _pair_cost(line_b, line_a)
                     if debug:
                         print(
-                            f"  Changeset for {line_b!r} -> {line_a!r}:\n    {changeset}",
+                            f"  Pair score for {line_b!r} -> {line_a!r}: {weight}",
                             file=sys.stderr,
                         )
-                    if debug:
-                        print(
-                            f"    Edit distance: {edit_dist}, operations: {operations}",
-                            file=sys.stderr,
-                        )
-                    weight = edit_dist * ((operations + 1) // 2)
                 row.append(AlignmentNode(x, y, weight))
                 if debug:
                     print(f"  Initialised: {row[-1]}", file=sys.stderr)
@@ -216,25 +265,3 @@ def align(
         after = lines_a[point.y // 2] if point.y % 2 else None
         alignment.append((before, after))
     return alignment
-
-
-def compute_edit_distance(
-    matches: list[
-        tuple[Literal["replace", "delete", "insert", "equal"], int, int, int, int]
-    ],
-) -> tuple[int, int]:
-    operations = 0
-    edit_distance = 0
-    for match in matches:
-        if match[0] == "replace":
-            operations += 2
-            edit_distance += (match[2] - match[1]) + (match[4] - match[3])
-        elif match[0] == "delete":
-            operations += 1
-            edit_distance += match[2] - match[1]
-        elif match[0] == "insert":
-            operations += 1
-            edit_distance += match[4] - match[3]
-        elif match[0] == "equal":
-            operations += 1  # TODO: bodge for consistency with
-    return edit_distance, operations

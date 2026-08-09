@@ -1,0 +1,2 @@
+- version is more portable. Tests assert that the two versions are
++ version is more portable. The core diff behaviour is identical
