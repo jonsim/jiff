@@ -13,6 +13,7 @@ from jiff_config import ColorScheme, ColorStyle
 from rich.console import Console
 from rich.style import Style
 from rich.text import Text
+from syntax_highlighting import HighlightedFile, HighlightedFiles
 
 from .align import align
 
@@ -187,37 +188,51 @@ def _omission_text(line_count: int) -> str:
 
 
 def print_diffs(
-    diffs: list[Diff], color: bool = True, colors: ColorScheme | None = None
+    diffs: list[Diff],
+    color: bool = True,
+    colors: ColorScheme | None = None,
+    highlighting: HighlightedFiles | None = None,
 ) -> None:
     colors = _colors(color, colors)
     margin_styling = _indicator_styling(colors)
     lines = _line_styling(colors)
+    highlighting = highlighting or HighlightedFiles()
+    left_index = 0
+    right_index = 0
 
     for change in diffs:
         if change.kind == DiffType.SAME:
             for line in change.left.split("\n"):
                 console.print(
-                    Text("  ", style=margin_styling.same) + Text(line, style=lines.same)
+                    Text("  ", style=margin_styling.same)
+                    + highlighting.right.render_line(right_index, line, lines.same)
                 )
+                left_index += 1
+                right_index += 1
 
         elif change.kind == DiffType.ADD:
             for line in change.left.split("\n"):
                 console.print(
-                    Text("+ ", style=margin_styling.add) + Text(line, style=lines.add)
+                    Text("+ ", style=margin_styling.add)
+                    + highlighting.right.render_line(right_index, line, lines.add)
                 )
+                right_index += 1
 
         elif change.kind == DiffType.REMOVE:
             for line in change.left.split("\n"):
                 console.print(
                     Text("- ", style=margin_styling.remove)
-                    + Text(line, style=lines.remove)
+                    + highlighting.left.render_line(left_index, line, lines.remove)
                 )
+                left_index += 1
 
         elif change.kind == DiffType.OMITTED:
             console.print(
                 Text("  ", style=margin_styling.same)
                 + Text(_omission_text(change.omitted_lines), style=lines.same)
             )
+            left_index += change.omitted_lines
+            right_index += change.omitted_lines
 
         elif change.kind == DiffType.REPLACE:
             lines_b = change.left.split("\n")
@@ -228,23 +243,52 @@ def print_diffs(
             for before, after in alignment:
                 if before is None and after is not None:
                     text_a.append("+ ", style=margin_styling.add_highlight)
-                    text_a.append(after + "\n", style=lines.add_highlight)
+                    text_a.append_text(
+                        highlighting.right.render_line(
+                            right_index, after, lines.add_highlight
+                        )
+                    )
+                    text_a.append("\n")
+                    right_index += 1
                 elif before is not None and after is None:
                     text_b.append("- ", style=margin_styling.remove_highlight)
-                    text_b.append(before + "\n", style=lines.remove_highlight)
+                    text_b.append_text(
+                        highlighting.left.render_line(
+                            left_index, before, lines.remove_highlight
+                        )
+                    )
+                    text_b.append("\n")
+                    left_index += 1
                 elif before is not None and after is not None:
                     text_b.append("- ", style=margin_styling.remove_highlight)
                     text_a.append("+ ", style=margin_styling.add_highlight)
-                    _style_diff_line(before + "\n", after + "\n", lines, text_b, text_a)
+                    _style_diff_line(
+                        before,
+                        after,
+                        lines,
+                        text_b,
+                        text_a,
+                        highlighting.left,
+                        highlighting.right,
+                        left_index,
+                        right_index,
+                    )
+                    text_b.append("\n")
+                    text_a.append("\n")
+                    left_index += 1
+                    right_index += 1
             console.print(text_b, end="")
             console.print(text_a, end="")
 
 
 def render_diffs(
-    diffs: list[Diff], color: bool = True, colors: ColorScheme | None = None
+    diffs: list[Diff],
+    color: bool = True,
+    colors: ColorScheme | None = None,
+    highlighting: HighlightedFiles | None = None,
 ) -> str:
     with console.capture() as capture:
-        print_diffs(diffs, color, colors)
+        print_diffs(diffs, color, colors, highlighting)
     return capture.get()
 
 
@@ -259,20 +303,40 @@ def _style_diff_line(
     styling: DiffStyling,
     before_text: Text,
     after_text: Text,
+    before_highlighting: HighlightedFile,
+    after_highlighting: HighlightedFile,
+    before_index: int,
+    after_index: int,
 ) -> None:
+    before_line = before_highlighting.render_line(before_index, before, styling.remove)
+    after_line = after_highlighting.render_line(after_index, after, styling.add)
+    before_offset = 0
+    after_offset = 0
+
     for change in calculate_char_diff(before, after):
         if change.kind == DiffType.SAME:
-            before_text.append(change.left, style=styling.remove)
-            after_text.append(change.left, style=styling.add)
+            before_offset += len(change.left)
+            after_offset += len(change.left)
         elif change.kind == DiffType.ADD:
-            after_text.append(change.left, style=styling.add_highlight)
+            end = after_offset + len(change.left)
+            after_line.stylize(styling.add_highlight, after_offset, end)
+            after_offset = end
         elif change.kind == DiffType.REMOVE:
-            before_text.append(change.left, style=styling.remove_highlight)
+            end = before_offset + len(change.left)
+            before_line.stylize(styling.remove_highlight, before_offset, end)
+            before_offset = end
         elif change.kind == DiffType.REPLACE:
-            before_text.append(change.left, style=styling.remove_highlight)
-            after_text.append(change.right, style=styling.add_highlight)
+            before_end = before_offset + len(change.left)
+            after_end = after_offset + len(change.right)
+            before_line.stylize(styling.remove_highlight, before_offset, before_end)
+            after_line.stylize(styling.add_highlight, after_offset, after_end)
+            before_offset = before_end
+            after_offset = after_end
         elif change.kind == DiffType.OMITTED:
             raise AssertionError("character diffs are never context-limited")
+
+    before_text.append_text(before_line)
+    after_text.append_text(after_line)
 
 
 # =========================
@@ -285,10 +349,12 @@ def print_diffs_side_by_side(
     max_line_count: int,
     color: bool = True,
     colors: ColorScheme | None = None,
+    highlighting: HighlightedFiles | None = None,
 ) -> None:
     colors = _colors(color, colors)
     lineno_styling = _indicator_styling(colors)
     lines = _line_styling(colors)
+    highlighting = highlighting or HighlightedFiles()
 
     # Define separator.
     sep = "\u2502"
@@ -315,8 +381,8 @@ def print_diffs_side_by_side(
                     Text(lineno_r_fmt, style=lineno_styling.same),
                     Text(empty_lineno, style=lineno_styling.same),
                     Text(empty_lineno, style=lineno_styling.same),
-                    Text(line, style=lines.same),
-                    Text(line, style=lines.same),
+                    highlighting.left.render_line(lineno_l - 1, line, lines.same),
+                    highlighting.right.render_line(lineno_r - 1, line, lines.same),
                     line_width,
                     sep,
                 )
@@ -332,7 +398,9 @@ def print_diffs_side_by_side(
                     Text(empty_lineno, style=lineno_styling.same),
                     Text(empty_lineno, style=lineno_styling.add_highlight),
                     Text("", style=lines.same),
-                    Text(line, style=lines.add_highlight),
+                    highlighting.right.render_line(
+                        lineno_r - 1, line, lines.add_highlight
+                    ),
                     line_width,
                     sep,
                 )
@@ -346,7 +414,9 @@ def print_diffs_side_by_side(
                     Text(empty_lineno, style=lineno_styling.same),
                     Text(empty_lineno, style=lineno_styling.remove_highlight),
                     Text(empty_lineno, style=lineno_styling.same),
-                    Text(line, style=lines.remove_highlight),
+                    highlighting.left.render_line(
+                        lineno_l - 1, line, lines.remove_highlight
+                    ),
                     Text("", style=lines.same),
                     line_width,
                     sep,
@@ -383,7 +453,9 @@ def print_diffs_side_by_side(
                         Text(empty_lineno, style=lineno_styling.same),
                         Text(empty_lineno, style=lineno_styling.add_highlight),
                         Text("", style=lines.same),
-                        Text(line_r, style=lines.add_highlight),
+                        highlighting.right.render_line(
+                            lineno_r - 1, line_r, lines.add_highlight
+                        ),
                         line_width,
                         sep,
                     )
@@ -395,7 +467,9 @@ def print_diffs_side_by_side(
                         Text(empty_lineno, style=lineno_styling.same),
                         Text(empty_lineno, style=lineno_styling.remove_highlight),
                         Text(empty_lineno, style=lineno_styling.same),
-                        Text(line_l, style=lines.remove_highlight),
+                        highlighting.left.render_line(
+                            lineno_l - 1, line_l, lines.remove_highlight
+                        ),
                         Text("", style=lines.same),
                         line_width,
                         sep,
@@ -406,7 +480,17 @@ def print_diffs_side_by_side(
                     lineno_r_fmt = f"{lineno_r:>{lineno_width}}:"
                     line_l_text = Text()
                     line_r_text = Text()
-                    _style_diff_line(line_l, line_r, lines, line_l_text, line_r_text)
+                    _style_diff_line(
+                        line_l,
+                        line_r,
+                        lines,
+                        line_l_text,
+                        line_r_text,
+                        highlighting.left,
+                        highlighting.right,
+                        lineno_l - 1,
+                        lineno_r - 1,
+                    )
                     _print_side_by_side_line(
                         Text(lineno_l_fmt, style=lineno_styling.remove),
                         Text(lineno_r_fmt, style=lineno_styling.add),
@@ -426,9 +510,10 @@ def render_diffs_side_by_side(
     max_line_count: int,
     color: bool = True,
     colors: ColorScheme | None = None,
+    highlighting: HighlightedFiles | None = None,
 ) -> str:
     with console.capture() as capture:
-        print_diffs_side_by_side(diffs, max_line_count, color, colors)
+        print_diffs_side_by_side(diffs, max_line_count, color, colors, highlighting)
     return capture.get()
 
 

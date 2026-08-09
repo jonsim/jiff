@@ -1,6 +1,7 @@
 mod config;
 mod diff;
 mod pager;
+mod syntax;
 
 use clap::{App, Arg};
 use std::cmp::max;
@@ -67,6 +68,7 @@ fn render_output(
     rpath: &str,
     options: &OutputOptions,
     colors: &config::ColorScheme,
+    highlighting: &syntax::HighlightedFiles,
 ) -> String {
     let (left_label, right_label) = file_labels(options.repository_path, lpath, rpath);
 
@@ -86,13 +88,14 @@ fn render_output(
                 diffs = diff::limit_context(diffs, context_lines);
             }
             if options.inline {
-                output.push_str(&diff::render_diffs(&diffs, colors));
+                output.push_str(&diff::render_diffs(&diffs, colors, highlighting));
             } else {
                 let max_line_count = max(line_count(left), line_count(right));
                 output.push_str(&diff::render_diffs_side_by_side(
                     &diffs,
                     max_line_count,
                     colors,
+                    highlighting,
                 ));
             }
             output
@@ -145,6 +148,20 @@ fn main() {
                 .long("no-pager")
                 .help("Disables paging of long output"),
         )
+        .arg(
+            Arg::with_name("syntax")
+                .long("syntax")
+                .takes_value(true)
+                .value_name("LANGUAGE")
+                .conflicts_with("no-syntax")
+                .help("Use LANGUAGE for syntax highlighting instead of detecting it"),
+        )
+        .arg(
+            Arg::with_name("no-syntax")
+                .long("no-syntax")
+                .conflicts_with("syntax")
+                .help("Disables syntax highlighting"),
+        )
         .arg(Arg::with_name("file1").required(true).help("Left file"))
         .arg(Arg::with_name("file2").required(true).help("Right file"))
         .get_matches();
@@ -157,6 +174,10 @@ fn main() {
     let mut color = !matches.is_present("no-color");
     let no_pager = matches.is_present("no-pager");
     let inline = matches.is_present("inline");
+    if let Err(error) = syntax::validate_syntax(matches.value_of("syntax")) {
+        eprintln!("Could not highlight diff: {error}");
+        process::exit(1);
+    }
     let mut colors = match config::load_color_scheme() {
         Ok(colors) => colors,
         Err(error) => {
@@ -190,6 +211,29 @@ fn main() {
         colors = config::ColorScheme::plain();
     }
 
+    let highlighting = match (&lfile, &rfile) {
+        (FileContents::Text(left), FileContents::Text(right))
+            if color && !matches.is_present("no-syntax") =>
+        {
+            match syntax::highlight_files(
+                left,
+                right,
+                lpath,
+                rpath,
+                repository_path,
+                matches.value_of("syntax"),
+                &colors,
+            ) {
+                Ok(highlighting) => highlighting,
+                Err(error) => {
+                    eprintln!("Could not highlight diff: {error}");
+                    process::exit(1);
+                }
+            }
+        }
+        _ => syntax::HighlightedFiles::default(),
+    };
+
     let output = render_output(
         &lfile,
         &rfile,
@@ -201,6 +245,7 @@ fn main() {
             context_lines,
         },
         &colors,
+        &highlighting,
     );
 
     if let Err(error) = pager::display(&output, no_pager) {
@@ -277,6 +322,7 @@ mod tests {
                 context_lines: None,
             },
             &config::ColorScheme::plain(),
+            &syntax::HighlightedFiles::default(),
         );
 
         assert!(output.starts_with("--- a/muppet cast.txt\n+++ b/muppet cast.txt\n"));
@@ -298,6 +344,7 @@ mod tests {
                 context_lines: None,
             },
             &config::ColorScheme::plain(),
+            &syntax::HighlightedFiles::default(),
         );
 
         assert_eq!(
@@ -322,6 +369,7 @@ mod tests {
                 context_lines: None,
             },
             &config::ColorScheme::plain(),
+            &syntax::HighlightedFiles::default(),
         );
 
         assert_eq!(

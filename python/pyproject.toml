@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "A terminal diff tool with sub-line and side-by-side output"
 requires-python = ">=3.9"
 dependencies = [
+    "pygments",
     "rich",
     "tomli; python_version < '3.11'",
 ]
@@ -16,7 +17,7 @@ dependencies = [
 jiff = "jiff:main"
 
 [tool.setuptools]
-py-modules = ["jiff", "jiff_config"]
+py-modules = ["jiff", "jiff_config", "syntax_highlighting"]
 
 [tool.setuptools.packages.find]
 where = ["."]

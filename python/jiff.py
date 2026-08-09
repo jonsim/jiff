@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 
+import syntax_highlighting
 from jiff_config import ColorScheme, ConfigError, load_color_scheme
 from rich.cells import cell_len
 from rich.text import Text
@@ -52,6 +53,8 @@ def render_output(
     color: bool,
     colors: ColorScheme,
     context_lines: int | None = None,
+    syntax: str | None = None,
+    syntax_enabled: bool = True,
 ) -> str:
     left_label, right_label = file_labels(repository_path, lpath, rpath)
 
@@ -67,14 +70,22 @@ def render_output(
     if repository_path is not None:
         output += diff.render_file_header(repository_path, color, colors)
 
+    highlighting = syntax_highlighting.HighlightedFiles()
+    if color and syntax_enabled:
+        highlighting = syntax_highlighting.highlight_files(
+            left, right, lpath, rpath, repository_path, syntax, colors
+        )
+
     diffs = diff.calculate_line_diff(left, right)
     if context_lines is not None:
         diffs = diff.limit_context(diffs, context_lines)
     if inline:
-        output += diff.render_diffs(diffs, color, colors)
+        output += diff.render_diffs(diffs, color, colors, highlighting)
     else:
         max_line_count = max(line_count(left), line_count(right))
-        output += diff.render_diffs_side_by_side(diffs, max_line_count, color, colors)
+        output += diff.render_diffs_side_by_side(
+            diffs, max_line_count, color, colors, highlighting
+        )
     return output
 
 
@@ -183,9 +194,26 @@ def run():
     parser.add_argument(
         "--no-pager", action="store_true", help="Disables paging of long output"
     )
+    syntax = parser.add_mutually_exclusive_group()
+    syntax.add_argument(
+        "--syntax",
+        metavar="LANGUAGE",
+        help="Use LANGUAGE for syntax highlighting instead of detecting it",
+    )
+    syntax.add_argument(
+        "--no-syntax",
+        action="store_true",
+        help="Disables syntax highlighting",
+    )
     parser.add_argument("file1", help="Left file")
     parser.add_argument("file2", help="Right file")
     args = parser.parse_args()
+
+    try:
+        syntax_highlighting.validate_syntax(args.syntax)
+    except syntax_highlighting.UnknownSyntaxError as error:
+        print(f"Could not highlight diff: {error}", file=sys.stderr)
+        sys.exit(1)
 
     try:
         colors = load_color_scheme()
@@ -207,17 +235,23 @@ def run():
         sys.exit(1)
 
     color = not args.no_color
-    output = render_output(
-        lfile,
-        rfile,
-        lpath,
-        rpath,
-        args.path,
-        args.inline,
-        color,
-        colors,
-        args.unified,
-    )
+    try:
+        output = render_output(
+            lfile,
+            rfile,
+            lpath,
+            rpath,
+            args.path,
+            args.inline,
+            color,
+            colors,
+            args.unified,
+            args.syntax,
+            not args.no_syntax,
+        )
+    except syntax_highlighting.UnknownSyntaxError as error:
+        print(f"Could not highlight diff: {error}", file=sys.stderr)
+        sys.exit(1)
 
     try:
         _display(output, args.no_pager)

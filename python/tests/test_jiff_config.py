@@ -33,6 +33,23 @@ class ColorConfigTests(unittest.TestCase):
         ):
             jiff_config._parse_color_scheme({"color": {"kermit": {"color": "green"}}})
 
+    def test_syntax_colours_are_configurable(self):
+        scheme = jiff_config._parse_color_scheme(
+            {"color": {"syntax_comment": {"color": "grey", "bold": True}}}
+        )
+
+        self.assertEqual("bright_black", scheme.syntax_comment.color)
+        self.assertTrue(scheme.syntax_comment.bold)
+
+    def test_syntax_colours_cannot_hide_the_diff_background(self):
+        # Backgrounds belong to the diff, which is the primary signal in Jiff.
+        with self.assertRaisesRegex(
+            jiff_config.ConfigError, "color.syntax_keyword.bgcolor"
+        ):
+            jiff_config._parse_color_scheme(
+                {"color": {"syntax_keyword": {"bgcolor": "cyan"}}}
+            )
+
 
 class ConfigPathTests(unittest.TestCase):
     def test_xdg_config_takes_precedence_over_the_home_dotfile(self):

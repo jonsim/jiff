@@ -6,7 +6,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 const SUPPORTED_COLORS: &str =
-    "default, black, red, green, yellow, blue, magenta, purple, cyan, or white";
+    "default, black, bright_black, gray, grey, red, green, yellow, blue, magenta, purple, cyan, or white";
 
 #[derive(Clone, Copy)]
 pub(crate) struct ColorScheme {
@@ -15,6 +15,11 @@ pub(crate) struct ColorScheme {
     pub(crate) add_highlight: Style,
     pub(crate) remove: Style,
     pub(crate) remove_highlight: Style,
+    pub(crate) syntax_comment: Style,
+    pub(crate) syntax_keyword: Style,
+    pub(crate) syntax_string: Style,
+    pub(crate) syntax_number: Style,
+    pub(crate) syntax_definition: Style,
 }
 
 impl ColorScheme {
@@ -25,6 +30,11 @@ impl ColorScheme {
             add_highlight: Style::default(),
             remove: Style::default(),
             remove_highlight: Style::default(),
+            syntax_comment: Style::default(),
+            syntax_keyword: Style::default(),
+            syntax_string: Style::default(),
+            syntax_number: Style::default(),
+            syntax_definition: Style::default(),
         }
     }
 }
@@ -37,6 +47,11 @@ impl Default for ColorScheme {
             add_highlight: Color::Black.on(Color::Green),
             remove: Color::Red.normal(),
             remove_highlight: Color::Black.on(Color::Red),
+            syntax_comment: Color::Fixed(8).normal(),
+            syntax_keyword: Color::Purple.normal(),
+            syntax_string: Color::Cyan.normal(),
+            syntax_number: Color::Blue.normal(),
+            syntax_definition: Color::Yellow.normal(),
         }
     }
 }
@@ -131,26 +146,80 @@ fn parse_config(contents: &str, path: &Path) -> Result<ColorScheme, ConfigError>
         .ok_or_else(|| ConfigError::new(path, "color must be a table"))?;
     reject_unknown_fields(
         color,
-        &["same", "add", "add_highlight", "remove", "remove_highlight"],
+        &[
+            "same",
+            "add",
+            "add_highlight",
+            "remove",
+            "remove_highlight",
+            "syntax_comment",
+            "syntax_keyword",
+            "syntax_string",
+            "syntax_number",
+            "syntax_definition",
+        ],
         "color",
         path,
     )?;
 
     let mut scheme = ColorScheme::default();
-    scheme.same = parse_style(color.get("same"), scheme.same, "color.same", path)?;
-    scheme.add = parse_style(color.get("add"), scheme.add, "color.add", path)?;
+    scheme.same = parse_style(color.get("same"), scheme.same, "color.same", path, true)?;
+    scheme.add = parse_style(color.get("add"), scheme.add, "color.add", path, true)?;
     scheme.add_highlight = parse_style(
         color.get("add_highlight"),
         scheme.add_highlight,
         "color.add_highlight",
         path,
+        true,
     )?;
-    scheme.remove = parse_style(color.get("remove"), scheme.remove, "color.remove", path)?;
+    scheme.remove = parse_style(
+        color.get("remove"),
+        scheme.remove,
+        "color.remove",
+        path,
+        true,
+    )?;
     scheme.remove_highlight = parse_style(
         color.get("remove_highlight"),
         scheme.remove_highlight,
         "color.remove_highlight",
         path,
+        true,
+    )?;
+    scheme.syntax_comment = parse_style(
+        color.get("syntax_comment"),
+        scheme.syntax_comment,
+        "color.syntax_comment",
+        path,
+        false,
+    )?;
+    scheme.syntax_keyword = parse_style(
+        color.get("syntax_keyword"),
+        scheme.syntax_keyword,
+        "color.syntax_keyword",
+        path,
+        false,
+    )?;
+    scheme.syntax_string = parse_style(
+        color.get("syntax_string"),
+        scheme.syntax_string,
+        "color.syntax_string",
+        path,
+        false,
+    )?;
+    scheme.syntax_number = parse_style(
+        color.get("syntax_number"),
+        scheme.syntax_number,
+        "color.syntax_number",
+        path,
+        false,
+    )?;
+    scheme.syntax_definition = parse_style(
+        color.get("syntax_definition"),
+        scheme.syntax_definition,
+        "color.syntax_definition",
+        path,
+        false,
     )?;
     Ok(scheme)
 }
@@ -160,6 +229,7 @@ fn parse_style(
     mut style: Style,
     field: &str,
     path: &Path,
+    allow_background: bool,
 ) -> Result<Style, ConfigError> {
     let Some(value) = value else {
         return Ok(style);
@@ -167,13 +237,20 @@ fn parse_style(
     let table = value
         .as_table()
         .ok_or_else(|| ConfigError::new(path, format!("{field} must be a table")))?;
-    reject_unknown_fields(table, &["color", "bgcolor", "bold"], field, path)?;
+    let expected = if allow_background {
+        &["color", "bgcolor", "bold"][..]
+    } else {
+        &["color", "bold"][..]
+    };
+    reject_unknown_fields(table, expected, field, path)?;
 
     if let Some(color) = string_field(table, "color", field, path)? {
         style.foreground = parse_color(color, &format!("{field}.color"), path)?;
     }
-    if let Some(color) = string_field(table, "bgcolor", field, path)? {
-        style.background = parse_color(color, &format!("{field}.bgcolor"), path)?;
+    if allow_background {
+        if let Some(color) = string_field(table, "bgcolor", field, path)? {
+            style.background = parse_color(color, &format!("{field}.bgcolor"), path)?;
+        }
     }
     if let Some(bold) = boolean_field(table, "bold", field, path)? {
         style.is_bold = bold;
@@ -217,6 +294,7 @@ fn parse_color(name: &str, field: &str, path: &Path) -> Result<Option<Color>, Co
     let color = match name.trim().to_ascii_lowercase().as_str() {
         "default" => None,
         "black" => Some(Color::Black),
+        "bright_black" | "gray" | "grey" => Some(Color::Fixed(8)),
         "red" => Some(Color::Red),
         "green" => Some(Color::Green),
         "yellow" => Some(Color::Yellow),
@@ -316,6 +394,38 @@ mod tests {
         .expect("unknown styles should be rejected");
 
         assert!(error.to_string().contains("unknown option color.kermit"));
+    }
+
+    #[test]
+    fn syntax_colours_are_configurable() {
+        let scheme = parse(
+            r#"
+            [color.syntax_comment]
+            color = "grey"
+            bold = true
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(Some(Color::Fixed(8)), scheme.syntax_comment.foreground);
+        assert!(scheme.syntax_comment.is_bold);
+    }
+
+    #[test]
+    fn syntax_colours_cannot_hide_the_diff_background() {
+        // Backgrounds belong to the diff, which is the primary signal in Jiff.
+        let error = parse(
+            r#"
+            [color.syntax_keyword]
+            bgcolor = "cyan"
+            "#,
+        )
+        .err()
+        .expect("syntax backgrounds should be rejected");
+
+        assert!(error
+            .to_string()
+            .contains("unknown option color.syntax_keyword.bgcolor"));
     }
 
     #[test]

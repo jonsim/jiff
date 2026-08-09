@@ -15,6 +15,9 @@ except ModuleNotFoundError:  # pragma: no cover - exercised on Python 3.9 and 3.
 SUPPORTED_COLORS = (
     "default",
     "black",
+    "bright_black",
+    "gray",
+    "grey",
     "red",
     "green",
     "yellow",
@@ -30,6 +33,11 @@ STYLE_NAMES = (
     "add_highlight",
     "remove",
     "remove_highlight",
+    "syntax_comment",
+    "syntax_keyword",
+    "syntax_string",
+    "syntax_number",
+    "syntax_definition",
 )
 
 
@@ -54,6 +62,11 @@ class ColorScheme:
     add_highlight: ColorStyle
     remove: ColorStyle
     remove_highlight: ColorStyle
+    syntax_comment: ColorStyle
+    syntax_keyword: ColorStyle
+    syntax_string: ColorStyle
+    syntax_number: ColorStyle
+    syntax_definition: ColorStyle
 
     @classmethod
     def default(cls) -> ColorScheme:
@@ -63,12 +76,28 @@ class ColorScheme:
             add_highlight=ColorStyle(color="black", bgcolor="green"),
             remove=ColorStyle(color="red"),
             remove_highlight=ColorStyle(color="black", bgcolor="red"),
+            syntax_comment=ColorStyle(color="bright_black"),
+            syntax_keyword=ColorStyle(color="magenta"),
+            syntax_string=ColorStyle(color="cyan"),
+            syntax_number=ColorStyle(color="blue"),
+            syntax_definition=ColorStyle(color="yellow"),
         )
 
     @classmethod
     def plain(cls) -> ColorScheme:
         plain = ColorStyle()
-        return cls(plain, plain, plain, plain, plain)
+        return cls(
+            same=plain,
+            add=plain,
+            add_highlight=plain,
+            remove=plain,
+            remove_highlight=plain,
+            syntax_comment=plain,
+            syntax_keyword=plain,
+            syntax_string=plain,
+            syntax_number=plain,
+            syntax_definition=plain,
+        )
 
 
 def load_color_scheme() -> ColorScheme:
@@ -122,20 +151,37 @@ def _parse_color_scheme(document: object) -> ColorScheme:
     _reject_unknown_fields(color, set(STYLE_NAMES), "color")
     defaults = ColorScheme.default()
     styles = {
-        name: _parse_style(color.get(name), getattr(defaults, name), f"color.{name}")
+        name: _parse_style(
+            color.get(name),
+            getattr(defaults, name),
+            f"color.{name}",
+            allow_background=not name.startswith("syntax_"),
+        )
         for name in STYLE_NAMES
     }
     return ColorScheme(**styles)
 
 
-def _parse_style(value: object, default: ColorStyle, field: str) -> ColorStyle:
+def _parse_style(
+    value: object,
+    default: ColorStyle,
+    field: str,
+    allow_background: bool = True,
+) -> ColorStyle:
     if value is None:
         return default
     table = _table(value, field)
-    _reject_unknown_fields(table, {"color", "bgcolor", "bold"}, field)
+    expected = {"color", "bold"}
+    if allow_background:
+        expected.add("bgcolor")
+    _reject_unknown_fields(table, expected, field)
 
     color = _color_field(table, "color", field, default.color)
-    bgcolor = _color_field(table, "bgcolor", field, default.bgcolor)
+    bgcolor = (
+        _color_field(table, "bgcolor", field, default.bgcolor)
+        if allow_background
+        else None
+    )
     bold = table.get("bold", default.bold)
     if not isinstance(bold, bool):
         raise ConfigError(f"{field}.bold must be true or false")
@@ -159,6 +205,8 @@ def _color_field(
         )
     if normalized == "default":
         return None
+    if normalized in ("gray", "grey"):
+        return "bright_black"
     if normalized == "purple":
         return "magenta"
     return normalized

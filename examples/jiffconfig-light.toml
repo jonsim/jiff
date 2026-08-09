@@ -5,3 +5,10 @@ add = { color = "blue", bold = true }
 add_highlight = { color = "white", bgcolor = "blue", bold = true }
 remove = { color = "magenta", bold = true }
 remove_highlight = { color = "white", bgcolor = "magenta", bold = true }
+
+# Syntax uses foregrounds only, leaving the diff backgrounds in charge.
+syntax_comment = { color = "bright_black" }
+syntax_keyword = { color = "magenta" }
+syntax_string = { color = "blue" }
+syntax_number = { color = "cyan" }
+syntax_definition = { color = "green" }

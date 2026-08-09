@@ -12,6 +12,7 @@ term_size = "0.3"
 clap = "~2.33.0"
 itertools = "~0.8.1"
 similar = "3.2.0"
+syntect = { version = "5.3", default-features = false, features = ["default-syntaxes", "regex-fancy"] }
 unicode-width = "0.2.2"
 unicode-segmentation = "1.13.3"
 toml = "0.8"

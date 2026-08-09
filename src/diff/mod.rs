@@ -2,6 +2,7 @@ mod align;
 mod wrap;
 
 use crate::config::ColorScheme;
+use crate::syntax::{HighlightedFile, HighlightedFiles};
 use align::align;
 use ansi_term::Style;
 use ansi_term::{ANSIString, ANSIStrings};
@@ -176,35 +177,54 @@ fn make_diff(tag: DiffTag, old: String, new: String) -> Diff {
 }
 
 /// Renders a unified diff, including character highlighting for paired lines.
-pub(super) fn render_diffs(diffs: &[Diff], colors: &ColorScheme) -> String {
+pub(super) fn render_diffs(
+    diffs: &[Diff],
+    colors: &ColorScheme,
+    highlighting: &HighlightedFiles,
+) -> String {
     let line_styling = colors;
     let margin_styling = indicator_styling(colors);
     let mut output = String::new();
+    let mut left_index = 0;
+    let mut right_index = 0;
 
     for change in diffs {
         match change {
             Diff::Same(same) => {
                 for line in same.split('\n') {
                     let margin = margin_styling.same.paint("  ");
-                    let fmt = line_styling.same.paint(line);
-                    writeln!(&mut output, "{}{}", margin, fmt)
+                    let fmt =
+                        highlighting
+                            .right
+                            .render_line(right_index, line, line_styling.same, &[]);
+                    writeln!(&mut output, "{}{}", margin, ANSIStrings(&fmt))
                         .expect("writing to a String cannot fail");
+                    left_index += 1;
+                    right_index += 1;
                 }
             }
             Diff::Add(add) => {
                 for line in add.split('\n') {
                     let margin = margin_styling.add.paint("+ ");
-                    let fmt = line_styling.add.paint(line);
-                    writeln!(&mut output, "{}{}", margin, fmt)
+                    let fmt =
+                        highlighting
+                            .right
+                            .render_line(right_index, line, line_styling.add, &[]);
+                    writeln!(&mut output, "{}{}", margin, ANSIStrings(&fmt))
                         .expect("writing to a String cannot fail");
+                    right_index += 1;
                 }
             }
             Diff::Remove(rem) => {
                 for line in rem.split('\n') {
                     let margin = margin_styling.remove.paint("- ");
-                    let fmt = line_styling.remove.paint(line);
-                    writeln!(&mut output, "{}{}", margin, fmt)
+                    let fmt =
+                        highlighting
+                            .left
+                            .render_line(left_index, line, line_styling.remove, &[]);
+                    writeln!(&mut output, "{}{}", margin, ANSIStrings(&fmt))
                         .expect("writing to a String cannot fail");
+                    left_index += 1;
                 }
             }
             Diff::Omitted(line_count) => {
@@ -213,6 +233,8 @@ pub(super) fn render_diffs(diffs: &[Diff], colors: &ColorScheme) -> String {
                 let fmt = line_styling.same.paint(message);
                 writeln!(&mut output, "{}{}", margin, fmt)
                     .expect("writing to a String cannot fail");
+                left_index += line_count;
+                right_index += line_count;
             }
             Diff::Replace(before, after) => {
                 let lines_b: Vec<&str> = before.split('\n').collect();
@@ -224,20 +246,42 @@ pub(super) fn render_diffs(diffs: &[Diff], colors: &ColorScheme) -> String {
                     match aligned {
                         (Some(before), None) => {
                             fmts_b.push(margin_styling.remove_highlight.paint("- "));
-                            fmts_b.push(line_styling.remove_highlight.paint(before));
+                            fmts_b.extend(highlighting.left.render_line(
+                                left_index,
+                                before,
+                                line_styling.remove_highlight,
+                                &[],
+                            ));
                             fmts_b.push(Style::default().paint("\n"));
+                            left_index += 1;
                         }
                         (None, Some(after)) => {
                             fmts_a.push(margin_styling.add_highlight.paint("+ "));
-                            fmts_a.push(line_styling.add_highlight.paint(after));
+                            fmts_a.extend(highlighting.right.render_line(
+                                right_index,
+                                after,
+                                line_styling.add_highlight,
+                                &[],
+                            ));
                             fmts_a.push(Style::default().paint("\n"));
+                            right_index += 1;
                         }
                         (Some(before), Some(after)) => {
                             fmts_b.push(margin_styling.remove.paint("- "));
                             fmts_a.push(margin_styling.add.paint("+ "));
-                            _style_diff_line(before, after, line_styling, &mut fmts_b, &mut fmts_a);
+                            _style_diff_line(
+                                before,
+                                after,
+                                line_styling,
+                                &mut fmts_b,
+                                &mut fmts_a,
+                                (&highlighting.left, left_index),
+                                (&highlighting.right, right_index),
+                            );
                             fmts_b.push(Style::default().paint("\n"));
                             fmts_a.push(Style::default().paint("\n"));
+                            left_index += 1;
+                            right_index += 1;
                         }
                         (None, None) => unreachable!("alignment cannot omit both lines"),
                     }
@@ -305,26 +349,56 @@ fn _style_diff_line<'u>(
     styling: &ColorScheme,
     before_fmts: &mut Vec<ANSIString<'u>>,
     after_fmts: &mut Vec<ANSIString<'u>>,
+    before_syntax: (&HighlightedFile, usize),
+    after_syntax: (&HighlightedFile, usize),
 ) {
+    let (before_highlighting, before_index) = before_syntax;
+    let (after_highlighting, after_index) = after_syntax;
+    let mut before_overrides = Vec::new();
+    let mut after_overrides = Vec::new();
+    let mut before_offset = 0;
+    let mut after_offset = 0;
+
     for char_change in calculate_char_diff(before, after) {
         match char_change {
             Diff::Same(same) => {
-                before_fmts.push(styling.remove.paint(same.clone()));
-                after_fmts.push(styling.add.paint(same));
+                before_offset += same.len();
+                after_offset += same.len();
             }
             Diff::Add(add) => {
-                after_fmts.push(styling.add_highlight.paint(add));
+                let end = after_offset + add.len();
+                after_overrides.push((after_offset..end, styling.add_highlight));
+                after_offset = end;
             }
             Diff::Remove(rem) => {
-                before_fmts.push(styling.remove_highlight.paint(rem));
+                let end = before_offset + rem.len();
+                before_overrides.push((before_offset..end, styling.remove_highlight));
+                before_offset = end;
             }
             Diff::Replace(rem, add) => {
-                before_fmts.push(styling.remove_highlight.paint(rem));
-                after_fmts.push(styling.add_highlight.paint(add));
+                let before_end = before_offset + rem.len();
+                let after_end = after_offset + add.len();
+                before_overrides.push((before_offset..before_end, styling.remove_highlight));
+                after_overrides.push((after_offset..after_end, styling.add_highlight));
+                before_offset = before_end;
+                after_offset = after_end;
             }
             Diff::Omitted(_) => unreachable!("character diffs are never context-limited"),
         }
     }
+
+    before_fmts.extend(before_highlighting.render_line(
+        before_index,
+        before,
+        styling.remove,
+        &before_overrides,
+    ));
+    after_fmts.extend(after_highlighting.render_line(
+        after_index,
+        after,
+        styling.add,
+        &after_overrides,
+    ));
 }
 
 fn side_by_side_line_width(term_width: usize, lineno_width: usize, separator: &str) -> usize {
@@ -341,6 +415,7 @@ pub(super) fn render_diffs_side_by_side(
     diffs: &[Diff],
     max_line_count: usize,
     colors: &ColorScheme,
+    highlighting: &HighlightedFiles,
 ) -> String {
     let lineno_styling = indicator_styling(colors);
     let line_styling = colors;
@@ -372,8 +447,12 @@ pub(super) fn render_diffs_side_by_side(
                         lineno_styling.same.paint(&lineno_r_fmt),
                         lineno_styling.same.paint(&empty_lineno),
                         lineno_styling.same.paint(&empty_lineno),
-                        &[line_styling.same.paint(line)],
-                        &[line_styling.same.paint(line)],
+                        &highlighting
+                            .left
+                            .render_line(lineno_l - 1, line, line_styling.same, &[]),
+                        &highlighting
+                            .right
+                            .render_line(lineno_r - 1, line, line_styling.same, &[]),
                         line_width,
                         sep,
                     );
@@ -391,7 +470,12 @@ pub(super) fn render_diffs_side_by_side(
                         lineno_styling.same.paint(&empty_lineno),
                         lineno_styling.add_highlight.paint(&empty_lineno),
                         &[line_styling.same.paint("")],
-                        &[line_styling.add_highlight.paint(line_r)],
+                        &highlighting.right.render_line(
+                            lineno_r - 1,
+                            line_r,
+                            line_styling.add_highlight,
+                            &[],
+                        ),
                         line_width,
                         sep,
                     );
@@ -407,7 +491,12 @@ pub(super) fn render_diffs_side_by_side(
                         lineno_styling.same.paint(&empty_lineno),
                         lineno_styling.remove_highlight.paint(&empty_lineno),
                         lineno_styling.same.paint(&empty_lineno),
-                        &[line_styling.remove_highlight.paint(line_l)],
+                        &highlighting.left.render_line(
+                            lineno_l - 1,
+                            line_l,
+                            line_styling.remove_highlight,
+                            &[],
+                        ),
                         &[line_styling.same.paint("")],
                         line_width,
                         sep,
@@ -448,7 +537,12 @@ pub(super) fn render_diffs_side_by_side(
                                 lineno_styling.same.paint(&empty_lineno),
                                 lineno_styling.remove_highlight.paint(&empty_lineno),
                                 lineno_styling.same.paint(&empty_lineno),
-                                &[line_styling.remove_highlight.paint(line_l)],
+                                &highlighting.left.render_line(
+                                    lineno_l - 1,
+                                    line_l,
+                                    line_styling.remove_highlight,
+                                    &[],
+                                ),
                                 &[line_styling.same.paint("")],
                                 line_width,
                                 sep,
@@ -464,7 +558,12 @@ pub(super) fn render_diffs_side_by_side(
                                 lineno_styling.same.paint(&empty_lineno),
                                 lineno_styling.add_highlight.paint(&empty_lineno),
                                 &[line_styling.same.paint("")],
-                                &[line_styling.add_highlight.paint(line_r)],
+                                &highlighting.right.render_line(
+                                    lineno_r - 1,
+                                    line_r,
+                                    line_styling.add_highlight,
+                                    &[],
+                                ),
                                 line_width,
                                 sep,
                             );
@@ -475,7 +574,15 @@ pub(super) fn render_diffs_side_by_side(
                             let lineno_r_fmt = format!("{:w$}:", lineno_r, w = lineno_width);
                             let mut fmt_l = Vec::new();
                             let mut fmt_r = Vec::new();
-                            _style_diff_line(line_l, line_r, line_styling, &mut fmt_l, &mut fmt_r);
+                            _style_diff_line(
+                                line_l,
+                                line_r,
+                                line_styling,
+                                &mut fmt_l,
+                                &mut fmt_r,
+                                (&highlighting.left, lineno_l - 1),
+                                (&highlighting.right, lineno_r - 1),
+                            );
                             _render_side_by_side_line(
                                 &mut output,
                                 lineno_styling.remove.paint(&lineno_l_fmt),
@@ -654,7 +761,12 @@ mod tests {
         // The first visible line after a gap keeps its source line number.
         let diffs = vec![Diff::Omitted(9), Diff::Same("Kermit".to_string())];
 
-        let output = render_diffs_side_by_side(&diffs, 10, &ColorScheme::plain());
+        let output = render_diffs_side_by_side(
+            &diffs,
+            10,
+            &ColorScheme::plain(),
+            &HighlightedFiles::default(),
+        );
 
         assert!(output.contains("10: Kermit"));
     }

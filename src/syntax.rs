@@ -1,0 +1,467 @@
+use crate::config::ColorScheme;
+use ansi_term::{ANSIString, Style};
+use std::fmt;
+use std::ops::Range;
+use std::path::Path;
+use std::str::FromStr;
+use std::sync::LazyLock;
+use syntect::easy::ScopeRangeIterator;
+use syntect::highlighting::ScopeSelector;
+use syntect::parsing::{ParseState, Scope, ScopeStack, SyntaxReference, SyntaxSet};
+use syntect::util::LinesWithEndings;
+
+static SYNTAX_SET: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
+static SELECTORS: LazyLock<SyntaxSelectors> = LazyLock::new(SyntaxSelectors::new);
+
+#[derive(Debug)]
+pub(crate) struct HighlightError {
+    message: String,
+}
+
+impl HighlightError {
+    fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+}
+
+impl fmt::Display for HighlightError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for HighlightError {}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct SyntaxSpan {
+    start: usize,
+    end: usize,
+    style: Style,
+}
+
+#[derive(Debug, Default, PartialEq)]
+struct HighlightedLine {
+    spans: Vec<SyntaxSpan>,
+}
+
+/// Syntax spans for a source file, retained in source-line order.
+#[derive(Debug, Default, PartialEq)]
+pub(crate) struct HighlightedFile {
+    lines: Vec<HighlightedLine>,
+}
+
+impl HighlightedFile {
+    /// Combines syntax foregrounds with the diff styling for one source line.
+    pub(crate) fn render_line<'a>(
+        &self,
+        index: usize,
+        content: &'a str,
+        base_style: Style,
+        overrides: &[(Range<usize>, Style)],
+    ) -> Vec<ANSIString<'a>> {
+        if content.is_empty() {
+            return vec![base_style.paint(content)];
+        }
+
+        let empty = HighlightedLine::default();
+        let line = self.lines.get(index).unwrap_or(&empty);
+        let mut boundaries = vec![0, content.len()];
+        for span in &line.spans {
+            boundaries.push(span.start.min(content.len()));
+            boundaries.push(span.end.min(content.len()));
+        }
+        for (range, _) in overrides {
+            boundaries.push(range.start.min(content.len()));
+            boundaries.push(range.end.min(content.len()));
+        }
+        boundaries.sort_unstable();
+        boundaries.dedup();
+        let mut syntax_spans = line.spans.iter().peekable();
+        let mut diff_overrides = overrides.iter().peekable();
+
+        boundaries
+            .windows(2)
+            .filter_map(|window| {
+                let start = window[0];
+                let end = window[1];
+                if start == end {
+                    return None;
+                }
+
+                let mut style = base_style;
+                while syntax_spans.peek().is_some_and(|span| span.end <= start) {
+                    syntax_spans.next();
+                }
+                if let Some(span) = syntax_spans
+                    .peek()
+                    .filter(|span| span.start <= start && start < span.end)
+                {
+                    // Syntax owns the foreground only. The diff background
+                    // therefore remains visible across the complete line.
+                    style.foreground = span.style.foreground;
+                    style.is_bold |= span.style.is_bold;
+                }
+                while diff_overrides
+                    .peek()
+                    .is_some_and(|(range, _)| range.end <= start)
+                {
+                    diff_overrides.next();
+                }
+                if let Some((_, override_style)) = diff_overrides
+                    .peek()
+                    .filter(|(range, _)| range.start <= start && start < range.end)
+                {
+                    // Intraline changes are the most useful signal, so their
+                    // complete style wins where the two kinds of span overlap.
+                    style = *override_style;
+                }
+                Some(style.paint(&content[start..end]))
+            })
+            .collect()
+    }
+}
+
+/// Syntax highlighting for the before and after sides of a diff.
+#[derive(Debug, Default, PartialEq)]
+pub(crate) struct HighlightedFiles {
+    pub(crate) left: HighlightedFile,
+    pub(crate) right: HighlightedFile,
+}
+
+/// Checks an explicit syntax name even when colour output is disabled.
+pub(crate) fn validate_syntax(syntax_name: Option<&str>) -> Result<(), HighlightError> {
+    let Some(name) = syntax_name.filter(|name| !name.eq_ignore_ascii_case("auto")) else {
+        return Ok(());
+    };
+    if SYNTAX_SET.find_syntax_by_token(name).is_none() {
+        return Err(HighlightError::new(format!("unknown syntax {name:?}")));
+    }
+    Ok(())
+}
+
+/// Highlights both files using an explicitly requested or detected syntax.
+pub(crate) fn highlight_files(
+    left: &str,
+    right: &str,
+    left_path: &str,
+    right_path: &str,
+    repository_path: Option<&str>,
+    syntax_name: Option<&str>,
+    colors: &ColorScheme,
+) -> Result<HighlightedFiles, HighlightError> {
+    let left_path = repository_path.unwrap_or(left_path);
+    let right_path = repository_path.unwrap_or(right_path);
+
+    Ok(HighlightedFiles {
+        left: highlight_file(left, left_path, syntax_name, colors)?,
+        right: highlight_file(right, right_path, syntax_name, colors)?,
+    })
+}
+
+fn highlight_file(
+    content: &str,
+    path: &str,
+    syntax_name: Option<&str>,
+    colors: &ColorScheme,
+) -> Result<HighlightedFile, HighlightError> {
+    let explicit_syntax = syntax_name.filter(|name| !name.eq_ignore_ascii_case("auto"));
+    let syntax = if let Some(name) = explicit_syntax {
+        SYNTAX_SET
+            .find_syntax_by_token(name)
+            .ok_or_else(|| HighlightError::new(format!("unknown syntax {name:?}")))?
+    } else {
+        let Some(syntax) = detect_syntax(path, content) else {
+            return Ok(HighlightedFile::default());
+        };
+        syntax
+    };
+
+    parse_highlights(content, path, syntax, colors)
+}
+
+fn detect_syntax(path: &str, content: &str) -> Option<&'static SyntaxReference> {
+    let path = Path::new(path);
+    let extension_match = path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .and_then(|extension| SYNTAX_SET.find_syntax_by_extension(extension));
+    let filename_match = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .and_then(|name| SYNTAX_SET.find_syntax_by_token(name.trim_start_matches('.')));
+    let first_line_match = content
+        .lines()
+        .next()
+        .and_then(|line| SYNTAX_SET.find_syntax_by_first_line(line));
+
+    extension_match.or(filename_match).or(first_line_match)
+}
+
+fn parse_highlights(
+    content: &str,
+    path: &str,
+    syntax: &SyntaxReference,
+    colors: &ColorScheme,
+) -> Result<HighlightedFile, HighlightError> {
+    let mut parser = ParseState::new(syntax);
+    let mut stack = ScopeStack::new();
+    let mut lines = Vec::new();
+
+    for line_with_ending in LinesWithEndings::from(content) {
+        let visible_length = line_with_ending
+            .strip_suffix('\n')
+            .unwrap_or(line_with_ending)
+            .len();
+        let operations = parser
+            .parse_line(line_with_ending, &SYNTAX_SET)
+            .map_err(|error| HighlightError::new(format!("could not parse {path:?}: {error}")))?;
+        let mut spans: Vec<SyntaxSpan> = Vec::new();
+
+        for (range, operation) in ScopeRangeIterator::new(&operations, line_with_ending) {
+            stack.apply(operation).map_err(|error| {
+                HighlightError::new(format!("could not parse {path:?}: {error}"))
+            })?;
+            let start = range.start.min(visible_length);
+            let end = range.end.min(visible_length);
+            let Some(style) = syntax_style(stack.as_slice(), colors) else {
+                continue;
+            };
+            if start == end {
+                continue;
+            }
+
+            if let Some(previous) = spans.last_mut() {
+                if previous.end == start && previous.style == style {
+                    previous.end = end;
+                    continue;
+                }
+            }
+            spans.push(SyntaxSpan { start, end, style });
+        }
+        lines.push(HighlightedLine { spans });
+    }
+
+    // `LinesWithEndings` quite reasonably treats the final newline as part
+    // of the preceding line. Jiff treats a retained newline as a meaningful
+    // final blank line because file terminators were removed when reading.
+    if content.ends_with('\n') {
+        lines.push(HighlightedLine::default());
+    }
+
+    Ok(HighlightedFile { lines })
+}
+
+fn syntax_style(scopes: &[Scope], colors: &ColorScheme) -> Option<Style> {
+    if SELECTORS
+        .comment
+        .iter()
+        .any(|selector| selector.does_match(scopes).is_some())
+    {
+        return Some(colors.syntax_comment);
+    }
+    if SELECTORS
+        .string
+        .iter()
+        .any(|selector| selector.does_match(scopes).is_some())
+    {
+        return Some(colors.syntax_string);
+    }
+    if SELECTORS
+        .keyword
+        .iter()
+        .any(|selector| selector.does_match(scopes).is_some())
+    {
+        return Some(colors.syntax_keyword);
+    }
+    if SELECTORS
+        .number
+        .iter()
+        .any(|selector| selector.does_match(scopes).is_some())
+    {
+        return Some(colors.syntax_number);
+    }
+    if SELECTORS
+        .name
+        .iter()
+        .any(|selector| selector.does_match(scopes).is_some())
+    {
+        return Some(colors.syntax_definition);
+    }
+    None
+}
+
+struct SyntaxSelectors {
+    comment: Vec<ScopeSelector>,
+    string: Vec<ScopeSelector>,
+    keyword: Vec<ScopeSelector>,
+    number: Vec<ScopeSelector>,
+    name: Vec<ScopeSelector>,
+}
+
+impl SyntaxSelectors {
+    fn new() -> Self {
+        Self {
+            comment: parse_selectors(&["comment"]),
+            string: parse_selectors(&["string"]),
+            keyword: parse_selectors(&["keyword", "storage"]),
+            number: parse_selectors(&["constant.numeric"]),
+            name: parse_selectors(&[
+                "entity.name.function",
+                "entity.name.type",
+                "support.type",
+                "variable.function",
+            ]),
+        }
+    }
+}
+
+fn parse_selectors(names: &[&str]) -> Vec<ScopeSelector> {
+    names
+        .iter()
+        .map(|name| ScopeSelector::from_str(name).expect("built-in scope selector is valid"))
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ansi_term::Color;
+
+    #[test]
+    fn filename_selects_the_python_syntax() {
+        // Automatic detection should be useful without another command-line option.
+        let highlighted = highlight_file(
+            "def kermit():\n    return 3",
+            "muppets.py",
+            None,
+            &ColorScheme::default(),
+        )
+        .expect("Python source should highlight");
+
+        assert_eq!(
+            Some(Color::Purple),
+            highlighted.lines[0].spans[0].style.foreground
+        );
+    }
+
+    #[test]
+    fn explicit_syntax_overrides_a_plain_filename() {
+        // Git and process-substitution paths often have no useful extension.
+        let highlighted = highlight_file(
+            "def kermit():",
+            "temporary.txt",
+            Some("python"),
+            &ColorScheme::default(),
+        )
+        .expect("explicit Python source should highlight");
+
+        assert_eq!(
+            Some(Color::Purple),
+            highlighted.lines[0].spans[0].style.foreground
+        );
+    }
+
+    #[test]
+    fn unknown_detected_syntax_falls_back_to_plain_text() {
+        let highlighted = highlight_file(
+            "Kermit and Fozzie",
+            "muppets.unknown",
+            None,
+            &ColorScheme::default(),
+        )
+        .expect("unknown files should remain plain");
+
+        assert_eq!(HighlightedFile::default(), highlighted);
+    }
+
+    #[test]
+    fn unknown_explicit_syntax_is_reported() {
+        let error = highlight_file(
+            "Kermit",
+            "muppets.txt",
+            Some("great-gonzo"),
+            &ColorScheme::default(),
+        )
+        .expect_err("an unknown explicit syntax should fail");
+
+        assert!(error.to_string().contains("great-gonzo"));
+    }
+
+    #[test]
+    fn explicit_syntax_is_validated_without_highlighting() {
+        // `--no-color` must not make a misspelled explicit language valid.
+        let error = validate_syntax(Some("great-gonzo"))
+            .expect_err("an unknown explicit syntax should fail");
+
+        assert!(error.to_string().contains("great-gonzo"));
+    }
+
+    #[test]
+    fn repository_path_identifies_git_temporary_files() {
+        // Both Git sides should use the real path supplied through `--path`.
+        let highlighted = highlight_files(
+            "def kermit(): pass",
+            "def fozzie(): pass",
+            "/tmp/old",
+            "/tmp/new",
+            Some("muppets.py"),
+            None,
+            &ColorScheme::default(),
+        )
+        .expect("repository path should select Python");
+
+        assert!(!highlighted.left.lines[0].spans.is_empty());
+        assert!(!highlighted.right.lines[0].spans.is_empty());
+    }
+
+    #[test]
+    fn syntax_foreground_keeps_the_diff_background() {
+        // Token colour is intentionally subordinate to the stronger diff background.
+        let highlighted =
+            highlight_file("def kermit():", "muppets.py", None, &ColorScheme::default())
+                .expect("Python source should highlight");
+
+        let rendered =
+            highlighted.render_line(0, "def kermit():", Color::Green.on(Color::Red), &[]);
+
+        assert_eq!(
+            Color::Purple.on(Color::Red).paint("def").to_string(),
+            rendered[0].to_string()
+        );
+    }
+
+    #[test]
+    fn intraline_diff_style_wins_over_syntax() {
+        // Changed characters need to stand out more strongly than their token type.
+        let highlighted =
+            highlight_file("def kermit():", "muppets.py", None, &ColorScheme::default())
+                .expect("Python source should highlight");
+        let changed = vec![(0..3, Color::Black.on(Color::Green))];
+
+        let rendered = highlighted.render_line(0, "def kermit():", Style::default(), &changed);
+
+        assert_eq!(
+            Color::Black.on(Color::Green).paint("def").to_string(),
+            rendered[0].to_string()
+        );
+    }
+
+    #[test]
+    fn multiline_parser_state_is_kept() {
+        // The second line remains a string because the complete file is parsed at once.
+        let highlighted = highlight_file(
+            "muppet = \"\"\"Kermit\nthe Frog\"\"\"",
+            "muppets.py",
+            None,
+            &ColorScheme::default(),
+        )
+        .expect("multiline Python should highlight");
+
+        assert_eq!(
+            Some(Color::Cyan),
+            highlighted.lines[1].spans[0].style.foreground
+        );
+    }
+}

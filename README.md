@@ -9,8 +9,9 @@ A terminal diff tool supporting sub-line diffs and side-by-side output display
 
 This repo has two separate, fully featured implementations: one written in Rust,
 the other in Python. The Rust version is expected to be faster, but the Python
-version is more portable. Tests assert that the two versions are functionally
-identical.
+version is more portable. The core diff behaviour is kept identical. Syntax
+highlighting can differ slightly because the implementations use different
+language engines.
 
 ### Installing
 
@@ -44,6 +45,37 @@ jiff -U3 FILE1 FILE2
 Omitted regions are marked with their number of unchanged lines in either
 output layout. `-U0` shows only changed lines and those markers.
 
+### Syntax highlighting
+
+Jiff automatically detects source languages from the input filenames. Git
+difftool comparisons use the repository path supplied through `--path`, rather
+than trying to identify Git's temporary filenames.
+
+Use `--syntax=LANGUAGE` when the filename is ambiguous or has no useful
+extension:
+
+```sh
+jiff --syntax=python FILE1 FILE2
+```
+
+Common language names and extensions are accepted. The Python implementation
+uses Pygments, while Rust uses syntect, so their complete language lists and a
+few token boundaries differ. An unknown automatically detected language falls
+back to plain text. An unknown explicit language is reported as an error.
+
+Pass `--no-syntax` to retain Jiff's diff colours without token highlighting.
+`--no-color` disables both. The built-in syntax palette is deliberately muted:
+
+- comments are grey;
+- keywords are magenta;
+- strings are cyan;
+- numbers are blue;
+- function and type names are yellow.
+
+Syntax highlighting only changes foreground colour and optional bold text.
+Diff backgrounds remain in control, and intraline changes take priority where
+the two overlap.
+
 ### Configuration
 
 Jiff uses the first configuration file it finds in this order:
@@ -64,16 +96,21 @@ add = { color = "blue", bold = true }
 add_highlight = { color = "yellow", bgcolor = "blue" }
 ```
 
-The supported styles are `same`, `add`, `add_highlight`, `remove` and
-`remove_highlight`. Each accepts `color`, `bgcolor` and `bold`. Line numbers and
-change markers inherit the corresponding `same`, `add` or `remove` colours and
-are shown in bold. The built-in palette uses the terminal default for unchanged
-text, green for additions, red for removals, and black on green or red for
-highlights.
+The diff styles are `same`, `add`, `add_highlight`, `remove` and
+`remove_highlight`. Each accepts `color`, `bgcolor` and `bold`. Syntax styles
+are `syntax_comment`, `syntax_keyword`, `syntax_string`, `syntax_number` and
+`syntax_definition`; these accept `color` and `bold`. Syntax backgrounds are
+rejected so they cannot hide the diff.
 
-Supported colour names are `default`, `black`, `red`, `green`, `yellow`,
-`blue`, `magenta`, `purple`, `cyan` and `white`. `purple` is an alias for
-`magenta`; `default` clears that foreground or background and lets the terminal
+Line numbers and change markers inherit the corresponding `same`, `add` or
+`remove` colours and are shown in bold. The built-in diff palette uses the
+terminal default for unchanged text, green for additions, red for removals,
+and black on green or red for highlights.
+
+Supported colour names are `default`, `black`, `bright_black`, `gray`, `grey`,
+`red`, `green`, `yellow`, `blue`, `magenta`, `purple`, `cyan` and `white`.
+`gray` and `grey` are aliases for `bright_black`; `purple` is an alias for
+`magenta`. `default` clears that foreground or background and lets the terminal
 choose it.
 
 The repository includes ready-made palettes for
