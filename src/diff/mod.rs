@@ -377,7 +377,7 @@ fn _render_side_by_side_line(
 
         // A missing right line has no line number or text worth padding. Stop
         // at the separator so redirected output does not contain whitespace.
-        if margin_r.trim().is_empty() && wrapped_r.is_empty() {
+        if margin_r.trim().is_empty() && wrapped_r.trim().is_empty() {
             writeln!(output, "{} {}{}", margin_l, wrapped_l, separator)
                 .expect("writing to a String cannot fail");
         } else {
@@ -862,6 +862,21 @@ mod tests {
         );
 
         assert!(output.contains("10: Kermit"));
+    }
+
+    #[test]
+    fn side_by_side_unpaired_wrapped_lines_have_no_trailing_whitespace() {
+        // Padding for an absent right pane must stop at the separator on every wrap.
+        let diffs = vec![Diff::Replace("Kermit ".repeat(100), "Gonzo".to_string())];
+
+        let output = render_diffs_side_by_side(
+            &diffs,
+            1,
+            &ColorScheme::plain(),
+            &HighlightedFiles::default(),
+        );
+
+        assert!(output.lines().all(|line| !line.ends_with(' ')));
     }
 
     #[test]
