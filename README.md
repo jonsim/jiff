@@ -78,6 +78,11 @@ the two overlap.
 
 ### Configuration
 
+The configuration file is optional. Jiff uses the first file it finds and does
+not merge settings from several files.
+
+#### File location
+
 Jiff uses the first configuration file it finds in this order:
 
 1. The path in `$JIFF_CONFIG`, when set.
@@ -85,10 +90,38 @@ Jiff uses the first configuration file it finds in this order:
    `$XDG_CONFIG_HOME` is not set.
 3. `~/.jiffconfig`.
 
-The file is optional. If it exists, it must contain valid TOML. Colour styles
-are configured under `[color]`; every style and field is optional, and omitted
-values keep the built-in default. For example, this changes additions to a
-blue and yellow palette:
+The XDG path is recommended for normal use. Create it with:
+
+```sh
+mkdir -p ~/.config/jiff
+touch ~/.config/jiff/config.toml
+```
+
+`JIFF_CONFIG` is useful for trying another palette without replacing the usual
+one:
+
+```sh
+JIFF_CONFIG=examples/jiffconfig-light.toml jiff OLD NEW
+```
+
+If `$JIFF_CONFIG` is set, Jiff uses that exact path. It does not fall back to
+the other locations when the file is missing or invalid.
+
+#### TOML structure
+
+The file must contain valid TOML and currently supports one top-level table:
+`[color]`. Unknown tables, styles and fields are reported as errors so a typo
+cannot silently change the result.
+
+Each entry below `[color]` names a style. A style has up to three fields:
+
+| Field | Value | Meaning |
+|---|---|---|
+| `color` | Colour name | Foreground colour |
+| `bgcolor` | Colour name | Background colour; diff styles only |
+| `bold` | `true` or `false` | Enable or disable bold text |
+
+Inline tables keep short styles compact:
 
 ```toml
 [color]
@@ -96,25 +129,93 @@ add = { color = "blue", bold = true }
 add_highlight = { color = "yellow", bgcolor = "blue" }
 ```
 
-The diff styles are `same`, `omitted`, `add`, `add_highlight`, `remove` and
-`remove_highlight`. Each accepts `color`, `bgcolor` and `bold`. `omitted`
-controls the muted markers for unchanged regions hidden by `--unified`.
-Syntax styles are `syntax_comment`, `syntax_keyword`, `syntax_string`,
-`syntax_number` and `syntax_definition`; these accept `color` and `bold`.
-Syntax backgrounds are rejected so they cannot hide the diff.
+The normal TOML table form is clearer for a longer style and means exactly the
+same thing:
 
-Line numbers and change markers inherit the corresponding `same`, `add` or
-`remove` colours and are shown in bold. The built-in diff palette uses the
-terminal default for unchanged text, green for additions, red for removals,
-and black on green or red for highlights.
+```toml
+[color.add_highlight]
+color = "yellow"
+bgcolor = "blue"
+bold = true
+```
 
-Supported colour names are `default`, `black`, `bright_black`, `gray`, `grey`,
-`red`, `green`, `yellow`, `blue`, `magenta`, `purple`, `cyan` and `white`.
+Every style and field is optional. An omitted value keeps its built-in default.
+Use the colour name `default` when you want to clear a built-in foreground or
+background instead:
+
+```toml
+[color]
+add = { color = "default" }
+```
+
+That example makes added text use the terminal's normal foreground colour.
+
+#### Diff styles
+
+These styles control the diff itself:
+
+| Style | Used for | Default foreground | Default background |
+|---|---|---|---|
+| `same` | Unchanged text | Terminal default | Terminal default |
+| `omitted` | `... N unchanged lines ...` markers | `bright_black` | Terminal default |
+| `add` | Normal added text and unchanged characters in paired lines | `green` | Terminal default |
+| `add_highlight` | Changed characters and unpaired side-by-side additions | `black` | `green` |
+| `remove` | Normal removed text and unchanged characters in paired lines | `red` | Terminal default |
+| `remove_highlight` | Changed characters and unpaired side-by-side removals | `black` | `red` |
+
+All six accept `color`, `bgcolor` and `bold`. Their built-in `bold` value is
+`false`. Line numbers and the `+`/`-` markers inherit the corresponding diff
+colour and are deliberately bold so they remain visible beside highlighted
+text.
+
+#### Syntax highlighting styles
+
+Syntax configuration only changes how token categories are drawn. It does not
+select a language: Jiff still detects that from the filename, or uses the
+language passed to `--syntax=LANGUAGE`.
+
+| Style | Used for | Default foreground |
+|---|---|---|
+| `syntax_comment` | Comments and documentation | `bright_black` |
+| `syntax_keyword` | Language keywords | `magenta` |
+| `syntax_string` | String literals | `cyan` |
+| `syntax_number` | Numeric literals | `blue` |
+| `syntax_definition` | Function, type and other definition names | `yellow` |
+
+These five styles accept `color` and `bold`; their built-in `bold` value is
+`false`. They do not accept `bgcolor`. Diff backgrounds must remain in control,
+and the stronger `add_highlight` and `remove_highlight` styles win when syntax
+and intraline highlighting overlap.
+
+Use `--no-syntax` to ignore the syntax styles while retaining the diff colours.
+Use `--no-color` to disable both diff and syntax styling.
+
+#### Supported colour names
+
+Colour names are case-insensitive and surrounding whitespace is ignored. The
+supported canonical names are:
+
+```text
+default
+black
+bright_black
+red
+green
+yellow
+blue
+magenta
+cyan
+white
+```
+
 `gray` and `grey` are aliases for `bright_black`; `purple` is an alias for
-`magenta`. `default` clears that foreground or background and lets the terminal
-choose it.
+`magenta`. `default` means the terminal's normal foreground or background—it
+does not mean Jiff's built-in value. Hex colours, RGB values, ANSI colour
+numbers and other `bright_*` names are not currently supported.
 
-The repository includes ready-made palettes for
+#### Complete examples
+
+Voilà—the repository includes complete palettes for
 [light terminals](examples/jiffconfig-light.toml) and
 [dark terminals](examples/jiffconfig-dark.toml). Copy one to the standard XDG
 location to use it:
