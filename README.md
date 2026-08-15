@@ -213,21 +213,36 @@ white
 does not mean Jiff's built-in value. Hex colours, RGB values, ANSI colour
 numbers and other `bright_*` names are not currently supported.
 
-#### Complete examples
+#### Complete themes
 
-Voilà—the repository includes complete palettes for
-[light terminals](examples/jiffconfig-light.toml) and
-[dark terminals](examples/jiffconfig-dark.toml). Copy one to the standard XDG
-location to use it:
+The repository includes seven complete themes:
+
+| Theme | Best suited to | Character |
+|---|---|---|
+| [High contrast light](examples/jiffconfig-light.toml) | Light terminals | Crisp blue and magenta diff colours |
+| [High contrast dark](examples/jiffconfig-dark.toml) | Dark terminals | Bright cyan and yellow diff colours |
+| [Catppuccin Mocha](examples/jiffconfig-catppuccin-mocha.toml) | Dark terminals | Soft green, magenta and cyan |
+| [Dracula](examples/jiffconfig-dracula.toml) | Dark terminals | Green and red diffs with purple syntax |
+| [Gruvbox Dark](examples/jiffconfig-gruvbox-dark.toml) | Dark terminals | Warm green, red and yellow |
+| [Nord](examples/jiffconfig-nord.toml) | Dark terminals | Cool cyan, red and blue |
+| [Tokyo Night](examples/jiffconfig-tokyo-night.toml) | Dark terminals | Cyan and magenta with blue syntax |
+
+The first two prioritise contrast and colour-blind accessibility. The other
+five borrow the colour relationships of popular editor themes. Jiff's config
+uses ANSI colour names, so your terminal theme still chooses the exact shades.
+This generally makes the palettes sit naturally alongside a matching terminal
+theme, but they are not exact RGB reproductions.
+
+Copy any theme to the standard XDG location to use it:
 
 ```sh
 mkdir -p ~/.config/jiff
 cp examples/jiffconfig-dark.toml ~/.config/jiff/config.toml
 ```
 
-Use the light variant in the command above when your terminal has a light
-background. Both examples are complete configs, so they are also useful as a
-starting point for your own palette.
+Replace `jiffconfig-dark.toml` with another filename from the table to use that
+theme. Every example is a complete config, so they are also useful as starting
+points for your own palette.
 
 ### Git difftool
 

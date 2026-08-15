@@ -1,0 +1,15 @@
+# Dracula-inspired greens and purples for terminals with a dark background.
+# The exact shades come from your terminal's ANSI palette.
+[color]
+same = { color = "white" }
+omitted = { color = "bright_black" }
+add = { color = "green", bold = true }
+add_highlight = { color = "black", bgcolor = "green", bold = true }
+remove = { color = "red", bold = true }
+remove_highlight = { color = "black", bgcolor = "red", bold = true }
+
+syntax_comment = { color = "bright_black" }
+syntax_keyword = { color = "magenta" }
+syntax_string = { color = "yellow" }
+syntax_number = { color = "cyan" }
+syntax_definition = { color = "green" }
