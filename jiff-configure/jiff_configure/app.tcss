@@ -1,0 +1,130 @@
+JiffConfigureApp {
+    background: $background;
+}
+
+#workspace {
+    height: 1fr;
+}
+
+#controls {
+    width: 48;
+    min-width: 40;
+    padding: 0 1;
+    border-right: solid $primary-darken-2;
+}
+
+.section-title {
+    margin-top: 1;
+    text-style: bold;
+    color: $accent;
+}
+
+#theme {
+    width: 100%;
+    margin-bottom: 1;
+}
+
+.style-control {
+    height: auto;
+    padding: 1 0;
+    border-bottom: solid $panel-lighten-2;
+}
+
+.style-title {
+    text-style: bold;
+}
+
+.colour-fields {
+    height: 3;
+    align-vertical: middle;
+}
+
+.field-label {
+    width: auto;
+    margin-right: 1;
+    color: $text-muted;
+}
+
+.background-label {
+    margin-left: 1;
+}
+
+.colour-select {
+    width: 1fr;
+}
+
+.bold-field {
+    height: 3;
+    align-vertical: middle;
+}
+
+.bold-switch {
+    width: 8;
+}
+
+#main-actions {
+    height: 3;
+    margin: 1 0;
+    align-horizontal: right;
+}
+
+#main-actions Button {
+    margin-left: 1;
+}
+
+#preview-tabs {
+    width: 1fr;
+    height: 1fr;
+}
+
+.preview-scroll {
+    height: 1fr;
+    padding: 1;
+    overflow: auto auto;
+}
+
+.preview {
+    width: auto;
+    min-width: 100%;
+}
+
+.toml-preview {
+    color: $text;
+}
+
+ConfirmDialog,
+SavePathDialog {
+    align: center middle;
+    background: $background 60%;
+}
+
+.dialog {
+    width: 64;
+    height: auto;
+    padding: 1 2;
+    border: round $primary;
+    background: $surface;
+}
+
+.save-dialog {
+    width: 76;
+}
+
+.dialog-title,
+.dialog-message {
+    margin-bottom: 1;
+}
+
+.dialog-title {
+    text-style: bold;
+}
+
+.dialog-actions {
+    height: 3;
+    margin-top: 1;
+    align-horizontal: right;
+}
+
+.dialog-actions Button {
+    margin-left: 1;
+}

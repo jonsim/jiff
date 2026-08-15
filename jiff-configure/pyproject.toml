@@ -12,6 +12,9 @@ dependencies = [
     "textual>=8.2.8,<9",
 ]
 
+[project.scripts]
+jiff-configure = "jiff_configure.app:main"
+
 [tool.uv.sources]
 jiff = { workspace = true }
 
@@ -22,4 +25,5 @@ packages = ["jiff_configure", "jiff_configure.themes"]
 "jiff_configure.themes" = "themes"
 
 [tool.setuptools.package-data]
+"jiff_configure" = ["*.tcss"]
 "jiff_configure.themes" = ["*.toml"]
