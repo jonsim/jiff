@@ -6,6 +6,22 @@ import jiff_config
 
 
 class ColorConfigTests(unittest.TestCase):
+    def test_complete_config_round_trips_the_default_scheme(self):
+        # Generated files must retain every style understood by both renderers.
+        scheme = jiff_config.ColorScheme.default()
+
+        contents = jiff_config.color_scheme_to_toml(scheme)
+
+        self.assertEqual(scheme, jiff_config.parse_color_scheme(contents))
+        self.assertEqual(
+            ["[color]", *jiff_config.STYLE_NAMES],
+            [line.split(" =", maxsplit=1)[0] for line in contents.splitlines()],
+        )
+
+    def test_invalid_toml_is_reported_by_the_public_parser(self):
+        with self.assertRaisesRegex(jiff_config.ConfigError, "invalid TOML"):
+            jiff_config.parse_color_scheme("[color")
+
     def test_partial_styles_merge_with_the_default_palette(self):
         scheme = jiff_config._parse_color_scheme(
             {
@@ -58,6 +74,20 @@ class ColorConfigTests(unittest.TestCase):
 
 
 class ConfigPathTests(unittest.TestCase):
+    def test_default_path_uses_an_absolute_xdg_home(self):
+        path = jiff_config._default_config_path(
+            {"XDG_CONFIG_HOME": "/the-muppet-theatre"}, Path("/home/kermit")
+        )
+
+        self.assertEqual(Path("/the-muppet-theatre/jiff/config.toml"), path)
+
+    def test_default_path_ignores_a_relative_xdg_home(self):
+        path = jiff_config._default_config_path(
+            {"XDG_CONFIG_HOME": "backstage"}, Path("/home/kermit")
+        )
+
+        self.assertEqual(Path("/home/kermit/.config/jiff/config.toml"), path)
+
     def test_xdg_config_takes_precedence_over_the_home_dotfile(self):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)

@@ -411,6 +411,7 @@ def print_diffs_side_by_side(
     color: bool = True,
     colors: ColorScheme | None = None,
     highlighting: HighlightedFiles | None = None,
+    terminal_width: int | None = None,
 ) -> None:
     colors = _colors(color, colors)
     lineno_styling = _indicator_styling(colors)
@@ -423,8 +424,9 @@ def print_diffs_side_by_side(
 
     # Calculate widths to draw to.
     lineno_width = int(math.log10(max_line_count)) + 1 if max_line_count > 0 else 1
-    terminal_width = _terminal_width()
-    line_width = ((terminal_width - sep_width) // 2) - (lineno_width + 2)
+    if terminal_width is None:
+        terminal_width = _terminal_width()
+    line_width = max(((terminal_width - sep_width) // 2) - (lineno_width + 2), 1)
 
     # Print all diffs.
     lineno_l = 1
@@ -572,9 +574,12 @@ def render_diffs_side_by_side(
     color: bool = True,
     colors: ColorScheme | None = None,
     highlighting: HighlightedFiles | None = None,
+    terminal_width: int | None = None,
 ) -> str:
     with console.capture() as capture:
-        print_diffs_side_by_side(diffs, max_line_count, color, colors, highlighting)
+        print_diffs_side_by_side(
+            diffs, max_line_count, color, colors, highlighting, terminal_width
+        )
     return capture.get()
 
 

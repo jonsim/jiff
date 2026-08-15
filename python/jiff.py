@@ -62,6 +62,7 @@ def render_output(
     context_lines: int | None = None,
     syntax: str | None = None,
     syntax_enabled: bool = True,
+    terminal_width: int | None = None,
 ) -> str:
     left_label, right_label = file_labels(repository_path, lpath, rpath)
 
@@ -91,7 +92,7 @@ def render_output(
     else:
         max_line_count = max(line_count(left), line_count(right))
         output += diff.render_diffs_side_by_side(
-            diffs, max_line_count, color, colors, highlighting
+            diffs, max_line_count, color, colors, highlighting, terminal_width
         )
     return output
 

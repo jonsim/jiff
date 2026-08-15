@@ -110,28 +110,55 @@ def load_color_scheme() -> ColorScheme:
         return ColorScheme.default()
 
     try:
-        with path.open("rb") as config_file:
-            document = tomllib.load(config_file)
-    except OSError as error:
+        contents = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as error:
         raise ConfigError(f"{path}: could not read file: {error}") from error
-    except tomllib.TOMLDecodeError as error:
-        raise ConfigError(f"{path}: invalid TOML: {error}") from error
 
     try:
-        return _parse_color_scheme(document)
+        return parse_color_scheme(contents)
     except ConfigError as error:
         raise ConfigError(f"{path}: {error}") from error
+
+
+def parse_color_scheme(contents: str) -> ColorScheme:
+    """Parses one Jiff TOML configuration into its resolved colour scheme."""
+    try:
+        document = tomllib.loads(contents)
+    except tomllib.TOMLDecodeError as error:
+        raise ConfigError(f"invalid TOML: {error}") from error
+    return _parse_color_scheme(document)
+
+
+def color_scheme_to_toml(scheme: ColorScheme) -> str:
+    """Returns a complete Jiff TOML configuration for a colour scheme."""
+    lines = ["[color]"]
+    for name in STYLE_NAMES:
+        style = getattr(scheme, name)
+        fields = [f'color = "{style.color or "default"}"']
+        if not name.startswith("syntax_"):
+            fields.append(f'bgcolor = "{style.bgcolor or "default"}"')
+        fields.append(f"bold = {str(style.bold).lower()}")
+        lines.append(f"{name} = {{ {', '.join(fields)} }}")
+    return "\n".join(lines) + "\n"
+
+
+def default_config_path() -> Path:
+    """The standard XDG path offered when saving a Jiff configuration."""
+    return _default_config_path(os.environ, Path.home())
+
+
+def _default_config_path(environment: Mapping[str, str], home: Path) -> Path:
+    xdg_home = Path(environment.get("XDG_CONFIG_HOME", ""))
+    if xdg_home.is_absolute():
+        return xdg_home / "jiff" / "config.toml"
+    return home / ".config" / "jiff" / "config.toml"
 
 
 def _find_config_file(environment: Mapping[str, str], home: Path) -> Path | None:
     if explicit := environment.get("JIFF_CONFIG", "").strip():
         return Path(explicit)
 
-    xdg_home = Path(environment.get("XDG_CONFIG_HOME", ""))
-    if xdg_home.is_absolute():
-        candidates = [xdg_home / "jiff" / "config.toml"]
-    else:
-        candidates = [home / ".config" / "jiff" / "config.toml"]
+    candidates = [_default_config_path(environment, home)]
     candidates.append(home / ".jiffconfig")
 
     for path in candidates:

@@ -9,6 +9,16 @@ import diff
 
 
 class SideBySideRenderingTests(unittest.TestCase):
+    def test_explicit_terminal_width_skips_terminal_detection(self):
+        # Embedded previews own their width rather than the surrounding terminal.
+        diffs = diff.calculate_line_diff("Kermit", "Kermit the Frog")
+
+        with mock.patch("diff.mod._terminal_width") as terminal_width:
+            output = diff.render_diffs_side_by_side(diffs, 1, False, terminal_width=40)
+
+        terminal_width.assert_not_called()
+        self.assertIn("Kermit", output)
+
     def test_uneven_wrapped_lines_render_to_completion(self):
         # Once the shorter side is exhausted, wrapping still needs an empty
         # styled line with the same interface as the remaining chunks.
