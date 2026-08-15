@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "jiff-configure"
 version = "0.1.0"
 description = "Interactive colour configuration for Jiff"
+readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
     "jiff",

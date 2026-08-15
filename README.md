@@ -244,6 +244,34 @@ Replace `high-contrast-dark.toml` with another filename from the table to use
 that theme. Every example is a complete config, so they are also useful as
 starting points for your own palette.
 
+#### Building a theme interactively
+
+`jiff-configure` is a separate Textual application in the uv workspace. Run it
+from the repository with:
+
+```sh
+uv run jiff-configure
+```
+
+It starts with a small built-in Python diff which exercises the normal diff,
+intraline and syntax colours. To preview a pair of your own UTF-8 text files
+instead, pass both paths:
+
+```sh
+uv run jiff-configure OLD NEW
+```
+
+Pick one of the packaged themes as a starting point, then adjust the text
+colour, background colour and bold setting for each style. The side-by-side
+and inline tabs use Jiff's real Python renderer, so they update as the palette
+changes. The TOML tab shows the complete configuration which will be written.
+
+Press `Ctrl+S` or use the Save button to save it. The application asks for a
+path every time, initially suggesting `$XDG_CONFIG_HOME/jiff/config.toml` or
+`~/.config/jiff/config.toml`. It creates missing parent directories and asks
+before replacing an existing file. Changing the starting theme or quitting
+with unsaved edits also requires confirmation.
+
 ### Git difftool
 
 Once `jiff` is installed and available in `$PATH`, configure it as a custom Git
@@ -381,6 +409,7 @@ uv run jiff --inline FILE1 FILE2
 Unit tests:
 ```sh
 uv run python -m unittest discover -s python/tests
+uv run python -m unittest discover -s jiff-configure/tests
 ```
 
 System tests:
