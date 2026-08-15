@@ -101,7 +101,7 @@ touch ~/.config/jiff/config.toml
 one:
 
 ```sh
-JIFF_CONFIG=examples/jiffconfig-light.toml jiff OLD NEW
+JIFF_CONFIG=jiff-configure/themes/high-contrast-light.toml jiff OLD NEW
 ```
 
 If `$JIFF_CONFIG` is set, Jiff uses that exact path. It does not fall back to
@@ -219,13 +219,13 @@ The repository includes seven complete themes:
 
 | Theme | Best suited to | Character |
 |---|---|---|
-| [High contrast light](examples/jiffconfig-light.toml) | Light terminals | Crisp blue and magenta diff colours |
-| [High contrast dark](examples/jiffconfig-dark.toml) | Dark terminals | Bright cyan and yellow diff colours |
-| [Catppuccin Mocha](examples/jiffconfig-catppuccin-mocha.toml) | Dark terminals | Soft green, magenta and cyan |
-| [Dracula](examples/jiffconfig-dracula.toml) | Dark terminals | Green and red diffs with purple syntax |
-| [Gruvbox Dark](examples/jiffconfig-gruvbox-dark.toml) | Dark terminals | Warm green, red and yellow |
-| [Nord](examples/jiffconfig-nord.toml) | Dark terminals | Cool cyan, red and blue |
-| [Tokyo Night](examples/jiffconfig-tokyo-night.toml) | Dark terminals | Cyan and magenta with blue syntax |
+| [High contrast light](jiff-configure/themes/high-contrast-light.toml) | Light terminals | Crisp blue and magenta diff colours |
+| [High contrast dark](jiff-configure/themes/high-contrast-dark.toml) | Dark terminals | Bright cyan and yellow diff colours |
+| [Catppuccin Mocha](jiff-configure/themes/catppuccin-mocha.toml) | Dark terminals | Soft green, magenta and cyan |
+| [Dracula](jiff-configure/themes/dracula.toml) | Dark terminals | Green and red diffs with purple syntax |
+| [Gruvbox Dark](jiff-configure/themes/gruvbox-dark.toml) | Dark terminals | Warm green, red and yellow |
+| [Nord](jiff-configure/themes/nord.toml) | Dark terminals | Cool cyan, red and blue |
+| [Tokyo Night](jiff-configure/themes/tokyo-night.toml) | Dark terminals | Cyan and magenta with blue syntax |
 
 The first two prioritise contrast and colour-blind accessibility. The other
 five borrow the colour relationships of popular editor themes. Jiff's config
@@ -237,12 +237,12 @@ Copy any theme to the standard XDG location to use it:
 
 ```sh
 mkdir -p ~/.config/jiff
-cp examples/jiffconfig-dark.toml ~/.config/jiff/config.toml
+cp jiff-configure/themes/high-contrast-dark.toml ~/.config/jiff/config.toml
 ```
 
-Replace `jiffconfig-dark.toml` with another filename from the table to use that
-theme. Every example is a complete config, so they are also useful as starting
-points for your own palette.
+Replace `high-contrast-dark.toml` with another filename from the table to use
+that theme. Every example is a complete config, so they are also useful as
+starting points for your own palette.
 
 ### Git difftool
 

@@ -4,6 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.9"
 dependencies = [
     "jiff",
+    "jiff-configure",
 ]
 
 [dependency-groups]
@@ -17,6 +18,7 @@ package = false
 
 [tool.uv.sources]
 jiff = { workspace = true }
+jiff-configure = { workspace = true }
 
 [tool.uv.workspace]
-members = ["python"]
+members = ["python", "jiff-configure"]

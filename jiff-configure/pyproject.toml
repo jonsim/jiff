@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jiff-configure"
+version = "0.1.0"
+description = "Interactive colour configuration for Jiff"
+requires-python = ">=3.9"
+dependencies = [
+    "jiff",
+    "textual>=8.2.8,<9",
+]
+
+[tool.uv.sources]
+jiff = { workspace = true }
+
+[tool.setuptools]
+packages = ["jiff_configure", "jiff_configure.themes"]
+
+[tool.setuptools.package-dir]
+"jiff_configure.themes" = "themes"
+
+[tool.setuptools.package-data]
+"jiff_configure.themes" = ["*.toml"]
