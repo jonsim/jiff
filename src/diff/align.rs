@@ -12,10 +12,10 @@ enum AlignmentOperation {
     Pair,
 }
 
-fn lcs_distance(before: &[char], after: &[char], lengths: &mut Vec<usize>) -> usize {
-    // Shared ends can always participate in an optimal subsequence. Removing
-    // them leaves the same edit distance and keeps the quadratic part small for
-    // the common case of a local change in an otherwise stable line.
+fn edit_distance(before: &[char], after: &[char], distances: &mut Vec<usize>) -> usize {
+    // Matching ends can always be retained by an optimal edit script. Removing
+    // them keeps the quadratic part small for the common case of a local change
+    // in an otherwise stable line.
     let common_prefix = before
         .iter()
         .zip(after)
@@ -37,28 +37,37 @@ fn lcs_distance(before: &[char], after: &[char], lengths: &mut Vec<usize>) -> us
         (after, before)
     };
 
-    lengths.clear();
-    lengths.resize(columns.len() + 1, 0);
-    for row in rows {
-        let mut diagonal = 0;
+    distances.clear();
+    distances.extend(0..=columns.len());
+    for (row_index, row) in rows.iter().enumerate() {
+        let mut diagonal = distances[0];
+        distances[0] = row_index + 1;
         for (column_index, column) in columns.iter().enumerate() {
-            // `lengths[j]` is the LCS length for the rows processed so far and
-            // the first `j` columns. Keep the overwritten value and diagonal
-            // so this row can be calculated in place.
-            let previous_row = lengths[column_index + 1];
-            lengths[column_index + 1] = if row == column {
-                diagonal + 1
-            } else {
-                lengths[column_index].max(previous_row)
-            };
+            // Keep the previous row's value before overwriting it so the next
+            // cell still has its diagonal and deletion costs available.
+            let previous_row = distances[column_index + 1];
+            let deletion = previous_row + 1;
+            let insertion = distances[column_index] + 1;
+            let substitution = diagonal + usize::from(row != column);
+            distances[column_index + 1] = deletion.min(insertion).min(substitution);
             diagonal = previous_row;
         }
     }
 
-    before.len() + after.len() - 2 * lengths[columns.len()]
+    distances[columns.len()]
 }
 
-fn pair_cost(before: &[char], after: &[char], lengths: &mut Vec<usize>) -> usize {
+fn is_contiguous_extension(before: &[char], after: &[char]) -> bool {
+    let (shorter, longer) = if before.len() <= after.len() {
+        (before, after)
+    } else {
+        (after, before)
+    };
+
+    !shorter.is_empty() && longer.windows(shorter.len()).any(|part| part == shorter)
+}
+
+fn pair_cost(before: &[char], after: &[char], distances: &mut Vec<usize>) -> usize {
     if before == after {
         return 0;
     }
@@ -69,14 +78,20 @@ fn pair_cost(before: &[char], after: &[char], lengths: &mut Vec<usize>) -> usize
     let dissimilar_cost = unpaired_cost + 1;
     let length_difference = before.len().abs_diff(after.len());
 
-    // A sufficiently large length difference cannot pass the similarity
-    // cutoff, regardless of how the shorter line is arranged.
+    // A line at least three times longer than the other has too little shared
+    // context to make a useful pair, even when it contains the shorter line.
     if 2 * length_difference >= unpaired_cost {
         return dissimilar_cost;
     }
 
-    let distance = lcs_distance(before, after, lengths);
-    if 2 * distance >= unpaired_cost {
+    let distance = edit_distance(before, after, distances);
+    // A common subsequence can be made from isolated spaces and letters in two
+    // unrelated sentences. Levenshtein distance requires those matches to be
+    // locally coherent. Keep contiguous extensions as a useful special case
+    // for indentation and text added at either end of a line.
+    if !is_contiguous_extension(before, after)
+        && distance.saturating_mul(2) >= before.len().max(after.len())
+    {
         dissimilar_cost
     } else {
         distance
@@ -101,13 +116,15 @@ fn choose_operation(pair: usize, remove: usize, add: usize) -> (usize, Alignment
 ///
 /// Each output entry consumes a line from `lines_b`, `lines_a`, or both. The
 /// dynamic programme chooses the lowest-cost path, where an unpaired line costs
-/// its character length. Lines are paired only when their insertion/deletion
-/// distance is less than half their combined length.
+/// its character length. The longer of two pairable lines must be less than
+/// three times the shorter. Within that limit, one may be a contiguous
+/// extension of the other, or require edits to fewer than half the longer
+/// line's characters.
 ///
 /// Scoring is `O(C_b * C_a)` in the worst case, where `C_b` and `C_a` are the
 /// total character counts on each side. Traceback uses `O(L_b * L_a)` bytes for
 /// `L_b` before lines and `L_a` after lines. Alignment costs keep two line rows,
-/// while every candidate pair reuses one LCS row.
+/// while every candidate pair reuses one edit-distance row.
 pub(super) fn align<'a>(
     lines_b: &[&'a str],
     lines_a: &[&'a str],
@@ -121,7 +138,7 @@ pub(super) fn align<'a>(
     let mut current_costs = vec![0; width];
     let before_chars: Vec<Vec<char>> = lines_b.iter().map(|line| line.chars().collect()).collect();
     let after_chars: Vec<Vec<char>> = lines_a.iter().map(|line| line.chars().collect()).collect();
-    let mut lcs_lengths = Vec::new();
+    let mut edit_distances = Vec::new();
 
     // The first row and column describe paths which can only add or remove.
     for (after_index, after) in after_chars.iter().enumerate() {
@@ -135,7 +152,7 @@ pub(super) fn align<'a>(
 
         for (after_index, after) in after_chars.iter().enumerate() {
             let column = after_index + 1;
-            let score = pair_cost(before, after, &mut lcs_lengths);
+            let score = pair_cost(before, after, &mut edit_distances);
             let pair = previous_costs[column - 1] + score;
             let remove = previous_costs[column] + before.len();
             let add = current_costs[column - 1] + after.len();
@@ -195,12 +212,12 @@ mod tests {
     }
 
     #[test]
-    fn lcs_distance_ignores_a_common_prefix_and_suffix() {
-        // Trimming anchors must leave the same distance as diffing the full line.
+    fn edit_distance_ignores_a_common_prefix_and_suffix() {
+        // Trimming anchors must leave the same distance as editing the full line.
         let before = characters("abcXYZdef");
         let after = characters("abcX123YZdef");
 
-        let distance = lcs_distance(&before, &after, &mut Vec::new());
+        let distance = edit_distance(&before, &after, &mut Vec::new());
 
         assert_eq!(3, distance);
     }
@@ -308,6 +325,21 @@ mod tests {
                 (None, Some("Swedish Chef")),
                 (Some("Gonzo"), Some("Gonzo")),
             ],
+            alignment
+        );
+    }
+
+    #[test]
+    fn keeps_scattered_sentence_matches_unpaired() {
+        // Common letters and spaces must not turn unrelated prose into a line pair.
+        let before =
+            ["are configured under `[color]`; every style and field is optional, and omitted"];
+        let after = ["Each entry below `[color]` names a style. A style has up to three fields:"];
+
+        let alignment = align(&before, &after);
+
+        assert_eq!(
+            vec![(Some(before[0]), None), (None, Some(after[0]))],
             alignment
         );
     }

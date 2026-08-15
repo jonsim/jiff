@@ -104,6 +104,20 @@ class LineAlignmentTests(unittest.TestCase):
 
         self.assertEqual([("Kermit", None), (None, "Gonzo")], alignment)
 
+    def test_keeps_scattered_sentence_matches_unpaired(self):
+        # Common letters and spaces must not turn unrelated prose into a line pair.
+        before = (
+            "are configured under `[color]`; every style and field is optional, "
+            "and omitted"
+        )
+        after = (
+            "Each entry below `[color]` names a style. A style has up to three fields:"
+        )
+
+        alignment = align([before], [after])
+
+        self.assertEqual([(before, None), (None, after)], alignment)
+
 
 class ContextTests(unittest.TestCase):
     def test_context_keeps_lines_on_each_side_of_a_change(self):

@@ -1,0 +1,4 @@
+1: are configured under `[color]`; every style and field is│
+    optional, and omitted                                  │
+                                                           │1: Each entry below `[color]` names a style. A style has up
+                                                           │    to three fields:

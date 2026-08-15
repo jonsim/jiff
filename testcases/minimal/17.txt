@@ -1,0 +1,1 @@
+Each entry below `[color]` names a style. A style has up to three fields:

@@ -7,10 +7,10 @@ import sys
 debug = os.environ.get("JIFF_DEBUG", "0") == "1"
 
 
-def _lcs_distance(before: str, after: str) -> int:
-    # Shared ends are reliable anchors and can always belong to an optimal
-    # subsequence. Trimming them avoids the quadratic work for the common case
-    # of a small change in an otherwise stable line.
+def _edit_distance(before: str, after: str) -> int:
+    # Matching ends can always be retained by an optimal edit script. Trimming
+    # them avoids the quadratic work for the common case of a small change in
+    # an otherwise stable line.
     common_prefix = 0
     for before_char, after_char in zip(before, after, strict=False):
         if before_char != after_char:
@@ -33,20 +33,21 @@ def _lcs_distance(before: str, after: str) -> int:
     after = after[common_prefix:after_end]
     rows, columns = (before, after) if len(before) >= len(after) else (after, before)
 
-    lengths = [0] * (len(columns) + 1)
-    for row in rows:
-        diagonal = 0
+    distances = list(range(len(columns) + 1))
+    for row_index, row in enumerate(rows, start=1):
+        diagonal = distances[0]
+        distances[0] = row_index
         for column_index, column in enumerate(columns):
-            # Keep the value from the previous row before overwriting it so the
-            # LCS row can be updated in place.
-            previous_row = lengths[column_index + 1]
-            if row == column:
-                lengths[column_index + 1] = diagonal + 1
-            else:
-                lengths[column_index + 1] = max(lengths[column_index], previous_row)
+            # Keep the previous row's value before overwriting it so the next
+            # cell still has its diagonal and deletion costs available.
+            previous_row = distances[column_index + 1]
+            deletion = previous_row + 1
+            insertion = distances[column_index] + 1
+            substitution = diagonal + (row != column)
+            distances[column_index + 1] = min(deletion, insertion, substitution)
             diagonal = previous_row
 
-    return len(before) + len(after) - 2 * lengths[-1]
+    return distances[-1]
 
 
 def _pair_cost(before: str, after: str) -> int:
@@ -59,13 +60,20 @@ def _pair_cost(before: str, after: str) -> int:
     dissimilar_cost = unpaired_cost + 1
     length_difference = abs(len(before) - len(after))
 
-    # A sufficiently large length difference cannot pass the similarity
-    # cutoff, regardless of how the shorter line is arranged.
+    # A line at least three times longer than the other has too little shared
+    # context to make a useful pair, even when it contains the shorter line.
     if 2 * length_difference >= unpaired_cost:
         return dissimilar_cost
 
-    distance = _lcs_distance(before, after)
-    return dissimilar_cost if 2 * distance >= unpaired_cost else distance
+    distance = _edit_distance(before, after)
+    # A common subsequence can be made from isolated spaces and letters in two
+    # unrelated sentences. Levenshtein distance requires those matches to be
+    # locally coherent. Keep contiguous extensions as a useful special case
+    # for indentation and text added at either end of a line.
+    contiguous_extension = before in after or after in before
+    if not contiguous_extension and 2 * distance >= max(len(before), len(after)):
+        return dissimilar_cost
+    return distance
 
 
 class Point:

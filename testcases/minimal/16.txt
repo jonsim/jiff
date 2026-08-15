@@ -1,0 +1,1 @@
+are configured under `[color]`; every style and field is optional, and omitted
