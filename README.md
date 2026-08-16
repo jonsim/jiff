@@ -231,7 +231,7 @@ The repository includes seven complete themes:
 | [High contrast dark](jiff-configure/themes/high-contrast-dark.toml) | Dark terminals | Bright cyan and yellow diff colours |
 | [Catppuccin Mocha](jiff-configure/themes/catppuccin-mocha.toml) | Dark terminals | Soft green, magenta and cyan |
 | [Dracula](jiff-configure/themes/dracula.toml) | Dark terminals | Green and red diffs with purple syntax |
-| [Gruvbox Dark](jiff-configure/themes/gruvbox-dark.toml) | Dark terminals | Warm green, red and yellow |
+| [Gruvbox Dark](jiff-configure/themes/gruvbox-dark.toml) | Dark terminals | Warm, bright foregrounds on restrained backgrounds |
 | [Nord](jiff-configure/themes/nord.toml) | Dark terminals | Cool cyan, red and blue |
 | [Tokyo Night](jiff-configure/themes/tokyo-night.toml) | Dark terminals | Cyan and magenta with blue syntax |
 
@@ -240,6 +240,12 @@ five borrow the colour relationships of popular editor themes. Jiff's config
 uses ANSI colour names, so your terminal theme still chooses the exact shades.
 This generally makes the palettes sit naturally alongside a matching terminal
 theme, but they are not exact RGB reproductions.
+
+Gruvbox Dark and High Contrast Dark use bright foregrounds for the main diff
+signal, but retain standard colours for highlight backgrounds. This keeps
+changed spans clear without turning them into high-intensity blocks. The light
+theme and the other editor-inspired themes deliberately keep their standard
+ANSI colours.
 
 Copy any theme to the standard XDG location to use it:
 

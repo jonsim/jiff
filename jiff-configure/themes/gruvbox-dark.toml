@@ -3,13 +3,13 @@
 [color]
 same = { color = "white" }
 omitted = { color = "bright_black" }
-add = { color = "green", bold = true }
+add = { color = "bright_green", bold = true }
 add_highlight = { color = "black", bgcolor = "green", bold = true }
-remove = { color = "red", bold = true }
+remove = { color = "bright_red", bold = true }
 remove_highlight = { color = "black", bgcolor = "red", bold = true }
 
 syntax_comment = { color = "bright_black" }
-syntax_keyword = { color = "red" }
-syntax_string = { color = "green" }
-syntax_number = { color = "magenta" }
-syntax_definition = { color = "yellow" }
+syntax_keyword = { color = "bright_red" }
+syntax_string = { color = "bright_green" }
+syntax_number = { color = "bright_magenta" }
+syntax_definition = { color = "bright_yellow" }

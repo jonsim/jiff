@@ -129,6 +129,21 @@ class ThemeTests(unittest.TestCase):
             set(themes),
         )
 
+    def test_dark_contrast_and_gruvbox_use_bright_foregrounds(self):
+        # Standard backgrounds keep highlighted spans less overpowering.
+        themes = load_themes()
+
+        gruvbox = themes["Gruvbox Dark"]
+        self.assertEqual("bright_green", gruvbox.add.color)
+        self.assertEqual("green", gruvbox.add_highlight.bgcolor)
+        self.assertEqual("bright_red", gruvbox.syntax_keyword.color)
+        self.assertEqual("bright_yellow", gruvbox.syntax_definition.color)
+
+        high_contrast = themes["High Contrast Dark"]
+        self.assertEqual("bright_cyan", high_contrast.add.color)
+        self.assertEqual("cyan", high_contrast.add_highlight.bgcolor)
+        self.assertEqual("bright_yellow", high_contrast.remove.color)
+
 
 class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
     def make_app(self) -> JiffConfigureApp:
