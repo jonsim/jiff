@@ -81,11 +81,15 @@ JiffConfigureApp {
     height: 1fr;
     padding: 1;
     overflow: auto auto;
+    color: ansi_default;
+    background: ansi_default;
 }
 
 .preview {
     width: auto;
     min-width: 100%;
+    color: ansi_default;
+    background: ansi_default;
 }
 
 .toml-preview {

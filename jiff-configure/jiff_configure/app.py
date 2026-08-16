@@ -298,7 +298,10 @@ class JiffConfigureApp(App[None]):
         preview_source: PreviewSource,
         themes: dict[str, ColorScheme],
     ) -> None:
-        super().__init__()
+        # Textual normally replaces the 16 configurable ANSI colours with its
+        # own RGB palette. The preview needs the terminal to resolve them in
+        # exactly the same way as a real Jiff invocation.
+        super().__init__(ansi_color=True)
         self.preview_source = preview_source
         self.themes = themes
         self.scheme = themes["Default"]

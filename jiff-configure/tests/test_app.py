@@ -80,6 +80,16 @@ class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
     def make_app(self) -> JiffConfigureApp:
         return JiffConfigureApp(PreviewSource.built_in(), load_themes())
 
+    async def test_preview_uses_the_terminal_ansi_palette(self):
+        # Textual's normal RGB conversion would make this differ from Jiff.
+        app = self.make_app()
+        async with app.run_test(size=(140, 42)):
+            preview = app.query_one("#side-preview")
+
+            self.assertTrue(app.native_ansi_color)
+            self.assertEqual(-1, preview.styles.color.ansi)
+            self.assertEqual(-1, preview.styles.background.ansi)
+
     async def test_selecting_a_theme_updates_the_scheme_and_previews(self):
         app = self.make_app()
         async with app.run_test(size=(140, 42)) as pilot:
