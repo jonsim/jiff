@@ -149,11 +149,35 @@ def _coalesce_dissimilar_middle(changes: list[Diff]) -> list[Diff]:
     prefix = changes[:1] if changes[0].kind == DiffType.SAME else []
     suffix = changes[-1:] if changes[-1].kind == DiffType.SAME else []
     middle = changes[len(prefix) : len(changes) - len(suffix)]
+    replacement = _dissimilar_replacement(middle, coalesce_phrases=False)
+    if replacement is not None:
+        return prefix + [replacement] + suffix
+
+    # A genuinely common phrase can make the whole line look similar while a
+    # smaller replacement inside it is still full of accidental matches. Use
+    # longer common runs as anchors and judge each intervening region again.
+    refined: list[Diff] = []
+    region: list[Diff] = []
+    for change in middle:
+        if change.kind == DiffType.SAME and len(change.left) >= 3:
+            replacement = _dissimilar_replacement(region, coalesce_phrases=True)
+            refined.extend([replacement] if replacement is not None else region)
+            refined.append(change)
+            region = []
+        else:
+            region.append(change)
+    replacement = _dissimilar_replacement(region, coalesce_phrases=True)
+    refined.extend([replacement] if replacement is not None else region)
+    return prefix + refined + suffix
+
+
+def _dissimilar_replacement(changes: list[Diff], coalesce_phrases: bool) -> Diff | None:
+    """Collapses a region whose internal matches are too fragmented."""
     before = ""
     after = ""
     matched_characters = 0
 
-    for change in middle:
+    for change in changes:
         if change.kind == DiffType.SAME:
             matched_characters += len(change.left)
             before += change.left
@@ -168,10 +192,18 @@ def _coalesce_dissimilar_middle(changes: list[Diff]) -> list[Diff]:
         elif change.kind == DiffType.OMITTED:
             raise AssertionError("character diffs are never context-limited")
 
-    if before and after and matched_characters * 3 < max(len(before), len(after)):
-        middle = [Diff(DiffType.REPLACE, before, after)]
-
-    return prefix + middle + suffix
+    fragmented_phrase = (
+        coalesce_phrases
+        and any(character.isspace() for character in before)
+        and any(character.isspace() for character in after)
+    )
+    if (
+        before
+        and after
+        and (matched_characters * 3 < max(len(before), len(after)) or fragmented_phrase)
+    ):
+        return Diff(DiffType.REPLACE, before, after)
+    return None
 
 
 def calculate_diff(left: str, right: str, split: str) -> list[Diff]:

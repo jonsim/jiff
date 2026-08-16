@@ -12,6 +12,7 @@ Test Template    Jiff Files
 02_13               minimal/02.txt    minimal/13.txt    minimal/results/02_13.diff
 14_15               minimal/14.txt    minimal/15.txt    minimal/results/14_15.diff
 16_17               minimal/16.txt    minimal/17.txt    minimal/results/16_17.diff
+18_19               minimal/18.txt    minimal/19.txt    minimal/results/18_19.diff
 01_11               minimal/01.txt    minimal/11.txt    minimal/results/01_11.diff
 01_12               minimal/01.txt    minimal/12.txt    minimal/results/01_12.diff
 01_13               minimal/01.txt    minimal/13.txt    minimal/results/01_13.diff
@@ -27,3 +28,4 @@ Test Template    Jiff Files
 02_13_side_by_side  minimal/02.txt    minimal/13.txt    minimal/results/02_13.sbsdiff    True
 14_15_side_by_side  minimal/14.txt    minimal/15.txt    minimal/results/14_15.sbsdiff    True
 16_17_side_by_side  minimal/16.txt    minimal/17.txt    minimal/results/16_17.sbsdiff    True
+18_19_side_by_side  minimal/18.txt    minimal/19.txt    minimal/results/18_19.sbsdiff    True

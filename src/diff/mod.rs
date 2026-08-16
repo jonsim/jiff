@@ -139,10 +139,42 @@ fn coalesce_dissimilar_middle(mut changes: Vec<Diff>) -> Vec<Diff> {
         None
     };
 
+    if let Some(replacement) = dissimilar_replacement(&changes, false) {
+        changes = vec![replacement];
+    } else {
+        // A genuinely common phrase can make the whole line look similar while
+        // a smaller replacement inside it is still full of accidental matches.
+        // Longer common runs are reliable anchors for judging those regions.
+        let mut refined = Vec::new();
+        let mut region = Vec::new();
+        for change in changes {
+            if matches!(&change, Diff::Same(same) if same.chars().count() >= 3) {
+                refined.extend(coalesce_dissimilar_region(region));
+                refined.push(change);
+                region = Vec::new();
+            } else {
+                region.push(change);
+            }
+        }
+        refined.extend(coalesce_dissimilar_region(region));
+        changes = refined;
+    }
+
+    prefix.into_iter().chain(changes).chain(suffix).collect()
+}
+
+fn coalesce_dissimilar_region(changes: Vec<Diff>) -> Vec<Diff> {
+    match dissimilar_replacement(&changes, true) {
+        Some(replacement) => vec![replacement],
+        None => changes,
+    }
+}
+
+fn dissimilar_replacement(changes: &[Diff], coalesce_phrases: bool) -> Option<Diff> {
     let mut before = String::new();
     let mut after = String::new();
     let mut matched_characters = 0;
-    for change in &changes {
+    for change in changes {
         match change {
             Diff::Same(same) => {
                 matched_characters += same.chars().count();
@@ -160,14 +192,16 @@ fn coalesce_dissimilar_middle(mut changes: Vec<Diff>) -> Vec<Diff> {
     }
 
     let middle_length = before.chars().count().max(after.chars().count());
+    let fragmented_phrase = coalesce_phrases
+        && before.chars().any(char::is_whitespace)
+        && after.chars().any(char::is_whitespace);
     if !before.is_empty()
         && !after.is_empty()
-        && matched_characters.saturating_mul(3) < middle_length
+        && (matched_characters.saturating_mul(3) < middle_length || fragmented_phrase)
     {
-        changes = vec![Diff::Replace(before, after)];
+        return Some(Diff::Replace(before, after));
     }
-
-    prefix.into_iter().chain(changes).chain(suffix).collect()
+    None
 }
 
 /// Limits unchanged regions to the requested lines around each change.
@@ -780,6 +814,28 @@ mod tests {
                 Diff::Same("a".to_string()),
                 Diff::Replace("X".to_string(), "Y".to_string()),
                 Diff::Same("a".to_string()),
+            ],
+            diffs
+        );
+    }
+
+    #[test]
+    fn char_diff_coalesces_a_noisy_phrase_between_stable_anchors() {
+        // Shared surrounding clauses should not legitimise scattered letters.
+        let before = "Sam keeps one dependable act ready in the wings.";
+        let after = "Scooter keeps two unpredictable acts ready in the wings.";
+
+        let diffs = calculate_char_diff(before, after);
+
+        assert_eq!(
+            vec![
+                Diff::Same("S".to_string()),
+                Diff::Replace("am".to_string(), "cooter".to_string()),
+                Diff::Same(" keeps ".to_string()),
+                Diff::Replace("one depend".to_string(), "two unpredict".to_string()),
+                Diff::Same("able act".to_string()),
+                Diff::Add("s".to_string()),
+                Diff::Same(" ready in the wings.".to_string()),
             ],
             diffs
         );

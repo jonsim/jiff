@@ -97,6 +97,26 @@ class CharacterDiffTests(unittest.TestCase):
             diffs,
         )
 
+    def test_coalesces_a_noisy_phrase_between_stable_anchors(self):
+        # Shared surrounding clauses should not legitimise scattered letters.
+        before = "Sam keeps one dependable act ready in the wings."
+        after = "Scooter keeps two unpredictable acts ready in the wings."
+
+        diffs = diff.mod.calculate_char_diff(before, after)
+
+        self.assertEqual(
+            [
+                Diff(DiffType.SAME, "S"),
+                Diff(DiffType.REPLACE, "am", "cooter"),
+                Diff(DiffType.SAME, " keeps "),
+                Diff(DiffType.REPLACE, "one depend", "two unpredict"),
+                Diff(DiffType.SAME, "able act"),
+                Diff(DiffType.ADD, "s"),
+                Diff(DiffType.SAME, " ready in the wings."),
+            ],
+            diffs,
+        )
+
 
 class LineAlignmentTests(unittest.TestCase):
     def test_pairs_lines_with_a_shared_prefix_and_unrelated_suffixes(self):
