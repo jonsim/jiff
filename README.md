@@ -200,18 +200,26 @@ default
 black
 bright_black
 red
+bright_red
 green
+bright_green
 yellow
+bright_yellow
 blue
+bright_blue
 magenta
+bright_magenta
 cyan
+bright_cyan
 white
+bright_white
 ```
 
 `gray` and `grey` are aliases for `bright_black`; `purple` is an alias for
 `magenta`. `default` means the terminal's normal foreground or background—it
 does not mean Jiff's built-in value. Hex colours, RGB values, ANSI colour
-numbers and other `bright_*` names are not currently supported.
+numbers and colours outside the standard 16-colour ANSI palette are not
+currently supported.
 
 #### Complete themes
 

@@ -5,8 +5,11 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-const SUPPORTED_COLORS: &str =
-    "default, black, bright_black, gray, grey, red, green, yellow, blue, magenta, purple, cyan, or white";
+const SUPPORTED_COLORS: &str = concat!(
+    "default, black, bright_black, red, bright_red, green, bright_green, ",
+    "yellow, bright_yellow, blue, bright_blue, magenta, bright_magenta, ",
+    "cyan, bright_cyan, white, bright_white, gray, grey, or purple",
+);
 
 #[derive(Clone, Copy)]
 pub(crate) struct ColorScheme {
@@ -307,12 +310,19 @@ fn parse_color(name: &str, field: &str, path: &Path) -> Result<Option<Color>, Co
         "black" => Some(Color::Black),
         "bright_black" | "gray" | "grey" => Some(Color::Fixed(8)),
         "red" => Some(Color::Red),
+        "bright_red" => Some(Color::Fixed(9)),
         "green" => Some(Color::Green),
+        "bright_green" => Some(Color::Fixed(10)),
         "yellow" => Some(Color::Yellow),
+        "bright_yellow" => Some(Color::Fixed(11)),
         "blue" => Some(Color::Blue),
+        "bright_blue" => Some(Color::Fixed(12)),
         "magenta" | "purple" => Some(Color::Purple),
+        "bright_magenta" => Some(Color::Fixed(13)),
         "cyan" => Some(Color::Cyan),
+        "bright_cyan" => Some(Color::Fixed(14)),
         "white" => Some(Color::White),
+        "bright_white" => Some(Color::Fixed(15)),
         _ => {
             return Err(ConfigError::new(
                 path,
@@ -378,6 +388,36 @@ mod tests {
 
         assert_eq!(None, scheme.add_highlight.background);
         assert_eq!(Some(Color::Black), scheme.add_highlight.foreground);
+    }
+
+    #[test]
+    fn all_ansi_colours_are_configurable() {
+        // Keep the TOML names aligned with the terminal's standard 16 colours.
+        let colours = [
+            ("default", None),
+            ("black", Some(Color::Black)),
+            ("bright_black", Some(Color::Fixed(8))),
+            ("red", Some(Color::Red)),
+            ("bright_red", Some(Color::Fixed(9))),
+            ("green", Some(Color::Green)),
+            ("bright_green", Some(Color::Fixed(10))),
+            ("yellow", Some(Color::Yellow)),
+            ("bright_yellow", Some(Color::Fixed(11))),
+            ("blue", Some(Color::Blue)),
+            ("bright_blue", Some(Color::Fixed(12))),
+            ("magenta", Some(Color::Purple)),
+            ("bright_magenta", Some(Color::Fixed(13))),
+            ("cyan", Some(Color::Cyan)),
+            ("bright_cyan", Some(Color::Fixed(14))),
+            ("white", Some(Color::White)),
+            ("bright_white", Some(Color::Fixed(15))),
+        ];
+
+        for (name, expected) in colours {
+            let scheme = parse(&format!("[color]\nadd = {{ color = {name:?} }}\n")).unwrap();
+
+            assert_eq!(expected, scheme.add.foreground, "{name}");
+        }
     }
 
     #[test]

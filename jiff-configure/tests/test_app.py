@@ -5,8 +5,9 @@ from unittest import mock
 
 import syntax_highlighting
 from diff.mod import DiffType
-from jiff_config import ColorScheme, parse_color_scheme
+from jiff_config import CANONICAL_COLORS, ColorScheme, parse_color_scheme
 from jiff_configure.app import (
+    COLOR_OPTIONS,
     ConfirmDialog,
     JiffConfigureApp,
     PreviewSource,
@@ -103,6 +104,13 @@ class PreviewSourceTests(unittest.TestCase):
 
 
 class ThemeTests(unittest.TestCase):
+    def test_colour_controls_offer_every_canonical_ansi_colour(self):
+        # Aliases would duplicate choices without adding a distinct colour.
+        self.assertEqual(
+            list(CANONICAL_COLORS),
+            [value for _label, value in COLOR_OPTIONS],
+        )
+
     def test_packaged_themes_include_default_and_all_examples(self):
         themes = load_themes()
 

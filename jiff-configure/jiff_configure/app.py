@@ -10,6 +10,7 @@ from typing import ClassVar
 
 import jiff
 from jiff_config import (
+    CANONICAL_COLORS,
     ColorScheme,
     ColorStyle,
     ConfigError,
@@ -67,21 +68,9 @@ STYLE_LABELS = {
     "syntax_number": "Syntax: numbers",
     "syntax_definition": "Syntax: definitions",
 }
-COLOR_NAMES = (
-    "default",
-    "black",
-    "bright_black",
-    "red",
-    "green",
-    "yellow",
-    "blue",
-    "magenta",
-    "cyan",
-    "white",
-)
 COLOR_OPTIONS = tuple(
     ("Terminal default" if name == "default" else name.replace("_", " ").title(), name)
-    for name in COLOR_NAMES
+    for name in CANONICAL_COLORS
 )
 
 BUILTIN_LEFT = r'''"""Plan tonight's Muppet Theatre show."""

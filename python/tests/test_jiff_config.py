@@ -45,6 +45,22 @@ class ColorConfigTests(unittest.TestCase):
         self.assertIsNone(scheme.add_highlight.bgcolor)
         self.assertEqual("black", scheme.add_highlight.color)
 
+    def test_all_ansi_colours_are_configurable(self):
+        # The public list and parser must stay in step with Rich's ANSI names.
+        for colour in jiff_config.CANONICAL_COLORS:
+            with self.subTest(colour=colour):
+                scheme = jiff_config._parse_color_scheme(
+                    {"color": {"add": {"color": colour}}}
+                )
+
+                expected = None if colour == "default" else colour
+                rich_colour = scheme.add.rich_style().color
+                self.assertEqual(expected, scheme.add.color)
+                self.assertEqual(
+                    expected,
+                    None if rich_colour is None else rich_colour.name,
+                )
+
     def test_unsupported_colours_report_the_field(self):
         with self.assertRaisesRegex(jiff_config.ConfigError, "color.add.color.*orange"):
             jiff_config._parse_color_scheme({"color": {"add": {"color": "orange"}}})

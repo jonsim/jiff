@@ -12,21 +12,31 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - exercised on Python 3.9 and 3.10
     import tomli as tomllib
 
-SUPPORTED_COLORS = (
+CANONICAL_COLORS = (
     "default",
     "black",
     "bright_black",
-    "gray",
-    "grey",
     "red",
+    "bright_red",
     "green",
+    "bright_green",
     "yellow",
+    "bright_yellow",
     "blue",
+    "bright_blue",
     "magenta",
-    "purple",
+    "bright_magenta",
     "cyan",
+    "bright_cyan",
     "white",
+    "bright_white",
 )
+COLOR_ALIASES = {
+    "gray": "bright_black",
+    "grey": "bright_black",
+    "purple": "magenta",
+}
+SUPPORTED_COLORS = (*CANONICAL_COLORS, *COLOR_ALIASES)
 STYLE_NAMES = (
     "same",
     "omitted",
@@ -236,11 +246,7 @@ def _color_field(
         )
     if normalized == "default":
         return None
-    if normalized in ("gray", "grey"):
-        return "bright_black"
-    if normalized == "purple":
-        return "magenta"
-    return normalized
+    return COLOR_ALIASES.get(normalized, normalized)
 
 
 def _table(value: object, field: str) -> dict[str, object]:
