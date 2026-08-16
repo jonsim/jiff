@@ -14,7 +14,7 @@ from jiff_configure.app import (
     load_preview_source,
     load_themes,
 )
-from textual.widgets import Input, Select
+from textual.widgets import Input, Select, Switch
 
 import diff
 
@@ -163,6 +163,14 @@ class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
                 str(app.query_one("#toml-preview").content),
             )
 
+    async def test_bold_switch_is_one_row_tall(self):
+        app = self.make_app()
+        async with app.run_test(size=(140, 42)):
+            bold = app.query_one("#add-bold", Switch)
+
+            self.assertEqual(1, bold.size.height)
+            self.assertEqual(1, bold.parent.size.height)
+
     async def test_save_dialog_defaults_to_xdg_and_writes_valid_toml(self):
         app = self.make_app()
         with tempfile.TemporaryDirectory() as directory:
@@ -239,6 +247,18 @@ class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
             await pilot.click("#cancel-confirm")
             await pilot.pause()
             self.assertEqual("Default", app.selected_theme)
+
+    async def test_changing_an_unedited_theme_does_not_require_confirmation(self):
+        app = self.make_app()
+        async with app.run_test(size=(140, 42)) as pilot:
+            theme = app.query_one("#theme", Select)
+            theme.value = "Dracula"
+            await pilot.pause()
+            theme.value = "Nord"
+            await pilot.pause()
+
+            self.assertEqual("Nord", app.selected_theme)
+            self.assertEqual(app.themes["Nord"], app.scheme)
 
 
 if __name__ == "__main__":

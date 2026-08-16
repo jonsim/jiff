@@ -484,10 +484,11 @@ class JiffConfigureApp(App[None]):
         if name == self.selected_theme:
             return
 
-        # Put the selector back while the confirmation dialog is open. This
-        # also means cancelling leaves the entire editor exactly as it was.
-        event.select.value = self.selected_theme
-        if self.dirty:
+        selected_palette_changed = self.scheme != self.themes[self.selected_theme]
+        if self.dirty and selected_palette_changed:
+            # Put the selector back while the confirmation dialog is open. This
+            # also means cancelling leaves the entire editor exactly as it was.
+            event.select.value = self.selected_theme
             self.push_screen(
                 ConfirmDialog(
                     "Replace the unsaved palette with another theme?",
