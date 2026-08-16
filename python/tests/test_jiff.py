@@ -18,6 +18,56 @@ class CommandLineValueTests(unittest.TestCase):
         with self.assertRaisesRegex(argparse.ArgumentTypeError, "non-negative integer"):
             jiff._non_negative_int("many")
 
+    def test_ordinary_inputs_are_exactly_two_paths(self):
+        self.assertEqual(
+            jiff.ComparisonPaths("local.txt", "remote.txt", "muppet.txt"),
+            jiff._parse_input_paths(["local.txt", "remote.txt"], False, "muppet.txt"),
+        )
+        with self.assertRaisesRegex(ValueError, "expects two files"):
+            jiff._parse_input_paths(["local.txt"], False, None)
+        with self.assertRaisesRegex(ValueError, "expects two files"):
+            jiff._parse_input_paths(
+                ["local.txt", "base.txt", "remote.txt"], False, None
+            )
+
+    def test_git_external_diff_extracts_only_the_paths_jiff_uses(self):
+        self.assertEqual(
+            jiff.ComparisonPaths("/tmp/old", "/tmp/new", "muppet.txt"),
+            jiff._parse_input_paths(
+                [
+                    "muppet.txt",
+                    "/tmp/old",
+                    "old-object",
+                    "100644",
+                    "/tmp/new",
+                    "new-object",
+                    "100644",
+                ],
+                True,
+                None,
+            ),
+        )
+
+    def test_git_external_diff_accepts_an_unmerged_path(self):
+        self.assertEqual(
+            jiff.UnmergedPath("muppet.txt"),
+            jiff._parse_input_paths(["muppet.txt"], True, None),
+        )
+
+    def test_git_arguments_are_rejected_without_git_external_diff_mode(self):
+        git_arguments = [
+            "muppet.txt",
+            "/tmp/old",
+            "old-object",
+            "100644",
+            "/tmp/new",
+            "new-object",
+            "100644",
+        ]
+
+        with self.assertRaisesRegex(ValueError, "expects two files"):
+            jiff._parse_input_paths(git_arguments, False, None)
+
 
 class FileReadingTests(unittest.TestCase):
     def test_text_loses_one_terminal_newline(self):

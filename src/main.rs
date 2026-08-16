@@ -17,6 +17,18 @@ enum FileContents {
     Binary(Vec<u8>),
 }
 
+#[derive(Debug, Eq, PartialEq)]
+enum InputPaths<'a> {
+    Comparison {
+        left: &'a str,
+        right: &'a str,
+        repository_path: Option<&'a str>,
+    },
+    Unmerged {
+        repository_path: &'a str,
+    },
+}
+
 struct OutputOptions<'a> {
     repository_path: Option<&'a str>,
     inline: bool,
@@ -60,6 +72,36 @@ fn line_count(content: &str) -> usize {
         0
     } else {
         content.matches('\n').count() + 1
+    }
+}
+
+fn parse_input_paths<'a>(
+    files: &'a [&'a str],
+    git_external_diff: bool,
+    repository_path: Option<&'a str>,
+) -> Result<InputPaths<'a>, &'static str> {
+    if !git_external_diff {
+        return match files {
+            [left, right] => Ok(InputPaths::Comparison {
+                left,
+                right,
+                repository_path,
+            }),
+            _ => Err("jiff expects two files or directories"),
+        };
+    }
+
+    // Git's external-diff protocol is deliberately contained in this branch.
+    // The object IDs and modes describe the temporary files but are not needed
+    // until Jiff grows file-mode or object-aware output.
+    match files {
+        [repository_path] => Ok(InputPaths::Unmerged { repository_path }),
+        [repository_path, left, _, _, right, _, _] => Ok(InputPaths::Comparison {
+            left,
+            right,
+            repository_path: Some(repository_path),
+        }),
+        _ => Err("--git-external-diff expects one or seven arguments"),
     }
 }
 
@@ -264,7 +306,7 @@ fn main() {
                 .required(true)
                 .multiple(true)
                 .value_name("FILE")
-                .help("Files to compare, or arguments supplied by Git"),
+                .help("Files to compare"),
         )
         .get_matches();
     let files: Vec<_> = matches
@@ -272,27 +314,27 @@ fn main() {
         .expect("at least one file is required")
         .collect();
     let git_external_diff = matches.is_present("git-external-diff");
-    if git_external_diff && files.len() == 1 {
-        println!("Unmerged file: {}", files[0]);
-        return;
-    }
-
-    let (lpath, rpath, repository_path) = if git_external_diff {
-        if files.len() != 7 {
-            eprintln!("--git-external-diff expects one or seven arguments");
+    let input_paths = match parse_input_paths(
+        &files,
+        git_external_diff,
+        matches.value_of("path").filter(|path| !path.is_empty()),
+    ) {
+        Ok(input_paths) => input_paths,
+        Err(error) => {
+            eprintln!("{error}");
             process::exit(2);
         }
-        (files[1], files[4], Some(files[0]))
-    } else {
-        if files.len() != 2 {
-            eprintln!("jiff expects two files or directories");
-            process::exit(2);
+    };
+    let (lpath, rpath, repository_path) = match input_paths {
+        InputPaths::Comparison {
+            left,
+            right,
+            repository_path,
+        } => (left, right, repository_path),
+        InputPaths::Unmerged { repository_path } => {
+            println!("Unmerged file: {repository_path}");
+            return;
         }
-        (
-            files[0],
-            files[1],
-            matches.value_of("path").filter(|path| !path.is_empty()),
-        )
     };
     let context_lines = matches
         .value_of("unified")
@@ -427,6 +469,78 @@ mod tests {
         let content = "1\n2\n3\n4\n5\n6\n7\n8\n9\n10";
 
         assert_eq!(10, line_count(content));
+    }
+
+    #[test]
+    fn ordinary_inputs_are_exactly_two_paths() {
+        assert_eq!(
+            Ok(InputPaths::Comparison {
+                left: "local.txt",
+                right: "remote.txt",
+                repository_path: Some("muppet.txt"),
+            }),
+            parse_input_paths(&["local.txt", "remote.txt"], false, Some("muppet.txt"))
+        );
+        assert_eq!(
+            Err("jiff expects two files or directories"),
+            parse_input_paths(&["local.txt"], false, None)
+        );
+        assert_eq!(
+            Err("jiff expects two files or directories"),
+            parse_input_paths(&["local.txt", "base.txt", "remote.txt"], false, None)
+        );
+    }
+
+    #[test]
+    fn git_external_diff_extracts_only_the_paths_jiff_uses() {
+        assert_eq!(
+            Ok(InputPaths::Comparison {
+                left: "/tmp/old",
+                right: "/tmp/new",
+                repository_path: Some("muppet.txt"),
+            }),
+            parse_input_paths(
+                &[
+                    "muppet.txt",
+                    "/tmp/old",
+                    "old-object",
+                    "100644",
+                    "/tmp/new",
+                    "new-object",
+                    "100644",
+                ],
+                true,
+                None,
+            )
+        );
+    }
+
+    #[test]
+    fn git_external_diff_accepts_an_unmerged_path() {
+        assert_eq!(
+            Ok(InputPaths::Unmerged {
+                repository_path: "muppet.txt"
+            }),
+            parse_input_paths(&["muppet.txt"], true, None)
+        );
+    }
+
+    #[test]
+    fn git_arguments_are_rejected_without_git_external_diff_mode() {
+        let git_arguments = [
+            "muppet.txt",
+            "/tmp/old",
+            "old-object",
+            "100644",
+            "/tmp/new",
+            "new-object",
+            "100644",
+        ];
+
+        assert_eq!(
+            Err("jiff expects two files or directories"),
+            parse_input_paths(&git_arguments, false, None)
+        );
     }
 
     #[test]

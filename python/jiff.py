@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import directory_diff
@@ -17,6 +18,18 @@ import diff
 
 DEFAULT_TERMINAL_SIZE = (80, 24)
 TAB_WIDTH = 4
+
+
+@dataclass(frozen=True)
+class ComparisonPaths:
+    left: str
+    right: str
+    repository_path: str | None
+
+
+@dataclass(frozen=True)
+class UnmergedPath:
+    repository_path: str
 
 
 def file_contents(content: bytes) -> str | bytes:
@@ -42,6 +55,23 @@ def line_count(content: str) -> int:
     if not content:
         return 0
     return content.count("\n") + 1
+
+
+def _parse_input_paths(
+    files: list[str], git_external_diff: bool, repository_path: str | None
+) -> ComparisonPaths | UnmergedPath:
+    if not git_external_diff:
+        if len(files) != 2:
+            raise ValueError("jiff expects two files or directories")
+        return ComparisonPaths(files[0], files[1], repository_path)
+
+    # Keep Git's unusual positional protocol behind its explicit mode. The
+    # object IDs and modes are available here when Jiff eventually needs them.
+    if len(files) == 1:
+        return UnmergedPath(files[0])
+    if len(files) == 7:
+        return ComparisonPaths(files[1], files[4], files[0])
+    raise ValueError("--git-external-diff expects one or seven arguments")
 
 
 def file_labels(repository_path: str | None, lpath: str, rpath: str) -> tuple[str, str]:
@@ -256,26 +286,24 @@ def run():
         "files",
         nargs="+",
         metavar="FILE",
-        help="Files to compare, or arguments supplied by Git",
+        help="Files to compare",
     )
     args = parser.parse_args()
 
     if args.git_external_diff and args.path is not None:
         parser.error("--git-external-diff cannot be used with --path")
-    if args.git_external_diff and len(args.files) == 1:
-        print(f"Unmerged file: {args.files[0]}")
+    try:
+        input_paths = _parse_input_paths(
+            args.files, args.git_external_diff, args.path or None
+        )
+    except ValueError as error:
+        parser.error(str(error))
+    if isinstance(input_paths, UnmergedPath):
+        print(f"Unmerged file: {input_paths.repository_path}")
         return
-    if args.git_external_diff:
-        if len(args.files) != 7:
-            parser.error("--git-external-diff expects one or seven arguments")
-        repository_path = args.files[0]
-        lpath = args.files[1]
-        rpath = args.files[4]
-    else:
-        if len(args.files) != 2:
-            parser.error("jiff expects two files or directories")
-        lpath, rpath = args.files
-        repository_path = args.path or None
+    lpath = input_paths.left
+    rpath = input_paths.right
+    repository_path = input_paths.repository_path
 
     try:
         syntax_highlighting.validate_syntax(args.syntax)
