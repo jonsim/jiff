@@ -42,6 +42,18 @@ impl ColorScheme {
             syntax_definition: Style::default(),
         }
     }
+
+    pub(crate) fn without_additions(mut self) -> Self {
+        self.add = Style::default();
+        self.add_highlight = Style::default();
+        self
+    }
+
+    pub(crate) fn without_removals(mut self) -> Self {
+        self.remove = Style::default();
+        self.remove_highlight = Style::default();
+        self
+    }
 }
 
 impl Default for ColorScheme {

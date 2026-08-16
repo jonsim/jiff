@@ -23,11 +23,25 @@ class CommandLineValueTests(unittest.TestCase):
             jiff.ComparisonPaths("local.txt", "remote.txt", "muppet.txt"),
             jiff._parse_input_paths(["local.txt", "remote.txt"], False, "muppet.txt"),
         )
-        with self.assertRaisesRegex(ValueError, "expects two files"):
+        with self.assertRaisesRegex(ValueError, "expects two or three files"):
             jiff._parse_input_paths(["local.txt"], False, None)
-        with self.assertRaisesRegex(ValueError, "expects two files"):
+        with self.assertRaisesRegex(ValueError, "expects two or three files"):
+            jiff._parse_input_paths(
+                ["local.txt", "base.txt", "remote.txt", "fourth.txt"], False, None
+            )
+
+    def test_ordinary_inputs_accept_three_way_file_paths(self):
+        self.assertEqual(
+            jiff.ThreeWayPaths("local.txt", "base.txt", "remote.txt"),
             jiff._parse_input_paths(
                 ["local.txt", "base.txt", "remote.txt"], False, None
+            ),
+        )
+
+    def test_repository_headings_are_rejected_for_three_way_input(self):
+        with self.assertRaisesRegex(ValueError, "--path cannot be used"):
+            jiff._parse_input_paths(
+                ["local.txt", "base.txt", "remote.txt"], False, "muppet.txt"
             )
 
     def test_git_external_diff_extracts_only_the_paths_jiff_uses(self):
@@ -65,7 +79,7 @@ class CommandLineValueTests(unittest.TestCase):
             "100644",
         ]
 
-        with self.assertRaisesRegex(ValueError, "expects two files"):
+        with self.assertRaisesRegex(ValueError, "expects two or three files"):
             jiff._parse_input_paths(git_arguments, False, None)
 
 
@@ -138,6 +152,44 @@ class OutputTests(unittest.TestCase):
         self.assertEqual(
             "Binary files /tmp/kermit.dat and /tmp/kermit-copy.dat are identical\n",
             output,
+        )
+
+    def test_three_way_output_labels_both_comparisons(self):
+        output = jiff.render_three_way_output(
+            "Local choice",
+            "Common base",
+            "Remote choice",
+            "local.txt",
+            "base.txt",
+            "remote.txt",
+            True,
+            False,
+            ColorScheme.plain(),
+        )
+
+        self.assertEqual(
+            "=== 1: local.txt vs 2: base.txt ===\n"
+            "- Local choice\n"
+            "+ Common base\n"
+            "\n"
+            "=== 2: base.txt vs 3: remote.txt ===\n"
+            "- Common base\n"
+            "+ Remote choice\n",
+            output,
+        )
+
+    def test_three_way_palettes_disable_diff_styles_for_the_middle_file(self):
+        colors = ColorScheme.default()
+
+        self.assertEqual(ColorScheme.plain().add, colors.without_additions().add)
+        self.assertEqual(
+            ColorScheme.plain().add_highlight,
+            colors.without_additions().add_highlight,
+        )
+        self.assertEqual(ColorScheme.plain().remove, colors.without_removals().remove)
+        self.assertEqual(
+            ColorScheme.plain().remove_highlight,
+            colors.without_removals().remove_highlight,
         )
 
 

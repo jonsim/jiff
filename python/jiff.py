@@ -28,6 +28,13 @@ class ComparisonPaths:
 
 
 @dataclass(frozen=True)
+class ThreeWayPaths:
+    left: str
+    middle: str
+    right: str
+
+
+@dataclass(frozen=True)
 class UnmergedPath:
     repository_path: str
 
@@ -59,11 +66,15 @@ def line_count(content: str) -> int:
 
 def _parse_input_paths(
     files: list[str], git_external_diff: bool, repository_path: str | None
-) -> ComparisonPaths | UnmergedPath:
+) -> ComparisonPaths | ThreeWayPaths | UnmergedPath:
     if not git_external_diff:
-        if len(files) != 2:
-            raise ValueError("jiff expects two files or directories")
-        return ComparisonPaths(files[0], files[1], repository_path)
+        if len(files) == 2:
+            return ComparisonPaths(files[0], files[1], repository_path)
+        if len(files) == 3 and repository_path is None:
+            return ThreeWayPaths(*files)
+        if len(files) == 3:
+            raise ValueError("--path cannot be used with a three-way comparison")
+        raise ValueError("jiff expects two or three files, or two directories")
 
     # Keep Git's unusual positional protocol behind its explicit mode. The
     # object IDs and modes are available here when Jiff eventually needs them.
@@ -125,6 +136,58 @@ def render_output(
             diffs, max_line_count, color, colors, highlighting, terminal_width
         )
     return output
+
+
+def render_three_way_output(
+    left: str | bytes,
+    middle: str | bytes,
+    right: str | bytes,
+    left_path: str,
+    middle_path: str,
+    right_path: str,
+    inline: bool,
+    color: bool,
+    colors: ColorScheme,
+    context_lines: int | None = None,
+    syntax: str | None = None,
+    syntax_enabled: bool = True,
+    terminal_width: int | None = None,
+) -> str:
+    """Renders the two comparisons which share the middle input."""
+    first = render_output(
+        left,
+        middle,
+        left_path,
+        middle_path,
+        None,
+        inline,
+        color,
+        colors.without_additions(),
+        context_lines,
+        syntax,
+        syntax_enabled,
+        terminal_width,
+    )
+    second = render_output(
+        middle,
+        right,
+        middle_path,
+        right_path,
+        None,
+        inline,
+        color,
+        colors.without_removals(),
+        context_lines,
+        syntax,
+        syntax_enabled,
+        terminal_width,
+    )
+    return (
+        f"=== 1: {left_path} vs 2: {middle_path} ===\n"
+        f"{first}\n"
+        f"=== 2: {middle_path} vs 3: {right_path} ===\n"
+        f"{second}"
+    )
 
 
 def render_directory_output(
@@ -301,9 +364,6 @@ def run():
     if isinstance(input_paths, UnmergedPath):
         print(f"Unmerged file: {input_paths.repository_path}")
         return
-    lpath = input_paths.left
-    rpath = input_paths.right
-    repository_path = input_paths.repository_path
 
     try:
         syntax_highlighting.validate_syntax(args.syntax)
@@ -320,21 +380,19 @@ def run():
     color = not args.no_color
     if args.git_external_diff and color:
         diff.force_terminal_colors()
-    left_is_directory = Path(lpath).is_dir()
-    right_is_directory = Path(rpath).is_dir()
-    if left_is_directory != right_is_directory:
-        print(
-            f"Could not compare {lpath} and {rpath}: both inputs must be files "
-            "or both directories",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
     try:
-        if left_is_directory:
-            output = render_directory_output(
-                Path(lpath),
-                Path(rpath),
+        if isinstance(input_paths, ThreeWayPaths):
+            paths = (input_paths.left, input_paths.middle, input_paths.right)
+            if any(Path(path).is_dir() for path in paths):
+                joined_paths = ", ".join(paths[:-1]) + f", and {paths[-1]}"
+                print(
+                    f"Could not compare {joined_paths}: three-way inputs must be files",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            output = render_three_way_output(
+                *(read_file(path) for path in paths),
+                *paths,
                 args.inline,
                 color,
                 colors,
@@ -343,19 +401,42 @@ def run():
                 not args.no_syntax,
             )
         else:
-            output = render_output(
-                read_file(lpath),
-                read_file(rpath),
-                lpath,
-                rpath,
-                repository_path,
-                args.inline,
-                color,
-                colors,
-                args.unified,
-                args.syntax,
-                not args.no_syntax,
-            )
+            lpath = input_paths.left
+            rpath = input_paths.right
+            left_is_directory = Path(lpath).is_dir()
+            right_is_directory = Path(rpath).is_dir()
+            if left_is_directory != right_is_directory:
+                print(
+                    f"Could not compare {lpath} and {rpath}: both inputs must be "
+                    "files or both directories",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            if left_is_directory:
+                output = render_directory_output(
+                    Path(lpath),
+                    Path(rpath),
+                    args.inline,
+                    color,
+                    colors,
+                    args.unified,
+                    args.syntax,
+                    not args.no_syntax,
+                )
+            else:
+                output = render_output(
+                    read_file(lpath),
+                    read_file(rpath),
+                    lpath,
+                    rpath,
+                    input_paths.repository_path,
+                    args.inline,
+                    color,
+                    colors,
+                    args.unified,
+                    args.syntax,
+                    not args.no_syntax,
+                )
     except OSError as error:
         print(f"Could not read input: {error}", file=sys.stderr)
         sys.exit(1)

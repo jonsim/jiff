@@ -24,6 +24,11 @@ enum InputPaths<'a> {
         right: &'a str,
         repository_path: Option<&'a str>,
     },
+    ThreeWay {
+        left: &'a str,
+        middle: &'a str,
+        right: &'a str,
+    },
     Unmerged {
         repository_path: &'a str,
     },
@@ -33,6 +38,12 @@ struct OutputOptions<'a> {
     repository_path: Option<&'a str>,
     inline: bool,
     context_lines: Option<usize>,
+}
+
+#[derive(Clone, Copy)]
+struct RenderInput<'a> {
+    contents: &'a FileContents,
+    path: &'a str,
 }
 
 #[derive(Clone, Copy)]
@@ -87,7 +98,13 @@ fn parse_input_paths<'a>(
                 right,
                 repository_path,
             }),
-            _ => Err("jiff expects two files or directories"),
+            [left, middle, right] if repository_path.is_none() => Ok(InputPaths::ThreeWay {
+                left,
+                middle,
+                right,
+            }),
+            [_, _, _] => Err("--path cannot be used with a three-way comparison"),
+            _ => Err("jiff expects two or three files, or two directories"),
         };
     }
 
@@ -195,6 +212,41 @@ fn render_comparison(
     ))
 }
 
+fn render_three_way_output(
+    left: RenderInput,
+    middle: RenderInput,
+    right: RenderInput,
+    output_options: &OutputOptions,
+    highlight_options: HighlightOptions,
+    colors: &config::ColorScheme,
+) -> Result<String, syntax::HighlightError> {
+    let mut output = format!("=== 1: {} vs 2: {} ===\n", left.path, middle.path);
+    output.push_str(&render_comparison(
+        left.contents,
+        middle.contents,
+        left.path,
+        middle.path,
+        output_options,
+        highlight_options,
+        &colors.without_additions(),
+    )?);
+    output.push('\n');
+    output.push_str(&format!(
+        "=== 2: {} vs 3: {} ===\n",
+        middle.path, right.path
+    ));
+    output.push_str(&render_comparison(
+        middle.contents,
+        right.contents,
+        middle.path,
+        right.path,
+        output_options,
+        highlight_options,
+        &colors.without_removals(),
+    )?);
+    Ok(output)
+}
+
 fn render_directory_output(
     left_root: &Path,
     right_root: &Path,
@@ -238,6 +290,94 @@ fn render_directory_output(
     }
 
     Ok(output)
+}
+
+fn is_directory(path: &str) -> Result<bool, String> {
+    fs::metadata(path)
+        .map(|metadata| metadata.is_dir())
+        .map_err(|error| format!("Could not read {path}: {error}"))
+}
+
+fn read_input(path: &str) -> Result<FileContents, String> {
+    fs::read(path)
+        .map(FileContents::from_bytes)
+        .map_err(|error| format!("Could not read {path}: {error}"))
+}
+
+fn render_path_comparison(
+    left_path: &str,
+    right_path: &str,
+    output_options: &OutputOptions,
+    highlight_options: HighlightOptions,
+    colors: &config::ColorScheme,
+) -> Result<String, String> {
+    let left_is_directory = is_directory(left_path)?;
+    let right_is_directory = is_directory(right_path)?;
+    if left_is_directory != right_is_directory {
+        return Err(format!(
+            "Could not compare {left_path} and {right_path}: both inputs must be files or both directories"
+        ));
+    }
+    if left_is_directory {
+        return render_directory_output(
+            Path::new(left_path),
+            Path::new(right_path),
+            output_options,
+            highlight_options,
+            colors,
+        );
+    }
+
+    render_comparison(
+        &read_input(left_path)?,
+        &read_input(right_path)?,
+        left_path,
+        right_path,
+        output_options,
+        highlight_options,
+        colors,
+    )
+    .map_err(|error| format!("Could not highlight diff: {error}"))
+}
+
+fn render_three_paths(
+    left_path: &str,
+    middle_path: &str,
+    right_path: &str,
+    output_options: &OutputOptions,
+    highlight_options: HighlightOptions,
+    colors: &config::ColorScheme,
+) -> Result<String, String> {
+    let contains_directory =
+        is_directory(left_path)? || is_directory(middle_path)? || is_directory(right_path)?;
+    if contains_directory {
+        return Err(format!(
+            "Could not compare {left_path}, {middle_path}, and {right_path}: three-way inputs must be files"
+        ));
+    }
+
+    let left = read_input(left_path)?;
+    let middle = read_input(middle_path)?;
+    let right = read_input(right_path)?;
+
+    render_three_way_output(
+        RenderInput {
+            contents: &left,
+            path: left_path,
+        },
+        RenderInput {
+            contents: &middle,
+            path: middle_path,
+        },
+        RenderInput {
+            contents: &right,
+            path: right_path,
+        },
+        output_options,
+        highlight_options,
+        colors,
+    )
+    .map_err(|error| format!("Could not highlight diff: {error}"))
 }
 
 fn main() {
@@ -325,17 +465,10 @@ fn main() {
             process::exit(2);
         }
     };
-    let (lpath, rpath, repository_path) = match input_paths {
-        InputPaths::Comparison {
-            left,
-            right,
-            repository_path,
-        } => (left, right, repository_path),
-        InputPaths::Unmerged { repository_path } => {
-            println!("Unmerged file: {repository_path}");
-            return;
-        }
-    };
+    if let InputPaths::Unmerged { repository_path } = input_paths {
+        println!("Unmerged file: {repository_path}");
+        return;
+    }
     let context_lines = matches
         .value_of("unified")
         .map(|value| value.parse().expect("unified was validated"));
@@ -353,27 +486,6 @@ fn main() {
             process::exit(1);
         }
     };
-    let left_is_directory = match fs::metadata(lpath) {
-        Ok(metadata) => metadata.is_dir(),
-        Err(error) => {
-            eprintln!("Could not read {lpath}: {error}");
-            process::exit(1);
-        }
-    };
-    let right_is_directory = match fs::metadata(rpath) {
-        Ok(metadata) => metadata.is_dir(),
-        Err(error) => {
-            eprintln!("Could not read {rpath}: {error}");
-            process::exit(1);
-        }
-    };
-    if left_is_directory != right_is_directory {
-        eprintln!(
-            "Could not compare {lpath} and {rpath}: both inputs must be files or both directories"
-        );
-        process::exit(1);
-    }
-
     // Git sends external diff output through its own pager, so it is still
     // human-facing even though stdout is a pipe from Jiff's point of view.
     if color && !git_external_diff {
@@ -385,59 +497,50 @@ fn main() {
         colors = config::ColorScheme::plain();
     }
 
-    let output_options = OutputOptions {
-        repository_path,
-        inline,
-        context_lines,
-    };
     let highlight_options = HighlightOptions {
         color,
         enabled: !matches.is_present("no-syntax"),
         syntax_name: matches.value_of("syntax"),
     };
-    let output = if left_is_directory {
-        match render_directory_output(
-            Path::new(lpath),
-            Path::new(rpath),
-            &output_options,
+    let output = match input_paths {
+        InputPaths::Comparison {
+            left,
+            right,
+            repository_path,
+        } => render_path_comparison(
+            left,
+            right,
+            &OutputOptions {
+                repository_path,
+                inline,
+                context_lines,
+            },
             highlight_options,
             &colors,
-        ) {
-            Ok(output) => output,
-            Err(error) => {
-                eprintln!("{error}");
-                process::exit(1);
-            }
-        }
-    } else {
-        let lfile = match fs::read(lpath) {
-            Ok(contents) => FileContents::from_bytes(contents),
-            Err(error) => {
-                eprintln!("Could not read {lpath}: {error}");
-                process::exit(1);
-            }
-        };
-        let rfile = match fs::read(rpath) {
-            Ok(contents) => FileContents::from_bytes(contents),
-            Err(error) => {
-                eprintln!("Could not read {rpath}: {error}");
-                process::exit(1);
-            }
-        };
-        match render_comparison(
-            &lfile,
-            &rfile,
-            lpath,
-            rpath,
-            &output_options,
+        ),
+        InputPaths::ThreeWay {
+            left,
+            middle,
+            right,
+        } => render_three_paths(
+            left,
+            middle,
+            right,
+            &OutputOptions {
+                repository_path: None,
+                inline,
+                context_lines,
+            },
             highlight_options,
             &colors,
-        ) {
-            Ok(output) => output,
-            Err(error) => {
-                eprintln!("Could not highlight diff: {error}");
-                process::exit(1);
-            }
+        ),
+        InputPaths::Unmerged { .. } => unreachable!("unmerged input returned above"),
+    };
+    let output = match output {
+        Ok(output) => output,
+        Err(error) => {
+            eprintln!("{error}");
+            process::exit(1);
         }
     };
 
@@ -482,12 +585,40 @@ mod tests {
             parse_input_paths(&["local.txt", "remote.txt"], false, Some("muppet.txt"))
         );
         assert_eq!(
-            Err("jiff expects two files or directories"),
+            Err("jiff expects two or three files, or two directories"),
             parse_input_paths(&["local.txt"], false, None)
         );
         assert_eq!(
-            Err("jiff expects two files or directories"),
+            Err("jiff expects two or three files, or two directories"),
+            parse_input_paths(
+                &["local.txt", "base.txt", "remote.txt", "fourth.txt"],
+                false,
+                None
+            )
+        );
+    }
+
+    #[test]
+    fn ordinary_inputs_accept_three_way_file_paths() {
+        assert_eq!(
+            Ok(InputPaths::ThreeWay {
+                left: "local.txt",
+                middle: "base.txt",
+                right: "remote.txt",
+            }),
             parse_input_paths(&["local.txt", "base.txt", "remote.txt"], false, None)
+        );
+    }
+
+    #[test]
+    fn repository_headings_are_rejected_for_three_way_input() {
+        assert_eq!(
+            Err("--path cannot be used with a three-way comparison"),
+            parse_input_paths(
+                &["local.txt", "base.txt", "remote.txt"],
+                false,
+                Some("muppet.txt")
+            )
         );
     }
 
@@ -538,9 +669,56 @@ mod tests {
         ];
 
         assert_eq!(
-            Err("jiff expects two files or directories"),
+            Err("jiff expects two or three files, or two directories"),
             parse_input_paths(&git_arguments, false, None)
         );
+    }
+
+    #[test]
+    fn three_way_output_highlights_only_the_outer_files() {
+        let output = render_three_way_output(
+            RenderInput {
+                contents: &FileContents::Text("AAAAA".to_string()),
+                path: "local.txt",
+            },
+            RenderInput {
+                contents: &FileContents::Text("MMMMM".to_string()),
+                path: "base.txt",
+            },
+            RenderInput {
+                contents: &FileContents::Text("ZZZZZ".to_string()),
+                path: "remote.txt",
+            },
+            &OutputOptions {
+                repository_path: None,
+                inline: true,
+                context_lines: None,
+            },
+            HighlightOptions {
+                color: true,
+                enabled: false,
+                syntax_name: None,
+            },
+            &config::ColorScheme::default(),
+        )
+        .expect("plain text highlighting cannot fail");
+
+        assert!(output.contains("=== 1: local.txt vs 2: base.txt ===\n"));
+        assert!(output.contains("=== 2: base.txt vs 3: remote.txt ===\n"));
+        assert!(output.contains(
+            &config::ColorScheme::default()
+                .remove_highlight
+                .paint("AAAAA")
+                .to_string()
+        ));
+        assert!(output.contains("+ MMMMM\n"));
+        assert!(output.contains("- MMMMM\n"));
+        assert!(output.contains(
+            &config::ColorScheme::default()
+                .add_highlight
+                .paint("ZZZZZ")
+                .to_string()
+        ));
     }
 
     #[test]

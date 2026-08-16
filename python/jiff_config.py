@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from rich.style import Style
@@ -112,6 +112,14 @@ class ColorScheme:
             syntax_number=plain,
             syntax_definition=plain,
         )
+
+    def without_additions(self) -> ColorScheme:
+        """Returns the palette with addition diff styles disabled."""
+        return replace(self, add=ColorStyle(), add_highlight=ColorStyle())
+
+    def without_removals(self) -> ColorScheme:
+        """Returns the palette with removal diff styles disabled."""
+        return replace(self, remove=ColorStyle(), remove_highlight=ColorStyle())
 
 
 def load_color_scheme() -> ColorScheme:
