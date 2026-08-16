@@ -3,6 +3,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import syntax_highlighting
+from diff.mod import DiffType
 from jiff_config import ColorScheme, parse_color_scheme
 from jiff_configure.app import (
     ConfirmDialog,
@@ -14,6 +16,8 @@ from jiff_configure.app import (
 )
 from textual.widgets import Input, Select
 
+import diff
+
 
 class PreviewSourceTests(unittest.TestCase):
     def test_no_paths_uses_the_built_in_python_diff(self):
@@ -21,7 +25,49 @@ class PreviewSourceTests(unittest.TestCase):
 
         self.assertEqual("before.py", source.left_path)
         self.assertEqual("after.py", source.right_path)
-        self.assertEqual(1, source.context_lines)
+        self.assertEqual(4, source.context_lines)
+
+    def test_built_in_diff_exercises_every_diff_and_syntax_style(self):
+        # Every control should have a visible example on both sides of a change.
+        source = PreviewSource.built_in()
+        changes = diff.limit_context(
+            diff.calculate_line_diff(source.left, source.right),
+            source.context_lines,
+        )
+        highlighting = syntax_highlighting.highlight_files(
+            source.left,
+            source.right,
+            source.left_path,
+            source.right_path,
+            None,
+            None,
+            ColorScheme.default(),
+        )
+
+        self.assertEqual(set(DiffType), {change.kind for change in changes})
+
+        common_lines = set(source.left.splitlines()) & set(source.right.splitlines())
+        unchanged_syntax = set()
+        changed_syntax = set()
+        for content, highlighted in (
+            (source.left, highlighting.left),
+            (source.right, highlighting.right),
+        ):
+            for index, line in enumerate(content.splitlines()):
+                line_highlighting = highlighted.lines[index]
+                colors = {
+                    span.style.color.name
+                    for span in line_highlighting.spans
+                    if span.style.color is not None
+                }
+                if line in common_lines:
+                    unchanged_syntax.update(colors)
+                else:
+                    changed_syntax.update(colors)
+
+        expected_syntax = {"bright_black", "magenta", "cyan", "blue", "yellow"}
+        self.assertEqual(expected_syntax, unchanged_syntax)
+        self.assertEqual(expected_syntax, changed_syntax)
 
     def test_two_paths_load_their_text(self):
         with tempfile.TemporaryDirectory() as directory:

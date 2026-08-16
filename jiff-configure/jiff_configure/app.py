@@ -84,33 +84,93 @@ COLOR_OPTIONS = tuple(
     for name in COLOR_NAMES
 )
 
-BUILTIN_LEFT = """from dataclasses import dataclass
+BUILTIN_LEFT = r'''"""Plan tonight's Muppet Theatre show."""
 
-# Everyone needs a role before curtain-up.
-@dataclass
-class Muppet:
+from dataclasses import dataclass
+from enum import Enum
+
+VENUE = "Muppet Theatre"
+HOUSE_CAPACITY = 120
+
+# The balcony is reserved for Statler and Waldorf.
+class Stage(Enum):
+    MAIN = "main"
+    BALCONY = "balcony"
+
+
+@dataclass(frozen=True)
+class Act:
     name: str
+    stage: Stage
     entrances: int = 1
+    is_surprise: bool = False
 
-def introduce(muppet: Muppet) -> str:
-    return f"Please welcome {muppet.name}!"
+    def introduction(self) -> str:
+        return f"Please welcome {self.name}!"
 
-kermit = Muppet("Kermit", 42)
-print(introduce(kermit))"""
+    def needs_rehearsal(self) -> bool:
+        return self.entrances > 1
 
-BUILTIN_RIGHT = """from dataclasses import dataclass
 
-# Even Gonzo needs a role before curtain-up.
-@dataclass
-class Performer:
+def running_order(acts: list[Act]) -> list[str]:
+    announced: list[str] = []
+    for act in acts:
+        if act.entrances > 0:
+            announced.append(act.introduction())
+    return announced
+
+
+# Sam keeps one dependable act ready in the wings.
+acts = [
+    Act("Kermit", Stage.MAIN, 1),
+    Act("Fozzie", Stage.BALCONY, 2),
+]
+backup_act = Act("Rowlf", Stage.MAIN)
+print("\n".join(running_order(acts)))'''
+
+BUILTIN_RIGHT = r'''"""Plan tonight's spectacular Muppet Theatre show."""
+
+from dataclasses import dataclass
+from enum import Enum
+
+VENUE = "Muppet Theatre"
+HOUSE_CAPACITY = 144
+
+# The balcony is reserved for Statler and Waldorf.
+class Stage(Enum):
+    MAIN = "main"
+    BALCONY = "balcony"
+
+
+@dataclass(frozen=True)
+class Act:
     name: str
+    stage: Stage
     entrances: int = 2
+    is_surprise: bool = True
 
-def introduce(performer: Performer) -> str:
-    return f"Please welcome the Great {performer.name}!"
+    def announcement(self) -> str:
+        return f"Please welcome the magnificent {self.name}!"
 
-gonzo = Performer("Gonzo", 47)
-print(introduce(gonzo))"""
+    def needs_rehearsal(self) -> bool:
+        return self.entrances > 1
+
+
+def running_order(acts: list[Act]) -> list[str]:
+    announced: list[str] = []
+    for act in acts:
+        if act.entrances >= 1:
+            announced.append(act.announcement())
+    return announced
+
+
+# Scooter keeps two unpredictable acts ready in the wings.
+acts = [
+    Act("Kermit", Stage.MAIN, 1),
+    Act("Gonzo", Stage.BALCONY, 3),
+]
+print("\n".join(running_order(acts)))
+audience = HOUSE_CAPACITY - 4'''
 
 
 @dataclass(frozen=True)
@@ -125,8 +185,8 @@ class PreviewSource:
 
     @classmethod
     def built_in(cls) -> PreviewSource:
-        """The compact Python example which exercises every style category."""
-        return cls(BUILTIN_LEFT, BUILTIN_RIGHT, "before.py", "after.py", 1)
+        """The Python example which exercises every style category."""
+        return cls(BUILTIN_LEFT, BUILTIN_RIGHT, "before.py", "after.py", 4)
 
 
 def load_preview_source(paths: Sequence[str]) -> PreviewSource:
