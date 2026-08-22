@@ -8,4 +8,4 @@ def call_sheet(cast: list[str]) -> str:
     return f"Today's cast: {performers}. Rehearsal lasts {REHEARSAL_MINUTES} minutes."
 
 
-CAST = ["Kermit", "Fozzie", "Gonzo"]
+CAST = ["Kermit", "Gonzo"]
