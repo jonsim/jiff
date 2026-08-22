@@ -129,6 +129,13 @@ fn file_labels(repository_path: Option<&str>, lpath: &str, rpath: &str) -> (Stri
     }
 }
 
+fn display_name(path: &str) -> &str {
+    Path::new(path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(path)
+}
+
 fn render_output(
     left: &FileContents,
     right: &FileContents,
@@ -220,6 +227,53 @@ fn render_three_way_output(
     highlight_options: HighlightOptions,
     colors: &config::ColorScheme,
 ) -> Result<String, syntax::HighlightError> {
+    if !output_options.inline {
+        if let (
+            FileContents::Text(left_contents),
+            FileContents::Text(middle_contents),
+            FileContents::Text(right_contents),
+        ) = (left.contents, middle.contents, right.contents)
+        {
+            let highlighting = if highlight_options.color && highlight_options.enabled {
+                [
+                    syntax::highlight_file(
+                        left_contents,
+                        left.path,
+                        highlight_options.syntax_name,
+                        colors,
+                    )?,
+                    syntax::highlight_file(
+                        middle_contents,
+                        middle.path,
+                        highlight_options.syntax_name,
+                        colors,
+                    )?,
+                    syntax::highlight_file(
+                        right_contents,
+                        right.path,
+                        highlight_options.syntax_name,
+                        colors,
+                    )?,
+                ]
+            } else {
+                std::array::from_fn(|_| syntax::HighlightedFile::default())
+            };
+            return Ok(diff::render_three_way_side_by_side(
+                [left_contents, middle_contents, right_contents],
+                [
+                    display_name(left.path),
+                    display_name(middle.path),
+                    display_name(right.path),
+                ],
+                colors,
+                [&highlighting[0], &highlighting[1], &highlighting[2]],
+                output_options.context_lines,
+            ));
+        }
+    }
+
+    // Inline output and binary inputs remain two ordinary comparisons. There
+    // is no useful three-pane representation for a binary-file status line.
     let mut output = format!("=== 1: {} vs 2: {} ===\n", left.path, middle.path);
     output.push_str(&render_comparison(
         left.contents,

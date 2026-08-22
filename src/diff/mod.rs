@@ -497,6 +497,13 @@ fn side_by_side_line_width(term_width: usize, lineno_width: usize, separator: &s
     term_width.saturating_sub(fixed_width).div_euclid(2).max(1)
 }
 
+fn three_way_line_width(term_width: usize, lineno_width: usize, separator: &str) -> usize {
+    let separator_width = separator.width();
+    let fixed_width = 2 * separator_width + 3 * (lineno_width + 2);
+
+    term_width.saturating_sub(fixed_width).div_euclid(3).max(1)
+}
+
 /// Renders a two-column diff sized to the current terminal.
 pub(super) fn render_diffs_side_by_side(
     diffs: &[Diff],
@@ -694,6 +701,557 @@ pub(super) fn render_diffs_side_by_side(
         }
     }
 
+    output
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct IndexedLine {
+    index: usize,
+    text: String,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct LinePair {
+    left: Option<IndexedLine>,
+    right: Option<IndexedLine>,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct ThreeWayLine {
+    left: Option<IndexedLine>,
+    middle: Option<IndexedLine>,
+    right: Option<IndexedLine>,
+}
+
+impl ThreeWayLine {
+    fn is_unchanged(&self) -> bool {
+        matches!(
+            (&self.left, &self.middle, &self.right),
+            (Some(left), Some(middle), Some(right))
+                if left.text == middle.text && middle.text == right.text
+        )
+    }
+}
+
+enum ThreeWayRow {
+    Line(ThreeWayLine),
+    Omitted(usize),
+}
+
+fn append_line_pairs<'a>(
+    pairs: &mut Vec<LinePair>,
+    left_index: &mut usize,
+    right_index: &mut usize,
+    alignment: impl IntoIterator<Item = (Option<&'a str>, Option<&'a str>)>,
+) {
+    for (left, right) in alignment {
+        let left = left.map(|text| {
+            let line = IndexedLine {
+                index: *left_index,
+                text: text.to_string(),
+            };
+            *left_index += 1;
+            line
+        });
+        let right = right.map(|text| {
+            let line = IndexedLine {
+                index: *right_index,
+                text: text.to_string(),
+            };
+            *right_index += 1;
+            line
+        });
+        pairs.push(LinePair { left, right });
+    }
+}
+
+fn aligned_lines(left: &str, right: &str) -> Vec<LinePair> {
+    let mut pairs = Vec::new();
+    let mut left_index = 0;
+    let mut right_index = 0;
+
+    for change in calculate_line_diff(left, right) {
+        match change {
+            Diff::Same(same) => append_line_pairs(
+                &mut pairs,
+                &mut left_index,
+                &mut right_index,
+                same.split('\n').map(|line| (Some(line), Some(line))),
+            ),
+            Diff::Add(add) => append_line_pairs(
+                &mut pairs,
+                &mut left_index,
+                &mut right_index,
+                add.split('\n').map(|line| (None, Some(line))),
+            ),
+            Diff::Remove(remove) => append_line_pairs(
+                &mut pairs,
+                &mut left_index,
+                &mut right_index,
+                remove.split('\n').map(|line| (Some(line), None)),
+            ),
+            Diff::Replace(before, after) => {
+                let before_lines: Vec<_> = before.split('\n').collect();
+                let after_lines: Vec<_> = after.split('\n').collect();
+                append_line_pairs(
+                    &mut pairs,
+                    &mut left_index,
+                    &mut right_index,
+                    align(&before_lines, &after_lines),
+                );
+            }
+            Diff::Omitted(_) => unreachable!("unlimited line diffs contain no omissions"),
+        }
+    }
+    pairs
+}
+
+fn append_outer_lines(
+    rows: &mut Vec<ThreeWayLine>,
+    left: Vec<IndexedLine>,
+    right: Vec<IndexedLine>,
+) {
+    // Both sides inserted at the same middle-file boundary. Put corresponding
+    // insertions on one visual row without claiming they match each other.
+    let line_count = left.len().max(right.len());
+    let mut left = left.into_iter();
+    let mut right = right.into_iter();
+    for _ in 0..line_count {
+        rows.push(ThreeWayLine {
+            left: left.next(),
+            middle: None,
+            right: right.next(),
+        });
+    }
+}
+
+fn take_left_only(pairs: &[LinePair], cursor: &mut usize) -> Vec<IndexedLine> {
+    let mut lines = Vec::new();
+    while let Some(pair) = pairs.get(*cursor).filter(|pair| pair.right.is_none()) {
+        lines.push(
+            pair.left
+                .clone()
+                .expect("an aligned row cannot omit both sides"),
+        );
+        *cursor += 1;
+    }
+    lines
+}
+
+fn take_right_only(pairs: &[LinePair], cursor: &mut usize) -> Vec<IndexedLine> {
+    let mut lines = Vec::new();
+    while let Some(pair) = pairs.get(*cursor).filter(|pair| pair.left.is_none()) {
+        lines.push(
+            pair.right
+                .clone()
+                .expect("an aligned row cannot omit both sides"),
+        );
+        *cursor += 1;
+    }
+    lines
+}
+
+fn three_way_lines(left: &str, middle: &str, right: &str) -> Vec<ThreeWayLine> {
+    let left_pairs = aligned_lines(left, middle);
+    let right_pairs = aligned_lines(middle, right);
+    let middle_line_count = if middle.is_empty() {
+        0
+    } else {
+        middle.split('\n').count()
+    };
+    let mut left_cursor = 0;
+    let mut right_cursor = 0;
+    let mut rows = Vec::new();
+
+    for middle_index in 0..middle_line_count {
+        // Each pairwise alignment orders outer-only lines immediately before
+        // its next middle line. Merge those two boundaries, then consume the
+        // row anchored by this middle-file index from both alignments.
+        append_outer_lines(
+            &mut rows,
+            take_left_only(&left_pairs, &mut left_cursor),
+            take_right_only(&right_pairs, &mut right_cursor),
+        );
+
+        let left_pair = &left_pairs[left_cursor];
+        let right_pair = &right_pairs[right_cursor];
+        let middle_line = left_pair
+            .right
+            .clone()
+            .expect("every middle line appears in the left alignment");
+        debug_assert_eq!(middle_index, middle_line.index);
+        debug_assert_eq!(right_pair.left.as_ref(), Some(&middle_line));
+        rows.push(ThreeWayLine {
+            left: left_pair.left.clone(),
+            middle: Some(middle_line),
+            right: right_pair.right.clone(),
+        });
+        left_cursor += 1;
+        right_cursor += 1;
+    }
+
+    append_outer_lines(
+        &mut rows,
+        take_left_only(&left_pairs, &mut left_cursor),
+        take_right_only(&right_pairs, &mut right_cursor),
+    );
+    debug_assert_eq!(left_pairs.len(), left_cursor);
+    debug_assert_eq!(right_pairs.len(), right_cursor);
+    rows
+}
+
+fn limit_three_way_context(lines: Vec<ThreeWayLine>, context_lines: usize) -> Vec<ThreeWayRow> {
+    let mut keep = vec![false; lines.len()];
+    // Two linear passes retain nearby context before and after every change,
+    // including changes which exist on only one outer side.
+    let mut distance = usize::MAX;
+    for (index, line) in lines.iter().enumerate() {
+        distance = if line.is_unchanged() {
+            distance.saturating_add(1)
+        } else {
+            0
+        };
+        keep[index] = distance <= context_lines;
+    }
+    distance = usize::MAX;
+    for (index, line) in lines.iter().enumerate().rev() {
+        distance = if line.is_unchanged() {
+            distance.saturating_add(1)
+        } else {
+            0
+        };
+        keep[index] |= distance <= context_lines;
+    }
+
+    let mut rows = Vec::new();
+    let mut omitted = 0;
+    for (line, keep) in lines.into_iter().zip(keep) {
+        if keep {
+            if omitted > 0 {
+                rows.push(ThreeWayRow::Omitted(omitted));
+                omitted = 0;
+            }
+            rows.push(ThreeWayRow::Line(line));
+        } else {
+            omitted += 1;
+        }
+    }
+    if omitted > 0 {
+        rows.push(ThreeWayRow::Omitted(omitted));
+    }
+    rows
+}
+
+struct ThreeWayHighlighting<'a> {
+    left: &'a HighlightedFile,
+    middle: &'a HighlightedFile,
+    right: &'a HighlightedFile,
+}
+
+struct PaneLine<'a> {
+    lineno: ANSIString<'a>,
+    wrapno: ANSIString<'a>,
+    text: &'a [ANSIString<'a>],
+    present: bool,
+}
+
+fn render_three_way_line(
+    output: &mut String,
+    panes: &[PaneLine; 3],
+    line_width: usize,
+    separator: &str,
+) {
+    let wrapped: Vec<Vec<String>> = panes
+        .iter()
+        .enumerate()
+        .map(|(index, pane)| wrap_ansistrings(pane.text, line_width, index < 2).collect())
+        .collect();
+    let height = wrapped.iter().map(Vec::len).max().unwrap_or(1);
+    let padded_empty = " ".repeat(line_width);
+
+    for index in 0..height {
+        let margins: Vec<_> = panes
+            .iter()
+            .map(|pane| {
+                if index == 0 {
+                    &pane.lineno
+                } else {
+                    &pane.wrapno
+                }
+            })
+            .collect();
+        let left = wrapped[0]
+            .get(index)
+            .map(String::as_str)
+            .unwrap_or(&padded_empty);
+        let middle = wrapped[1]
+            .get(index)
+            .map(String::as_str)
+            .unwrap_or(&padded_empty);
+        let right = wrapped[2].get(index).map(String::as_str).unwrap_or("");
+
+        write!(
+            output,
+            "{} {}{}{} {}{}",
+            margins[0], left, separator, margins[1], middle, separator
+        )
+        .expect("writing to a String cannot fail");
+        if panes[2].present && index < wrapped[2].len() {
+            write!(output, "{}", margins[2]).expect("writing to a String cannot fail");
+            if !right.is_empty() {
+                write!(output, " {right}").expect("writing to a String cannot fail");
+            }
+        }
+        output.push('\n');
+    }
+}
+
+fn three_way_margin_style(line: &ThreeWayLine, styling: &DiffStyling) -> (Style, Style, Style) {
+    let left = match (&line.left, &line.middle) {
+        (Some(left), Some(middle)) if left.text == middle.text => styling.same,
+        (Some(_), Some(_)) => styling.remove,
+        (Some(_), None) => styling.remove_highlight,
+        (None, _) => styling.same,
+    };
+    let right = match (&line.middle, &line.right) {
+        (Some(middle), Some(right)) if middle.text == right.text => styling.same,
+        (Some(_), Some(_)) => styling.add,
+        (None, Some(_)) => styling.add_highlight,
+        (_, None) => styling.same,
+    };
+    (left, styling.same, right)
+}
+
+fn style_three_way_line<'a>(
+    line: &'a ThreeWayLine,
+    colors: &ColorScheme,
+    highlighting: &ThreeWayHighlighting,
+) -> [Vec<ANSIString<'a>>; 3] {
+    let left = match (&line.left, &line.middle) {
+        (Some(left), Some(middle)) if left.text != middle.text => {
+            let mut rendered = Vec::new();
+            let mut discarded_middle = Vec::new();
+            _style_diff_line(
+                &left.text,
+                &middle.text,
+                colors,
+                &mut rendered,
+                &mut discarded_middle,
+                (highlighting.left, left.index),
+                (highlighting.middle, middle.index),
+            );
+            rendered
+        }
+        (Some(left), Some(_)) => {
+            highlighting
+                .left
+                .render_line(left.index, &left.text, colors.same, &[])
+        }
+        (Some(left), None) => {
+            highlighting
+                .left
+                .render_line(left.index, &left.text, colors.remove_highlight, &[])
+        }
+        (None, _) => vec![colors.same.paint("")],
+    };
+    let middle = match &line.middle {
+        Some(middle) => {
+            highlighting
+                .middle
+                .render_line(middle.index, &middle.text, colors.same, &[])
+        }
+        None => vec![colors.same.paint("")],
+    };
+    let right = match (&line.middle, &line.right) {
+        (Some(middle), Some(right)) if middle.text != right.text => {
+            let mut discarded_middle = Vec::new();
+            let mut rendered = Vec::new();
+            _style_diff_line(
+                &middle.text,
+                &right.text,
+                colors,
+                &mut discarded_middle,
+                &mut rendered,
+                (highlighting.middle, middle.index),
+                (highlighting.right, right.index),
+            );
+            rendered
+        }
+        (Some(_), Some(right)) => {
+            highlighting
+                .right
+                .render_line(right.index, &right.text, colors.same, &[])
+        }
+        (None, Some(right)) => {
+            highlighting
+                .right
+                .render_line(right.index, &right.text, colors.add_highlight, &[])
+        }
+        (_, None) => vec![colors.same.paint("")],
+    };
+    [left, middle, right]
+}
+
+/// Renders two pairwise alignments as three panes around their shared input.
+pub(super) fn render_three_way_side_by_side(
+    contents: [&str; 3],
+    labels: [&str; 3],
+    colors: &ColorScheme,
+    highlighting: [&HighlightedFile; 3],
+    context_lines: Option<usize>,
+) -> String {
+    let lines = three_way_lines(contents[0], contents[1], contents[2]);
+    let rows = match context_lines {
+        Some(context_lines) => limit_three_way_context(lines, context_lines),
+        None => lines.into_iter().map(ThreeWayRow::Line).collect(),
+    };
+    let max_line_count = contents
+        .iter()
+        .map(|content| {
+            if content.is_empty() {
+                0
+            } else {
+                content.split('\n').count()
+            }
+        })
+        .max()
+        .unwrap_or(0);
+    let lineno_width = max_line_count.max(1).to_string().len();
+    let empty_lineno = " ".repeat(lineno_width + 1);
+    let separator = "\u{2502}";
+    let term_width = term_size::dimensions()
+        .map(|(term_width, _)| term_width)
+        .unwrap_or(120);
+    let line_width = three_way_line_width(term_width, lineno_width, separator);
+    let margin_styling = indicator_styling(colors);
+    let highlighting = ThreeWayHighlighting {
+        left: highlighting[0],
+        middle: highlighting[1],
+        right: highlighting[2],
+    };
+    let mut output = String::new();
+
+    let headings = [
+        colors.same.paint(format!("1: {}", labels[0])),
+        colors.same.paint(format!("2: {}", labels[1])),
+        colors.same.paint(format!("3: {}", labels[2])),
+    ];
+    let heading_margins = [
+        colors.same.paint(&empty_lineno),
+        colors.same.paint(&empty_lineno),
+        colors.same.paint(&empty_lineno),
+    ];
+    render_three_way_line(
+        &mut output,
+        &[
+            PaneLine {
+                lineno: heading_margins[0].clone(),
+                wrapno: heading_margins[0].clone(),
+                text: std::slice::from_ref(&headings[0]),
+                present: true,
+            },
+            PaneLine {
+                lineno: heading_margins[1].clone(),
+                wrapno: heading_margins[1].clone(),
+                text: std::slice::from_ref(&headings[1]),
+                present: true,
+            },
+            PaneLine {
+                lineno: heading_margins[2].clone(),
+                wrapno: heading_margins[2].clone(),
+                text: std::slice::from_ref(&headings[2]),
+                present: true,
+            },
+        ],
+        line_width,
+        separator,
+    );
+
+    for row in rows {
+        match row {
+            ThreeWayRow::Omitted(line_count) => {
+                let message = omission_text(line_count);
+                let rendered = colors.omitted.paint(&message);
+                let margins = colors.same.paint(&empty_lineno);
+                render_three_way_line(
+                    &mut output,
+                    &[
+                        PaneLine {
+                            lineno: margins.clone(),
+                            wrapno: margins.clone(),
+                            text: std::slice::from_ref(&rendered),
+                            present: true,
+                        },
+                        PaneLine {
+                            lineno: margins.clone(),
+                            wrapno: margins.clone(),
+                            text: std::slice::from_ref(&rendered),
+                            present: true,
+                        },
+                        PaneLine {
+                            lineno: margins.clone(),
+                            wrapno: margins.clone(),
+                            text: std::slice::from_ref(&rendered),
+                            present: true,
+                        },
+                    ],
+                    line_width,
+                    separator,
+                );
+            }
+            ThreeWayRow::Line(line) => {
+                let rendered = style_three_way_line(&line, colors, &highlighting);
+                let margin_styles = three_way_margin_style(&line, &margin_styling);
+                let numbers = [
+                    line.left.as_ref().map(|line| line.index + 1),
+                    line.middle.as_ref().map(|line| line.index + 1),
+                    line.right.as_ref().map(|line| line.index + 1),
+                ];
+                let number_text: Vec<_> = numbers
+                    .iter()
+                    .map(|number| match number {
+                        Some(number) => format!("{number:>lineno_width$}:"),
+                        None => empty_lineno.clone(),
+                    })
+                    .collect();
+                let margins = [
+                    margin_styles.0.paint(&number_text[0]),
+                    margin_styles.1.paint(&number_text[1]),
+                    margin_styles.2.paint(&number_text[2]),
+                ];
+                let wrap_margins = [
+                    margin_styles.0.paint(&empty_lineno),
+                    margin_styles.1.paint(&empty_lineno),
+                    margin_styles.2.paint(&empty_lineno),
+                ];
+                render_three_way_line(
+                    &mut output,
+                    &[
+                        PaneLine {
+                            lineno: margins[0].clone(),
+                            wrapno: wrap_margins[0].clone(),
+                            text: &rendered[0],
+                            present: line.left.is_some(),
+                        },
+                        PaneLine {
+                            lineno: margins[1].clone(),
+                            wrapno: wrap_margins[1].clone(),
+                            text: &rendered[1],
+                            present: line.middle.is_some(),
+                        },
+                        PaneLine {
+                            lineno: margins[2].clone(),
+                            wrapno: wrap_margins[2].clone(),
+                            text: &rendered[2],
+                            present: line.right.is_some(),
+                        },
+                    ],
+                    line_width,
+                    separator,
+                );
+            }
+        }
+    }
     output
 }
 
@@ -945,5 +1503,92 @@ mod tests {
     fn side_by_side_width_survives_a_tiny_terminal() {
         // Terminal resizing can report less width than the margins require.
         assert_eq!(1, side_by_side_line_width(4, 3, "│"));
+    }
+
+    #[test]
+    fn three_way_alignment_uses_the_middle_file_as_its_anchor() {
+        let lines = three_way_lines(
+            "start\nLOCAL ONLY\nanchor",
+            "start\nanchor",
+            "start\nREMOTE ONLY\nanchor",
+        );
+
+        assert_eq!(3, lines.len());
+        assert!(lines[0].is_unchanged());
+        assert_eq!(
+            Some("LOCAL ONLY"),
+            lines[1].left.as_ref().map(|line| line.text.as_str())
+        );
+        assert!(lines[1].middle.is_none());
+        assert_eq!(
+            Some("REMOTE ONLY"),
+            lines[1].right.as_ref().map(|line| line.text.as_str())
+        );
+        assert!(lines[2].is_unchanged());
+    }
+
+    #[test]
+    fn three_way_context_is_measured_from_changes_on_either_side() {
+        let lines = three_way_lines(
+            "zero\nvalue = 11\ntwo\nthree\nfour",
+            "zero\nvalue = 10\ntwo\nthree\nfour",
+            "zero\nvalue = 10\ntwo\nthree\nfour",
+        );
+
+        let rows = limit_three_way_context(lines, 1);
+
+        assert_eq!(4, rows.len());
+        assert!(matches!(rows[3], ThreeWayRow::Omitted(2)));
+    }
+
+    #[test]
+    fn three_way_renderer_draws_three_panes() {
+        let highlighting = [
+            HighlightedFile::default(),
+            HighlightedFile::default(),
+            HighlightedFile::default(),
+        ];
+
+        let output = render_three_way_side_by_side(
+            ["same\nlocal", "same\nbase", "same\nremote"],
+            ["local.txt", "base.txt", "remote.txt"],
+            &ColorScheme::plain(),
+            [&highlighting[0], &highlighting[1], &highlighting[2]],
+            None,
+        );
+
+        assert!(output.contains("1: local.txt"));
+        assert!(output.contains("2: base.txt"));
+        assert!(output.contains("3: remote.txt"));
+        assert!(output.lines().all(|line| line.matches('│').count() == 2));
+        assert!(output.lines().all(|line| !line.ends_with(' ')));
+    }
+
+    #[test]
+    fn three_way_renderer_colours_only_the_outer_files() {
+        let colors = ColorScheme::default();
+        let highlighting = [
+            HighlightedFile::default(),
+            HighlightedFile::default(),
+            HighlightedFile::default(),
+        ];
+
+        let output = render_three_way_side_by_side(
+            ["AAAAA", "MMMMM", "ZZZZZ"],
+            ["local", "base", "remote"],
+            &colors,
+            [&highlighting[0], &highlighting[1], &highlighting[2]],
+            None,
+        );
+
+        assert!(output.contains(&colors.remove_highlight.paint("AAAAA").to_string()));
+        assert!(output.contains(&colors.add_highlight.paint("ZZZZZ").to_string()));
+        assert!(!output.contains(&colors.remove_highlight.paint("MMMMM").to_string()));
+        assert!(!output.contains(&colors.add_highlight.paint("MMMMM").to_string()));
+    }
+
+    #[test]
+    fn three_way_width_accounts_for_both_separators_and_three_margins() {
+        assert_eq!(36, three_way_line_width(120, 1, "│"));
     }
 }

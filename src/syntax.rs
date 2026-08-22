@@ -160,7 +160,7 @@ pub(crate) fn highlight_files(
     })
 }
 
-fn highlight_file(
+pub(crate) fn highlight_file(
     content: &str,
     path: &str,
     syntax_name: Option<&str>,
