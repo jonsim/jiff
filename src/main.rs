@@ -9,7 +9,7 @@ use std::cmp::max;
 use std::fs;
 use std::io::IsTerminal;
 use std::path::Path;
-use std::process;
+use std::process::{self, Command};
 
 #[derive(Debug, Eq, PartialEq)]
 enum FileContents {
@@ -44,6 +44,11 @@ struct OutputOptions<'a> {
 struct RenderInput<'a> {
     contents: &'a FileContents,
     path: &'a str,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct GitIndexStage {
+    object_id: String,
 }
 
 #[derive(Clone, Copy)]
@@ -223,6 +228,7 @@ fn render_three_way_output(
     left: RenderInput,
     middle: RenderInput,
     right: RenderInput,
+    labels: [&str; 3],
     output_options: &OutputOptions,
     highlight_options: HighlightOptions,
     colors: &config::ColorScheme,
@@ -260,11 +266,7 @@ fn render_three_way_output(
             };
             return Ok(diff::render_three_way_side_by_side(
                 [left_contents, middle_contents, right_contents],
-                [
-                    display_name(left.path),
-                    display_name(middle.path),
-                    display_name(right.path),
-                ],
+                labels,
                 colors,
                 [&highlighting[0], &highlighting[1], &highlighting[2]],
                 output_options.context_lines,
@@ -274,7 +276,7 @@ fn render_three_way_output(
 
     // Inline output and binary inputs remain two ordinary comparisons. There
     // is no useful three-pane representation for a binary-file status line.
-    let mut output = format!("=== 1: {} vs 2: {} ===\n", left.path, middle.path);
+    let mut output = format!("=== 1: {} vs 2: {} ===\n", labels[0], labels[1]);
     output.push_str(&render_comparison(
         left.contents,
         middle.contents,
@@ -285,10 +287,7 @@ fn render_three_way_output(
         &colors.without_additions(),
     )?);
     output.push('\n');
-    output.push_str(&format!(
-        "=== 2: {} vs 3: {} ===\n",
-        middle.path, right.path
-    ));
+    output.push_str(&format!("=== 2: {} vs 3: {} ===\n", labels[1], labels[2]));
     output.push_str(&render_comparison(
         middle.contents,
         right.contents,
@@ -356,6 +355,152 @@ fn read_input(path: &str) -> Result<FileContents, String> {
     fs::read(path)
         .map(FileContents::from_bytes)
         .map_err(|error| format!("Could not read {path}: {error}"))
+}
+
+fn parse_unmerged_stages(
+    output: &[u8],
+    repository_path: &str,
+) -> Result<[Option<GitIndexStage>; 3], String> {
+    let mut stages = [None, None, None];
+
+    for record in output
+        .split(|byte| *byte == 0)
+        .filter(|record| !record.is_empty())
+    {
+        let Some(separator) = record.iter().position(|byte| *byte == b'\t') else {
+            return Err(format!(
+                "Git returned a malformed unmerged entry for {repository_path}"
+            ));
+        };
+        let (metadata, path_with_separator) = record.split_at(separator);
+        let path = &path_with_separator[1..];
+        if path != repository_path.as_bytes() {
+            return Err(format!(
+                "Git returned an unexpected path while reading {repository_path}"
+            ));
+        }
+
+        let fields: Vec<_> = metadata
+            .split(|byte| byte.is_ascii_whitespace())
+            .filter(|field| !field.is_empty())
+            .collect();
+        let [_, object_id, stage] = fields.as_slice() else {
+            return Err(format!(
+                "Git returned a malformed unmerged entry for {repository_path}"
+            ));
+        };
+        let stage = std::str::from_utf8(stage)
+            .ok()
+            .and_then(|stage| stage.parse::<usize>().ok())
+            .filter(|stage| (1..=3).contains(stage))
+            .ok_or_else(|| {
+                format!("Git returned an invalid stage while reading {repository_path}")
+            })?;
+        let object_id = std::str::from_utf8(object_id)
+            .map_err(|_| format!("Git returned an invalid object ID for {repository_path}"))?;
+        let slot = &mut stages[stage - 1];
+        if slot.is_some() {
+            return Err(format!(
+                "Git returned stage {stage} more than once for {repository_path}"
+            ));
+        }
+        *slot = Some(GitIndexStage {
+            object_id: object_id.to_string(),
+        });
+    }
+
+    Ok(stages)
+}
+
+fn git_error(action: &str, repository_path: &str, output: &process::Output) -> String {
+    let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    if detail.is_empty() {
+        format!(
+            "Could not {action} for {repository_path}: {}",
+            output.status
+        )
+    } else {
+        format!("Could not {action} for {repository_path}: {detail}")
+    }
+}
+
+fn read_git_stage(
+    stage: Option<&GitIndexStage>,
+    repository_path: &str,
+) -> Result<FileContents, String> {
+    let Some(stage) = stage else {
+        // Add/add and modify/delete conflicts omit one or more index stages.
+        // An empty input lets the ordinary three-way renderer show that side.
+        return Ok(FileContents::from_bytes(Vec::new()));
+    };
+    let output = Command::new("git")
+        .args(["cat-file", "blob", &stage.object_id])
+        .output()
+        .map_err(|error| format!("Could not read Git object for {repository_path}: {error}"))?;
+    if !output.status.success() {
+        return Err(git_error("read Git object", repository_path, &output));
+    }
+    Ok(FileContents::from_bytes(output.stdout))
+}
+
+fn read_unmerged_inputs(repository_path: &str) -> Result<[FileContents; 3], String> {
+    let output = Command::new("git")
+        .args([
+            "--literal-pathspecs",
+            "ls-files",
+            "--unmerged",
+            "--full-name",
+            "-z",
+            "--",
+            repository_path,
+        ])
+        .output()
+        .map_err(|error| format!("Could not read Git stages for {repository_path}: {error}"))?;
+    if !output.status.success() {
+        return Err(git_error("read Git stages", repository_path, &output));
+    }
+
+    let stages = parse_unmerged_stages(&output.stdout, repository_path)?;
+    if stages.iter().all(Option::is_none) {
+        return Err(format!("Git has no unmerged entries for {repository_path}"));
+    }
+
+    // Git names the common ancestor stage 1, ours stage 2 and theirs stage 3.
+    // Jiff's three panes are Local, Base, Remote, hence the deliberate reorder.
+    Ok([
+        read_git_stage(stages[1].as_ref(), repository_path)?,
+        read_git_stage(stages[0].as_ref(), repository_path)?,
+        read_git_stage(stages[2].as_ref(), repository_path)?,
+    ])
+}
+
+fn render_unmerged_path(
+    repository_path: &str,
+    output_options: &OutputOptions,
+    highlight_options: HighlightOptions,
+    colors: &config::ColorScheme,
+) -> Result<String, String> {
+    let [local, base, remote] = read_unmerged_inputs(repository_path)?;
+    let output = render_three_way_output(
+        RenderInput {
+            contents: &local,
+            path: repository_path,
+        },
+        RenderInput {
+            contents: &base,
+            path: repository_path,
+        },
+        RenderInput {
+            contents: &remote,
+            path: repository_path,
+        },
+        ["Local", "Base", "Remote"],
+        output_options,
+        highlight_options,
+        colors,
+    )
+    .map_err(|error| format!("Could not highlight diff: {error}"))?;
+    Ok(format!("=== Unmerged: {repository_path} ===\n{output}"))
 }
 
 fn render_path_comparison(
@@ -427,6 +572,11 @@ fn render_three_paths(
             contents: &right,
             path: right_path,
         },
+        [
+            display_name(left_path),
+            display_name(middle_path),
+            display_name(right_path),
+        ],
         output_options,
         highlight_options,
         colors,
@@ -519,10 +669,6 @@ fn main() {
             process::exit(2);
         }
     };
-    if let InputPaths::Unmerged { repository_path } = input_paths {
-        println!("Unmerged file: {repository_path}");
-        return;
-    }
     let context_lines = matches
         .value_of("unified")
         .map(|value| value.parse().expect("unified was validated"));
@@ -588,7 +734,16 @@ fn main() {
             highlight_options,
             &colors,
         ),
-        InputPaths::Unmerged { .. } => unreachable!("unmerged input returned above"),
+        InputPaths::Unmerged { repository_path } => render_unmerged_path(
+            repository_path,
+            &OutputOptions {
+                repository_path: None,
+                inline,
+                context_lines,
+            },
+            highlight_options,
+            &colors,
+        ),
     };
     let output = match output {
         Ok(output) => output,
@@ -711,6 +866,58 @@ mod tests {
     }
 
     #[test]
+    fn unmerged_index_entries_are_collected_by_stage() {
+        let output = concat!(
+            "100644 base-object 1\tmuppet cast.txt\0",
+            "100644 local-object 2\tmuppet cast.txt\0",
+            "100644 remote-object 3\tmuppet cast.txt\0",
+        );
+
+        assert_eq!(
+            [
+                Some(GitIndexStage {
+                    object_id: "base-object".to_string(),
+                }),
+                Some(GitIndexStage {
+                    object_id: "local-object".to_string(),
+                }),
+                Some(GitIndexStage {
+                    object_id: "remote-object".to_string(),
+                }),
+            ],
+            parse_unmerged_stages(output.as_bytes(), "muppet cast.txt")
+                .expect("valid index entries should parse")
+        );
+    }
+
+    #[test]
+    fn unmerged_index_entries_may_omit_the_base() {
+        let output = concat!(
+            "100644 local-object 2\tnew.txt\0",
+            "100644 remote-object 3\tnew.txt\0",
+        );
+
+        let stages = parse_unmerged_stages(output.as_bytes(), "new.txt")
+            .expect("an add/add conflict has no base stage");
+
+        assert_eq!(None, stages[0]);
+        assert_eq!("local-object", stages[1].as_ref().unwrap().object_id);
+        assert_eq!("remote-object", stages[2].as_ref().unwrap().object_id);
+    }
+
+    #[test]
+    fn malformed_unmerged_index_entries_are_rejected() {
+        let error = parse_unmerged_stages(
+            b"100644 repeated 2\tkermit.txt\0\
+              100644 repeated-again 2\tkermit.txt\0",
+            "kermit.txt",
+        )
+        .expect_err("duplicate stages are ambiguous");
+
+        assert_eq!("Git returned stage 2 more than once for kermit.txt", error);
+    }
+
+    #[test]
     fn git_arguments_are_rejected_without_git_external_diff_mode() {
         let git_arguments = [
             "muppet.txt",
@@ -743,6 +950,7 @@ mod tests {
                 contents: &FileContents::Text("ZZZZZ".to_string()),
                 path: "remote.txt",
             },
+            ["local.txt", "base.txt", "remote.txt"],
             &OutputOptions {
                 repository_path: None,
                 inline: true,
