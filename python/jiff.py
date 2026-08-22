@@ -39,6 +39,15 @@ class UnmergedPath:
     repository_path: str
 
 
+@dataclass(frozen=True)
+class GitIndexStage:
+    object_id: str
+
+
+class GitError(Exception):
+    """Git could not provide a usable unmerged index entry."""
+
+
 def file_contents(content: bytes) -> str | bytes:
     """Decodes text input while retaining binary content as bytes."""
     if b"\0" in content:
@@ -83,6 +92,98 @@ def _parse_input_paths(
     if len(files) == 7:
         return ComparisonPaths(files[1], files[4], files[0])
     raise ValueError("--git-external-diff expects one or seven arguments")
+
+
+def _parse_unmerged_stages(
+    output: bytes, repository_path: str
+) -> tuple[GitIndexStage | None, GitIndexStage | None, GitIndexStage | None]:
+    stages: list[GitIndexStage | None] = [None, None, None]
+    for record in filter(None, output.split(b"\0")):
+        metadata, separator, path = record.partition(b"\t")
+        if not separator:
+            raise GitError(
+                f"Git returned a malformed unmerged entry for {repository_path}"
+            )
+        if path != os.fsencode(repository_path):
+            raise GitError(
+                f"Git returned an unexpected path while reading {repository_path}"
+            )
+
+        fields = metadata.split()
+        if len(fields) != 3:
+            raise GitError(
+                f"Git returned a malformed unmerged entry for {repository_path}"
+            )
+        _, object_id_bytes, stage_bytes = fields
+        try:
+            object_id = object_id_bytes.decode("ascii")
+            stage = int(stage_bytes)
+        except (UnicodeDecodeError, ValueError) as error:
+            raise GitError(
+                f"Git returned an invalid stage or object ID for {repository_path}"
+            ) from error
+        if stage not in (1, 2, 3):
+            raise GitError(
+                f"Git returned an invalid stage while reading {repository_path}"
+            )
+        if stages[stage - 1] is not None:
+            raise GitError(
+                f"Git returned stage {stage} more than once for {repository_path}"
+            )
+        stages[stage - 1] = GitIndexStage(object_id)
+
+    return stages[0], stages[1], stages[2]
+
+
+def _run_git(arguments: list[str], action: str, repository_path: str) -> bytes:
+    result = subprocess.run(
+        ["git", *arguments],
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode:
+        detail = result.stderr.decode("utf-8", errors="replace").strip()
+        if not detail:
+            detail = f"Git exited with status {result.returncode}"
+        raise GitError(f"Could not {action} for {repository_path}: {detail}")
+    return result.stdout
+
+
+def _read_git_stage(stage: GitIndexStage | None, repository_path: str) -> str | bytes:
+    if stage is None:
+        # Add/add and modify/delete conflicts omit one or more index stages.
+        # An empty input lets the ordinary three-way renderer show that side.
+        return file_contents(b"")
+    return file_contents(
+        _run_git(
+            ["cat-file", "blob", stage.object_id],
+            "read Git object",
+            repository_path,
+        )
+    )
+
+
+def _read_unmerged_inputs(repository_path: str) -> tuple[str | bytes, ...]:
+    output = _run_git(
+        [
+            "--literal-pathspecs",
+            "ls-files",
+            "--unmerged",
+            "--full-name",
+            "-z",
+            "--",
+            repository_path,
+        ],
+        "read Git stages",
+        repository_path,
+    )
+    stages = _parse_unmerged_stages(output, repository_path)
+    if not any(stages):
+        raise GitError(f"Git has no unmerged entries for {repository_path}")
+
+    # Git names the common ancestor stage 1, ours stage 2 and theirs stage 3.
+    # Jiff's three panes are Local, Base, Remote, hence the deliberate reorder.
+    return tuple(_read_git_stage(stages[index], repository_path) for index in (1, 0, 2))
 
 
 def file_labels(repository_path: str | None, lpath: str, rpath: str) -> tuple[str, str]:
@@ -152,8 +253,12 @@ def render_three_way_output(
     syntax: str | None = None,
     syntax_enabled: bool = True,
     terminal_width: int | None = None,
+    labels: tuple[str, str, str] | None = None,
 ) -> str:
     """Renders a comparison whose second input is the common base."""
+    labels = labels or tuple(
+        Path(path).name or path for path in (left_path, middle_path, right_path)
+    )
     if (
         not inline
         and isinstance(left, str)
@@ -176,9 +281,7 @@ def render_three_way_output(
             )
         return diff.render_three_way_side_by_side(
             (left, middle, right),
-            tuple(
-                Path(path).name or path for path in (left_path, middle_path, right_path)
-            ),
+            labels,
             color,
             colors,
             highlighting,
@@ -217,9 +320,9 @@ def render_three_way_output(
         terminal_width,
     )
     return (
-        f"=== 1: {left_path} vs 2: {middle_path} ===\n"
+        f"=== 1: {labels[0]} vs 2: {labels[1]} ===\n"
         f"{first}\n"
-        f"=== 2: {middle_path} vs 3: {right_path} ===\n"
+        f"=== 2: {labels[1]} vs 3: {labels[2]} ===\n"
         f"{second}"
     )
 
@@ -395,10 +498,6 @@ def run():
         )
     except ValueError as error:
         parser.error(str(error))
-    if isinstance(input_paths, UnmergedPath):
-        print(f"Unmerged file: {input_paths.repository_path}")
-        return
-
     try:
         syntax_highlighting.validate_syntax(args.syntax)
     except syntax_highlighting.UnknownSyntaxError as error:
@@ -415,7 +514,23 @@ def run():
     if args.git_external_diff and color:
         diff.force_terminal_colors()
     try:
-        if isinstance(input_paths, ThreeWayPaths):
+        if isinstance(input_paths, UnmergedPath):
+            repository_path = input_paths.repository_path
+            output = f"=== Unmerged: {repository_path} ===\n"
+            output += render_three_way_output(
+                *_read_unmerged_inputs(repository_path),
+                repository_path,
+                repository_path,
+                repository_path,
+                args.inline,
+                color,
+                colors,
+                args.unified,
+                args.syntax,
+                not args.no_syntax,
+                labels=("Local", "Base", "Remote"),
+            )
+        elif isinstance(input_paths, ThreeWayPaths):
             paths = (input_paths.left, input_paths.middle, input_paths.right)
             if any(Path(path).is_dir() for path in paths):
                 joined_paths = ", ".join(paths[:-1]) + f", and {paths[-1]}"
@@ -471,6 +586,9 @@ def run():
                     args.syntax,
                     not args.no_syntax,
                 )
+    except GitError as error:
+        print(error, file=sys.stderr)
+        sys.exit(1)
     except OSError as error:
         print(f"Could not read input: {error}", file=sys.stderr)
         sys.exit(1)

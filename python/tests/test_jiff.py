@@ -106,6 +106,66 @@ class FileReadingTests(unittest.TestCase):
         self.assertEqual(content, result)
 
 
+class GitIndexTests(unittest.TestCase):
+    def test_unmerged_entries_are_collected_by_stage(self):
+        output = (
+            b"100644 base-object 1\tmuppet cast.txt\0"
+            b"100644 local-object 2\tmuppet cast.txt\0"
+            b"100644 remote-object 3\tmuppet cast.txt\0"
+        )
+
+        self.assertEqual(
+            (
+                jiff.GitIndexStage("base-object"),
+                jiff.GitIndexStage("local-object"),
+                jiff.GitIndexStage("remote-object"),
+            ),
+            jiff._parse_unmerged_stages(output, "muppet cast.txt"),
+        )
+
+    def test_unmerged_entries_may_omit_the_base(self):
+        output = b"\0".join(
+            [
+                b"100644 local-object 2\tnew.txt",
+                b"100644 remote-object 3\tnew.txt",
+            ]
+        )
+
+        self.assertEqual(
+            (
+                None,
+                jiff.GitIndexStage("local-object"),
+                jiff.GitIndexStage("remote-object"),
+            ),
+            jiff._parse_unmerged_stages(output, "new.txt"),
+        )
+
+    def test_duplicate_unmerged_stage_is_rejected(self):
+        output = b"\0".join(
+            [
+                b"100644 first-object 2\tkermit.txt",
+                b"100644 second-object 2\tkermit.txt",
+            ]
+        )
+
+        with self.assertRaisesRegex(jiff.GitError, "stage 2 more than once"):
+            jiff._parse_unmerged_stages(output, "kermit.txt")
+
+    def test_unmerged_inputs_are_reordered_for_the_three_panes(self):
+        entries = (
+            b"100644 base-object 1\tmuppet.txt\0"
+            b"100644 local-object 2\tmuppet.txt\0"
+            b"100644 remote-object 3\tmuppet.txt\0"
+        )
+        with mock.patch(
+            "jiff._run_git",
+            side_effect=[entries, b"Local\n", b"Base\n", b"Remote\n"],
+        ):
+            contents = jiff._read_unmerged_inputs("muppet.txt")
+
+        self.assertEqual(("Local", "Base", "Remote"), contents)
+
+
 class OutputTests(unittest.TestCase):
     def test_repository_path_adds_git_style_headings(self):
         output = jiff.render_output(
@@ -196,6 +256,23 @@ class OutputTests(unittest.TestCase):
         self.assertIn("2: base.txt", output)
         self.assertIn("3: remote.txt", output)
         self.assertTrue(all(line.count("│") == 2 for line in output.splitlines()))
+
+    def test_three_way_output_accepts_explicit_pane_labels(self):
+        output = jiff.render_three_way_output(
+            "Local choice",
+            "Common base",
+            "Remote choice",
+            "muppet.txt",
+            "muppet.txt",
+            "muppet.txt",
+            True,
+            False,
+            ColorScheme.plain(),
+            labels=("Local", "Base", "Remote"),
+        )
+
+        self.assertIn("=== 1: Local vs 2: Base ===\n", output)
+        self.assertIn("=== 2: Base vs 3: Remote ===\n", output)
 
     def test_three_way_palettes_disable_diff_styles_for_the_middle_file(self):
         colors = ColorScheme.default()
