@@ -289,9 +289,10 @@ uv run jiff-configure OLD NEW
 ```
 
 Pick one of the packaged themes as a starting point, then adjust the text
-colour, background colour and bold setting for each style. The side-by-side
-and inline tabs use Jiff's real Python renderer, so they update as the palette
-changes. The TOML tab shows the complete configuration which will be written.
+colour, background colour and bold setting for each style. The Side-by-side,
+Inline and Threeway tabs use Jiff's real Python renderer, so they update as the
+palette changes. The TOML tab shows the complete configuration which will be
+written.
 
 Press `Ctrl+S` or use the Save button to save it. The application asks for a
 path every time, initially suggesting `$XDG_CONFIG_HOME/jiff/config.toml` or

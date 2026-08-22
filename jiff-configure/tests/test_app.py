@@ -8,6 +8,9 @@ from diff.mod import DiffType
 from jiff_config import CANONICAL_COLORS, ColorScheme, parse_color_scheme
 from jiff_configure.app import (
     COLOR_OPTIONS,
+    THREEWAY_BASE,
+    THREEWAY_LOCAL,
+    THREEWAY_REMOTE,
     ConfirmDialog,
     JiffConfigureApp,
     PreviewSource,
@@ -69,6 +72,14 @@ class PreviewSourceTests(unittest.TestCase):
         expected_syntax = {"bright_black", "magenta", "cyan", "blue", "yellow"}
         self.assertEqual(expected_syntax, unchanged_syntax)
         self.assertEqual(expected_syntax, changed_syntax)
+
+    def test_three_way_example_lines_fit_its_narrow_panes(self):
+        for content in (THREEWAY_LOCAL, THREEWAY_BASE, THREEWAY_REMOTE):
+            with self.subTest(content=content):
+                self.assertLessEqual(
+                    max(map(len, content.splitlines()), default=0),
+                    25,
+                )
 
     def test_two_paths_load_their_text(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -158,6 +169,19 @@ class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(app.native_ansi_color)
             self.assertEqual(-1, preview.styles.color.ansi)
             self.assertEqual(-1, preview.styles.background.ansi)
+
+    async def test_threeway_tab_uses_the_three_pane_renderer(self):
+        app = self.make_app()
+        async with app.run_test(size=(140, 42)) as pilot:
+            await pilot.pause()
+            preview = app.query_one("#threeway-preview")
+            content = str(preview.content)
+
+            self.assertIn("1: local.py", content)
+            self.assertIn("2: base.py", content)
+            self.assertIn("3: remote.py", content)
+            self.assertIn('CAST = ["K"]', content)
+            self.assertIn('CAST = ["K", "Fozzie"]', content)
 
     async def test_selecting_a_theme_updates_the_scheme_and_previews(self):
         app = self.make_app()

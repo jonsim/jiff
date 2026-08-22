@@ -10,14 +10,18 @@ Run it from the root of the Jiff repository:
 uv run jiff-configure
 ```
 
-The built-in example exercises every two-file diff and syntax style. The
-three-way overlap style is available in the controls and generated TOML, but
-does not appear in this two-file preview. You can use a real pair of UTF-8 text
-files instead:
+The built-in examples exercise every diff and syntax style. Side-by-side and
+Inline show the larger two-file example. Threeway uses a separate compact
+example so all three panes remain readable beside the controls.
+
+You can use a real pair of UTF-8 text files instead:
 
 ```sh
 uv run jiff-configure OLD NEW
 ```
+
+Those files replace the Side-by-side and Inline examples. The Threeway tab
+keeps its compact built-in example.
 
 Choose a packaged theme as a starting point, adjust the individual styles and
 press `Ctrl+S` to save a complete Jiff configuration. The save dialog suggests
