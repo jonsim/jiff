@@ -1,6 +1,6 @@
 *** Settings ***
 Resource    jiff.resource
-Test Template    Three-Way Renderers Agree
+Test Template    Three-way Renderers Agree
 
 
 *** Test Cases ***    DIRECTORY      EXTENSION
@@ -10,7 +10,7 @@ Line Shapes           line-shapes    txt
 
 
 *** Keywords ***
-Three-Way Renderers Agree
+Three-way Renderers Agree
     [Documentation]    Checks both implementations draw the same three panes.
     [Arguments]    ${directory}    ${extension}
     VAR    ${root}    ${CURDIR}/../../testcases/threeway/${directory}

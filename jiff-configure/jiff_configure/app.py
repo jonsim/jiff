@@ -433,7 +433,7 @@ class JiffConfigureApp(App[None]):
                 ):
                     yield Static(id="inline-preview", classes="preview")
                 with (
-                    TabPane("Threeway", id="threeway"),
+                    TabPane("Three-way", id="threeway"),
                     VerticalScroll(classes="preview-scroll"),
                 ):
                     yield Static(id="threeway-preview", classes="preview")

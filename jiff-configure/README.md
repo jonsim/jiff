@@ -11,7 +11,7 @@ uv run jiff-configure
 ```
 
 The built-in examples exercise every diff and syntax style. Side-by-side and
-Inline show the larger two-file example. Threeway uses a separate compact
+Inline show the larger two-file example. Three-way uses a separate compact
 example so all three panes remain readable beside the controls.
 
 You can use a real pair of UTF-8 text files instead:
@@ -20,7 +20,7 @@ You can use a real pair of UTF-8 text files instead:
 uv run jiff-configure OLD NEW
 ```
 
-Those files replace the Side-by-side and Inline examples. The Threeway tab
+Those files replace the Side-by-side and Inline examples. The Three-way tab
 keeps its compact built-in example.
 
 Choose a packaged theme as a starting point, adjust the individual styles and

@@ -18,7 +18,7 @@ from jiff_configure.app import (
     load_preview_source,
     load_themes,
 )
-from textual.widgets import Input, Select, Switch
+from textual.widgets import Input, Select, Switch, TabbedContent
 
 import diff
 
@@ -176,7 +176,9 @@ class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
             await pilot.pause()
             preview = app.query_one("#threeway-preview")
             content = str(preview.content)
+            tabs = app.query_one("#preview-tabs", TabbedContent)
 
+            self.assertEqual("Three-way", tabs.get_tab("threeway").label_text)
             self.assertIn("1: local.py", content)
             self.assertIn("2: base.py", content)
             self.assertIn("3: remote.py", content)
