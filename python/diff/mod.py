@@ -12,7 +12,7 @@ from jiff_config import ColorScheme, ColorStyle
 from rich.cells import cell_len, chop_cells
 from rich.console import Console
 from rich.style import Style
-from rich.text import Text
+from rich.text import Span, Text
 from syntax_highlighting import HighlightedFile, HighlightedFiles
 
 from .align import align
@@ -403,6 +403,25 @@ def _style_diff_line(
 ) -> None:
     before_line = before_highlighting.render_line(before_index, before, styling.remove)
     after_line = after_highlighting.render_line(after_index, after, styling.add)
+    before_spans, after_spans = _line_diff_spans(before, after, styling)
+
+    for span in before_spans:
+        before_line.stylize(span.style, span.start, span.end)
+    for span in after_spans:
+        after_line.stylize(span.style, span.start, span.end)
+
+    before_text.append_text(before_line)
+    after_text.append_text(after_line)
+
+
+def _line_diff_spans(
+    before: str,
+    after: str,
+    styling: DiffStyling,
+) -> tuple[list[Span], list[Span]]:
+    """Returns the changed character spans for both versions of a line."""
+    before_spans: list[Span] = []
+    after_spans: list[Span] = []
     before_offset = 0
     after_offset = 0
 
@@ -412,24 +431,25 @@ def _style_diff_line(
             after_offset += len(change.left)
         elif change.kind == DiffType.ADD:
             end = after_offset + len(change.left)
-            after_line.stylize(styling.add_highlight, after_offset, end)
+            after_spans.append(Span(after_offset, end, styling.add_highlight))
             after_offset = end
         elif change.kind == DiffType.REMOVE:
             end = before_offset + len(change.left)
-            before_line.stylize(styling.remove_highlight, before_offset, end)
+            before_spans.append(Span(before_offset, end, styling.remove_highlight))
             before_offset = end
         elif change.kind == DiffType.REPLACE:
             before_end = before_offset + len(change.left)
             after_end = after_offset + len(change.right)
-            before_line.stylize(styling.remove_highlight, before_offset, before_end)
-            after_line.stylize(styling.add_highlight, after_offset, after_end)
+            before_spans.append(
+                Span(before_offset, before_end, styling.remove_highlight)
+            )
+            after_spans.append(Span(after_offset, after_end, styling.add_highlight))
             before_offset = before_end
             after_offset = after_end
         elif change.kind == DiffType.OMITTED:
             raise AssertionError("character diffs are never context-limited")
 
-    before_text.append_text(before_line)
-    after_text.append_text(after_line)
+    return before_spans, after_spans
 
 
 # =========================

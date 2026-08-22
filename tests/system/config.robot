@@ -15,6 +15,7 @@ Renderer Loads Custom Colours
     ...    [color]
     ...    \nadd = { color = "blue", bold = true }
     ...    \nadd_highlight = { color = "yellow", bgcolor = "blue" }
+    ...    \noverlap_highlight = { color = "white", bgcolor = "blue" }
     VAR    ${base_dir}    ${CURDIR}/../..
     VAR    ${first}    ${base_dir}/testcases/minimal/02.txt
     VAR    ${first_hello}    ${base_dir}/testcases/minimal/03.txt
@@ -26,6 +27,13 @@ Renderer Loads Custom Colours
     Output Uses Custom Colours    ${inline.stdout}
     Output Uses Custom Colours    ${side_by_side.stdout}
 
+    VAR    ${local}     ${base_dir}/testcases/threeway/overlapping/local.py
+    VAR    ${base}      ${base_dir}/testcases/threeway/overlapping/base.py
+    VAR    ${remote}    ${base_dir}/testcases/threeway/overlapping/remote.py
+    ${three_way} =    Run Keyword
+    ...    ${runner}    ${config}    --no-syntax    ${local}    ${base}    ${remote}
+    Output Uses Custom Overlap Colour    ${three_way.stdout}
+
 Output Uses Custom Colours
     [Arguments]    ${output}
     ${blue} =    Evaluate    chr(27) + "[1;34m"
@@ -33,3 +41,9 @@ Output Uses Custom Colours
     ${highlight_reordered} =    Evaluate    chr(27) + "[44;33m"
     Should Contain    ${output}    ${blue}
     Should Contain Any    ${output}    ${highlight}    ${highlight_reordered}
+
+Output Uses Custom Overlap Colour
+    [Arguments]    ${output}
+    ${overlap} =    Evaluate    chr(27) + "[37;44m"
+    ${overlap_reordered} =    Evaluate    chr(27) + "[44;37m"
+    Should Contain Any    ${output}    ${overlap}    ${overlap_reordered}

@@ -10,8 +10,10 @@ Run it from the root of the Jiff repository:
 uv run jiff-configure
 ```
 
-The built-in example is enough to exercise every style. You can use a real
-pair of UTF-8 text files instead:
+The built-in example exercises every two-file diff and syntax style. The
+three-way overlap style is available in the controls and generated TOML, but
+does not appear in this two-file preview. You can use a real pair of UTF-8 text
+files instead:
 
 ```sh
 uv run jiff-configure OLD NEW

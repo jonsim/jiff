@@ -11,7 +11,7 @@ class SyntaxDetectionTests(unittest.TestCase):
         # Automatic detection should be useful without another command-line option.
         source = "def kermit():\n    return 3"
 
-        highlighted = syntax_highlighting._highlight_file(
+        highlighted = syntax_highlighting.highlight_file(
             source, "muppet_show.py", None, ColorScheme.default()
         )
 
@@ -19,14 +19,14 @@ class SyntaxDetectionTests(unittest.TestCase):
 
     def test_explicit_syntax_overrides_a_plain_filename(self):
         # Git and process-substitution paths often have no useful extension.
-        highlighted = syntax_highlighting._highlight_file(
+        highlighted = syntax_highlighting.highlight_file(
             "def kermit():", "temporary.txt", "python", ColorScheme.default()
         )
 
         self.assertEqual("magenta", str(highlighted.lines[0].spans[0].style))
 
     def test_unknown_detected_syntax_falls_back_to_plain_text(self):
-        highlighted = syntax_highlighting._highlight_file(
+        highlighted = syntax_highlighting.highlight_file(
             "Kermit and Fozzie",
             "muppets.unknown",
             None,
@@ -39,7 +39,7 @@ class SyntaxDetectionTests(unittest.TestCase):
         with self.assertRaisesRegex(
             syntax_highlighting.UnknownSyntaxError, "great-gonzo"
         ):
-            syntax_highlighting._highlight_file(
+            syntax_highlighting.highlight_file(
                 "Kermit", "muppets.txt", "great-gonzo", ColorScheme.default()
             )
 
@@ -69,7 +69,7 @@ class SyntaxDetectionTests(unittest.TestCase):
 class SyntaxRenderingTests(unittest.TestCase):
     def test_syntax_foreground_keeps_the_diff_background(self):
         # Token colour is intentionally subordinate to the stronger diff background.
-        highlighted = syntax_highlighting._highlight_file(
+        highlighted = syntax_highlighting.highlight_file(
             "def kermit():", "muppets.py", None, ColorScheme.default()
         )
 
@@ -83,7 +83,7 @@ class SyntaxRenderingTests(unittest.TestCase):
 
     def test_multiline_lexer_state_is_kept(self):
         # The second line remains a string because the whole file is highlighted at once.
-        highlighted = syntax_highlighting._highlight_file(
+        highlighted = syntax_highlighting.highlight_file(
             '"""Kermit\nthe Frog"""',
             "muppets.py",
             None,

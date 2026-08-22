@@ -178,6 +178,25 @@ class OutputTests(unittest.TestCase):
             output,
         )
 
+    def test_three_way_side_by_side_output_draws_three_panes(self):
+        output = jiff.render_three_way_output(
+            "same\nLocal choice",
+            "same\nCommon base",
+            "same\nRemote choice",
+            "/tmp/local.txt",
+            "/tmp/base.txt",
+            "/tmp/remote.txt",
+            False,
+            False,
+            ColorScheme.plain(),
+            terminal_width=120,
+        )
+
+        self.assertIn("1: local.txt", output)
+        self.assertIn("2: base.txt", output)
+        self.assertIn("3: remote.txt", output)
+        self.assertTrue(all(line.count("│") == 2 for line in output.splitlines()))
+
     def test_three_way_palettes_disable_diff_styles_for_the_middle_file(self):
         colors = ColorScheme.default()
 

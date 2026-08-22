@@ -87,17 +87,18 @@ def highlight_files(
         right_path = repository_path
 
     return HighlightedFiles(
-        left=_highlight_file(left, left_path, syntax, colors),
-        right=_highlight_file(right, right_path, syntax, colors),
+        left=highlight_file(left, left_path, syntax, colors),
+        right=highlight_file(right, right_path, syntax, colors),
     )
 
 
-def _highlight_file(
+def highlight_file(
     content: str,
     path: str,
     syntax: str | None,
     colors: ColorScheme,
 ) -> HighlightedFile:
+    """Highlights one source file using an explicit or detected lexer."""
     try:
         if syntax is None or syntax.lower() == "auto":
             lexer = get_lexer_for_filename(path, content)

@@ -45,6 +45,18 @@ jiff -U3 FILE1 FILE2
 Omitted regions are marked with their number of unchanged lines in either
 output layout. `-U0` shows only changed lines and those markers.
 
+Pass three files to compare two versions against a common base. The second
+file is the base, so the order is `LOCAL BASE REMOTE`:
+
+```sh
+jiff LOCAL BASE REMOTE
+```
+
+Side-by-side mode draws one pane per file. Changes are highlighted in the two
+outer panes, while the base pane shows the exact text changed by the local
+side, the remote side or both. `--inline` falls back to two labelled diffs,
+`LOCAL` against `BASE` followed by `BASE` against `REMOTE`.
+
 ### Syntax highlighting
 
 Jiff automatically detects source languages from the input filenames. Git

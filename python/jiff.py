@@ -153,7 +153,41 @@ def render_three_way_output(
     syntax_enabled: bool = True,
     terminal_width: int | None = None,
 ) -> str:
-    """Renders the two comparisons which share the middle input."""
+    """Renders a comparison whose second input is the common base."""
+    if (
+        not inline
+        and isinstance(left, str)
+        and isinstance(middle, str)
+        and isinstance(right, str)
+    ):
+        highlighting = (
+            syntax_highlighting.HighlightedFile(),
+            syntax_highlighting.HighlightedFile(),
+            syntax_highlighting.HighlightedFile(),
+        )
+        if color and syntax_enabled:
+            highlighting = tuple(
+                syntax_highlighting.highlight_file(content, path, syntax, colors)
+                for content, path in zip(
+                    (left, middle, right),
+                    (left_path, middle_path, right_path),
+                    strict=True,
+                )
+            )
+        return diff.render_three_way_side_by_side(
+            (left, middle, right),
+            tuple(
+                Path(path).name or path for path in (left_path, middle_path, right_path)
+            ),
+            color,
+            colors,
+            highlighting,
+            context_lines,
+            terminal_width,
+        )
+
+    # Inline output and binary inputs remain two ordinary comparisons. There
+    # is no useful three-pane representation for a binary-file status line.
     first = render_output(
         left,
         middle,
