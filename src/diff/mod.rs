@@ -4,12 +4,12 @@ mod wrap;
 use crate::config::ColorScheme;
 use crate::syntax::{HighlightedFile, HighlightedFiles};
 use align::align;
-use ansi_term::Style;
-use ansi_term::{ANSIString, ANSIStrings};
+use ansi_term::{ANSIString, ANSIStrings, Color, Style};
 use itertools::EitherOrBoth;
 use itertools::Itertools;
 use similar::{capture_diff_slices, Algorithm, DiffTag, TextDiff};
 use std::fmt::Write;
+use std::ops::Range;
 use std::sync::LazyLock;
 use unicode_width::UnicodeWidthStr;
 use wrap::wrap_ansistrings;
@@ -430,17 +430,13 @@ fn _render_side_by_side_line(
     }
 }
 
-fn _style_diff_line<'u>(
-    before: &'u str,
-    after: &'u str,
+type StyleOverride = (Range<usize>, Style);
+
+fn line_diff_overrides(
+    before: &str,
+    after: &str,
     styling: &ColorScheme,
-    before_fmts: &mut Vec<ANSIString<'u>>,
-    after_fmts: &mut Vec<ANSIString<'u>>,
-    before_syntax: (&HighlightedFile, usize),
-    after_syntax: (&HighlightedFile, usize),
-) {
-    let (before_highlighting, before_index) = before_syntax;
-    let (after_highlighting, after_index) = after_syntax;
+) -> (Vec<StyleOverride>, Vec<StyleOverride>) {
     let mut before_overrides = Vec::new();
     let mut after_overrides = Vec::new();
     let mut before_offset = 0;
@@ -473,6 +469,22 @@ fn _style_diff_line<'u>(
             Diff::Omitted(_) => unreachable!("character diffs are never context-limited"),
         }
     }
+
+    (before_overrides, after_overrides)
+}
+
+fn _style_diff_line<'u>(
+    before: &'u str,
+    after: &'u str,
+    styling: &ColorScheme,
+    before_fmts: &mut Vec<ANSIString<'u>>,
+    after_fmts: &mut Vec<ANSIString<'u>>,
+    before_syntax: (&HighlightedFile, usize),
+    after_syntax: (&HighlightedFile, usize),
+) {
+    let (before_highlighting, before_index) = before_syntax;
+    let (after_highlighting, after_index) = after_syntax;
+    let (before_overrides, after_overrides) = line_diff_overrides(before, after, styling);
 
     before_fmts.extend(before_highlighting.render_line(
         before_index,
@@ -1022,72 +1034,147 @@ fn three_way_margin_style(line: &ThreeWayLine, styling: &DiffStyling) -> (Style,
     (left, styling.same, right)
 }
 
+fn middle_overlap_style(colors: &ColorScheme) -> Style {
+    if colors.add_highlight.is_plain() && colors.remove_highlight.is_plain() {
+        Style::default()
+    } else {
+        // This is deliberately internal while the three-way display remains a
+        // prototype. If the UX survives, it should become a configurable style.
+        Color::Black.on(Color::Yellow)
+    }
+}
+
+fn merge_middle_overrides(
+    from_left: &[StyleOverride],
+    from_right: &[StyleOverride],
+    overlap: Style,
+) -> Vec<StyleOverride> {
+    let mut boundaries = Vec::new();
+    for (range, _) in from_left.iter().chain(from_right) {
+        boundaries.push(range.start);
+        boundaries.push(range.end);
+    }
+    boundaries.sort_unstable();
+    boundaries.dedup();
+
+    let mut merged: Vec<StyleOverride> = Vec::new();
+    for boundary in boundaries.windows(2) {
+        let start = boundary[0];
+        let end = boundary[1];
+        let left_style = from_left
+            .iter()
+            .find(|(range, _)| range.start <= start && start < range.end)
+            .map(|(_, style)| *style);
+        let right_style = from_right
+            .iter()
+            .find(|(range, _)| range.start <= start && start < range.end)
+            .map(|(_, style)| *style);
+        let style = match (left_style, right_style) {
+            (Some(_), Some(_)) => overlap,
+            (Some(style), None) | (None, Some(style)) => style,
+            (None, None) => continue,
+        };
+
+        if let Some((previous_range, previous_style)) = merged.last_mut() {
+            if previous_range.end == start && *previous_style == style {
+                previous_range.end = end;
+                continue;
+            }
+        }
+        merged.push((start..end, style));
+    }
+    merged
+}
+
+fn full_line_override(line: &IndexedLine, style: Style) -> Vec<StyleOverride> {
+    if line.text.is_empty() {
+        Vec::new()
+    } else {
+        vec![(0..line.text.len(), style)]
+    }
+}
+
 fn style_three_way_line<'a>(
     line: &'a ThreeWayLine,
     colors: &ColorScheme,
     highlighting: &ThreeWayHighlighting,
 ) -> [Vec<ANSIString<'a>>; 3] {
-    let left = match (&line.left, &line.middle) {
+    let (left, middle_from_left) = match (&line.left, &line.middle) {
         (Some(left), Some(middle)) if left.text != middle.text => {
-            let mut rendered = Vec::new();
-            let mut discarded_middle = Vec::new();
-            _style_diff_line(
-                &left.text,
-                &middle.text,
-                colors,
-                &mut rendered,
-                &mut discarded_middle,
-                (highlighting.left, left.index),
-                (highlighting.middle, middle.index),
-            );
-            rendered
+            let (left_overrides, middle_overrides) =
+                line_diff_overrides(&left.text, &middle.text, colors);
+            (
+                highlighting.left.render_line(
+                    left.index,
+                    &left.text,
+                    colors.remove,
+                    &left_overrides,
+                ),
+                middle_overrides,
+            )
         }
-        (Some(left), Some(_)) => {
+        (Some(left), Some(_)) => (
             highlighting
                 .left
-                .render_line(left.index, &left.text, colors.same, &[])
-        }
-        (Some(left), None) => {
+                .render_line(left.index, &left.text, colors.same, &[]),
+            Vec::new(),
+        ),
+        (Some(left), None) => (
             highlighting
                 .left
-                .render_line(left.index, &left.text, colors.remove_highlight, &[])
+                .render_line(left.index, &left.text, colors.remove_highlight, &[]),
+            Vec::new(),
+        ),
+        (None, Some(middle)) => (
+            vec![colors.same.paint("")],
+            full_line_override(middle, colors.add_highlight),
+        ),
+        (None, None) => (vec![colors.same.paint("")], Vec::new()),
+    };
+    let (middle_from_right, right) = match (&line.middle, &line.right) {
+        (Some(middle), Some(right)) if middle.text != right.text => {
+            let (middle_overrides, right_overrides) =
+                line_diff_overrides(&middle.text, &right.text, colors);
+            (
+                middle_overrides,
+                highlighting.right.render_line(
+                    right.index,
+                    &right.text,
+                    colors.add,
+                    &right_overrides,
+                ),
+            )
         }
-        (None, _) => vec![colors.same.paint("")],
+        (Some(_), Some(right)) => (
+            Vec::new(),
+            highlighting
+                .right
+                .render_line(right.index, &right.text, colors.same, &[]),
+        ),
+        (Some(middle), None) => (
+            full_line_override(middle, colors.remove_highlight),
+            vec![colors.same.paint("")],
+        ),
+        (None, Some(right)) => (
+            Vec::new(),
+            highlighting
+                .right
+                .render_line(right.index, &right.text, colors.add_highlight, &[]),
+        ),
+        (None, None) => (Vec::new(), vec![colors.same.paint("")]),
     };
     let middle = match &line.middle {
         Some(middle) => {
+            let overrides = merge_middle_overrides(
+                &middle_from_left,
+                &middle_from_right,
+                middle_overlap_style(colors),
+            );
             highlighting
                 .middle
-                .render_line(middle.index, &middle.text, colors.same, &[])
+                .render_line(middle.index, &middle.text, colors.same, &overrides)
         }
         None => vec![colors.same.paint("")],
-    };
-    let right = match (&line.middle, &line.right) {
-        (Some(middle), Some(right)) if middle.text != right.text => {
-            let mut discarded_middle = Vec::new();
-            let mut rendered = Vec::new();
-            _style_diff_line(
-                &middle.text,
-                &right.text,
-                colors,
-                &mut discarded_middle,
-                &mut rendered,
-                (highlighting.middle, middle.index),
-                (highlighting.right, right.index),
-            );
-            rendered
-        }
-        (Some(_), Some(right)) => {
-            highlighting
-                .right
-                .render_line(right.index, &right.text, colors.same, &[])
-        }
-        (None, Some(right)) => {
-            highlighting
-                .right
-                .render_line(right.index, &right.text, colors.add_highlight, &[])
-        }
-        (_, None) => vec![colors.same.paint("")],
     };
     [left, middle, right]
 }
@@ -1562,10 +1649,11 @@ mod tests {
         assert!(output.contains("3: remote.txt"));
         assert!(output.lines().all(|line| line.matches('│').count() == 2));
         assert!(output.lines().all(|line| !line.ends_with(' ')));
+        assert!(!output.contains("\x1b["));
     }
 
     #[test]
-    fn three_way_renderer_colours_only_the_outer_files() {
+    fn three_way_renderer_marks_middle_text_changed_on_both_sides() {
         let colors = ColorScheme::default();
         let highlighting = [
             HighlightedFile::default(),
@@ -1583,8 +1671,85 @@ mod tests {
 
         assert!(output.contains(&colors.remove_highlight.paint("AAAAA").to_string()));
         assert!(output.contains(&colors.add_highlight.paint("ZZZZZ").to_string()));
-        assert!(!output.contains(&colors.remove_highlight.paint("MMMMM").to_string()));
-        assert!(!output.contains(&colors.add_highlight.paint("MMMMM").to_string()));
+        assert!(output.contains(&Color::Black.on(Color::Yellow).paint("MMMMM").to_string()));
+    }
+
+    #[test]
+    fn middle_highlights_split_partially_overlapping_changes() {
+        let add = Color::Black.on(Color::Green);
+        let remove = Color::Black.on(Color::Red);
+        let overlap = Color::Black.on(Color::Yellow);
+
+        let merged = merge_middle_overrides(&[(1..5, add)], &[(3..7, remove)], overlap);
+
+        assert_eq!(vec![(1..3, add), (3..5, overlap), (5..7, remove)], merged);
+    }
+
+    #[test]
+    fn three_way_renderer_marks_middle_intraline_changes_from_each_side() {
+        let colors = ColorScheme::default();
+        let highlighting = [
+            HighlightedFile::default(),
+            HighlightedFile::default(),
+            HighlightedFile::default(),
+        ];
+        let references = [&highlighting[0], &highlighting[1], &highlighting[2]];
+
+        let changed_from_left = render_three_way_side_by_side(
+            ["hello world", "hello cruel world", "hello cruel world"],
+            ["local", "base", "remote"],
+            &colors,
+            references,
+            None,
+        );
+        let changed_from_right = render_three_way_side_by_side(
+            ["hello cruel world", "hello cruel world", "hello world"],
+            ["local", "base", "remote"],
+            &colors,
+            references,
+            None,
+        );
+
+        assert!(changed_from_left.contains(&colors.add_highlight.paint("cruel ").to_string()));
+        assert!(changed_from_right.contains(&colors.remove_highlight.paint("cruel ").to_string()));
+    }
+
+    #[test]
+    fn three_way_renderer_marks_whole_middle_lines_missing_from_outer_files() {
+        let colors = ColorScheme::default();
+        let highlighting = [
+            HighlightedFile::default(),
+            HighlightedFile::default(),
+            HighlightedFile::default(),
+        ];
+
+        let missing_from_left = render_three_way_side_by_side(
+            [
+                "start\nend",
+                "start\nbase only\nend",
+                "start\nbase only\nend",
+            ],
+            ["local", "base", "remote"],
+            &colors,
+            [&highlighting[0], &highlighting[1], &highlighting[2]],
+            None,
+        );
+        let missing_from_right = render_three_way_side_by_side(
+            [
+                "start\nbase only\nend",
+                "start\nbase only\nend",
+                "start\nend",
+            ],
+            ["local", "base", "remote"],
+            &colors,
+            [&highlighting[0], &highlighting[1], &highlighting[2]],
+            None,
+        );
+
+        assert!(missing_from_left.contains(&colors.add_highlight.paint("base only").to_string()));
+        assert!(
+            missing_from_right.contains(&colors.remove_highlight.paint("base only").to_string())
+        );
     }
 
     #[test]
