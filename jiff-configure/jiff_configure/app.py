@@ -46,6 +46,7 @@ DIFF_STYLE_NAMES = (
     "add_highlight",
     "remove",
     "remove_highlight",
+    "overlap_highlight",
 )
 SYNTAX_STYLE_NAMES = (
     "syntax_comment",
@@ -62,6 +63,7 @@ STYLE_LABELS = {
     "add_highlight": "Added highlights",
     "remove": "Removed text",
     "remove_highlight": "Removed highlights",
+    "overlap_highlight": "Three-way overlap",
     "syntax_comment": "Syntax: comments",
     "syntax_keyword": "Syntax: keywords",
     "syntax_string": "Syntax: strings",

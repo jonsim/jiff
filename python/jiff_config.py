@@ -44,6 +44,7 @@ STYLE_NAMES = (
     "add_highlight",
     "remove",
     "remove_highlight",
+    "overlap_highlight",
     "syntax_comment",
     "syntax_keyword",
     "syntax_string",
@@ -74,6 +75,7 @@ class ColorScheme:
     add_highlight: ColorStyle
     remove: ColorStyle
     remove_highlight: ColorStyle
+    overlap_highlight: ColorStyle
     syntax_comment: ColorStyle
     syntax_keyword: ColorStyle
     syntax_string: ColorStyle
@@ -89,6 +91,7 @@ class ColorScheme:
             add_highlight=ColorStyle(color="black", bgcolor="green"),
             remove=ColorStyle(color="red"),
             remove_highlight=ColorStyle(color="black", bgcolor="red"),
+            overlap_highlight=ColorStyle(color="black", bgcolor="yellow"),
             syntax_comment=ColorStyle(color="bright_black"),
             syntax_keyword=ColorStyle(color="magenta"),
             syntax_string=ColorStyle(color="cyan"),
@@ -106,6 +109,7 @@ class ColorScheme:
             add_highlight=plain,
             remove=plain,
             remove_highlight=plain,
+            overlap_highlight=plain,
             syntax_comment=plain,
             syntax_keyword=plain,
             syntax_string=plain,

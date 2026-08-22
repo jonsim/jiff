@@ -7,6 +7,7 @@ add = { color = "bright_green", bold = true }
 add_highlight = { color = "black", bgcolor = "green", bold = true }
 remove = { color = "bright_red", bold = true }
 remove_highlight = { color = "black", bgcolor = "red", bold = true }
+overlap_highlight = { color = "black", bgcolor = "yellow", bold = true }
 
 syntax_comment = { color = "bright_black" }
 syntax_keyword = { color = "bright_red" }

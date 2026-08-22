@@ -19,6 +19,7 @@ pub(crate) struct ColorScheme {
     pub(crate) add_highlight: Style,
     pub(crate) remove: Style,
     pub(crate) remove_highlight: Style,
+    pub(crate) overlap_highlight: Style,
     pub(crate) syntax_comment: Style,
     pub(crate) syntax_keyword: Style,
     pub(crate) syntax_string: Style,
@@ -35,6 +36,7 @@ impl ColorScheme {
             add_highlight: Style::default(),
             remove: Style::default(),
             remove_highlight: Style::default(),
+            overlap_highlight: Style::default(),
             syntax_comment: Style::default(),
             syntax_keyword: Style::default(),
             syntax_string: Style::default(),
@@ -65,6 +67,7 @@ impl Default for ColorScheme {
             add_highlight: Color::Black.on(Color::Green),
             remove: Color::Red.normal(),
             remove_highlight: Color::Black.on(Color::Red),
+            overlap_highlight: Color::Black.on(Color::Yellow),
             syntax_comment: Color::Fixed(8).normal(),
             syntax_keyword: Color::Purple.normal(),
             syntax_string: Color::Cyan.normal(),
@@ -171,6 +174,7 @@ fn parse_config(contents: &str, path: &Path) -> Result<ColorScheme, ConfigError>
             "add_highlight",
             "remove",
             "remove_highlight",
+            "overlap_highlight",
             "syntax_comment",
             "syntax_keyword",
             "syntax_string",
@@ -209,6 +213,13 @@ fn parse_config(contents: &str, path: &Path) -> Result<ColorScheme, ConfigError>
         color.get("remove_highlight"),
         scheme.remove_highlight,
         "color.remove_highlight",
+        path,
+        true,
+    )?;
+    scheme.overlap_highlight = parse_style(
+        color.get("overlap_highlight"),
+        scheme.overlap_highlight,
+        "color.overlap_highlight",
         path,
         true,
     )?;
@@ -474,6 +485,21 @@ mod tests {
 
         assert_eq!(Some(Color::Fixed(8)), scheme.syntax_comment.foreground);
         assert!(scheme.syntax_comment.is_bold);
+    }
+
+    #[test]
+    fn three_way_overlap_highlight_is_configurable() {
+        let scheme = parse(
+            r#"
+            [color.overlap_highlight]
+            color = "white"
+            bgcolor = "blue"
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(Some(Color::White), scheme.overlap_highlight.foreground);
+        assert_eq!(Some(Color::Blue), scheme.overlap_highlight.background);
     }
 
     #[test]

@@ -79,6 +79,21 @@ class ColorConfigTests(unittest.TestCase):
         self.assertEqual("bright_black", scheme.syntax_comment.color)
         self.assertTrue(scheme.syntax_comment.bold)
 
+    def test_three_way_overlap_highlight_is_configurable(self):
+        scheme = jiff_config._parse_color_scheme(
+            {
+                "color": {
+                    "overlap_highlight": {
+                        "color": "white",
+                        "bgcolor": "blue",
+                    }
+                }
+            }
+        )
+
+        self.assertEqual("white", scheme.overlap_highlight.color)
+        self.assertEqual("blue", scheme.overlap_highlight.bgcolor)
+
     def test_syntax_colours_cannot_hide_the_diff_background(self):
         # Backgrounds belong to the diff, which is the primary signal in Jiff.
         with self.assertRaisesRegex(

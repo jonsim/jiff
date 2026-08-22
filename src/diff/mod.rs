@@ -4,7 +4,7 @@ mod wrap;
 use crate::config::ColorScheme;
 use crate::syntax::{HighlightedFile, HighlightedFiles};
 use align::align;
-use ansi_term::{ANSIString, ANSIStrings, Color, Style};
+use ansi_term::{ANSIString, ANSIStrings, Style};
 use itertools::EitherOrBoth;
 use itertools::Itertools;
 use similar::{capture_diff_slices, Algorithm, DiffTag, TextDiff};
@@ -1034,16 +1034,6 @@ fn three_way_margin_style(line: &ThreeWayLine, styling: &DiffStyling) -> (Style,
     (left, styling.same, right)
 }
 
-fn middle_overlap_style(colors: &ColorScheme) -> Style {
-    if colors.add_highlight.is_plain() && colors.remove_highlight.is_plain() {
-        Style::default()
-    } else {
-        // This is deliberately internal while the three-way display remains a
-        // prototype. If the UX survives, it should become a configurable style.
-        Color::Black.on(Color::Yellow)
-    }
-}
-
 fn merge_middle_overrides(
     from_left: &[StyleOverride],
     from_right: &[StyleOverride],
@@ -1168,7 +1158,7 @@ fn style_three_way_line<'a>(
             let overrides = merge_middle_overrides(
                 &middle_from_left,
                 &middle_from_right,
-                middle_overlap_style(colors),
+                colors.overlap_highlight,
             );
             highlighting
                 .middle
@@ -1345,6 +1335,7 @@ pub(super) fn render_three_way_side_by_side(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ansi_term::Color;
 
     #[test]
     fn line_diff_preserves_unchanged_text() {
@@ -1671,7 +1662,7 @@ mod tests {
 
         assert!(output.contains(&colors.remove_highlight.paint("AAAAA").to_string()));
         assert!(output.contains(&colors.add_highlight.paint("ZZZZZ").to_string()));
-        assert!(output.contains(&Color::Black.on(Color::Yellow).paint("MMMMM").to_string()));
+        assert!(output.contains(&colors.overlap_highlight.paint("MMMMM").to_string()));
     }
 
     #[test]

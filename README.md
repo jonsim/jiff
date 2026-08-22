@@ -162,11 +162,12 @@ These styles control the diff itself:
 | `add_highlight` | Changed characters and unpaired side-by-side additions | `black` | `green` |
 | `remove` | Normal removed text and unchanged characters in paired lines | `red` | Terminal default |
 | `remove_highlight` | Changed characters and unpaired side-by-side removals | `black` | `red` |
+| `overlap_highlight` | Middle-pane characters changed by both outer files in a three-way diff | `black` | `yellow` |
 
-All six accept `color`, `bgcolor` and `bold`. Their built-in `bold` value is
+All seven accept `color`, `bgcolor` and `bold`. Their built-in `bold` value is
 `false`. Line numbers and the `+`/`-` markers inherit the corresponding diff
 colour and are deliberately bold so they remain visible beside highlighted
-text.
+text. `overlap_highlight` is only used in three-way side-by-side output.
 
 #### Syntax highlighting styles
 

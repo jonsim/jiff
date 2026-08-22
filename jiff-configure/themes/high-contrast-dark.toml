@@ -6,6 +6,7 @@ add = { color = "bright_cyan", bold = true }
 add_highlight = { color = "black", bgcolor = "cyan", bold = true }
 remove = { color = "bright_yellow", bold = true }
 remove_highlight = { color = "black", bgcolor = "yellow", bold = true }
+overlap_highlight = { color = "black", bgcolor = "magenta", bold = true }
 
 # Syntax uses foregrounds only, leaving the diff backgrounds in charge.
 syntax_comment = { color = "bright_black" }
