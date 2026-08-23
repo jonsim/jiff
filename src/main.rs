@@ -48,6 +48,9 @@ struct RenderInput<'a> {
 
 #[derive(Debug, Eq, PartialEq)]
 struct GitIndexStage {
+    // The mode determines the Git object type. Most stages are blobs, while a
+    // 160000 gitlink names the checked-out commit of a submodule.
+    mode: String,
     object_id: String,
 }
 
@@ -113,9 +116,9 @@ fn parse_input_paths<'a>(
         };
     }
 
-    // Git's external-diff protocol is deliberately contained in this branch.
-    // The object IDs and modes describe the temporary files but are not needed
-    // until Jiff grows file-mode or object-aware output.
+    // Keep Git's unusual positional protocol behind its explicit mode. The
+    // seven-argument form supplies temporary files; the one-argument form
+    // identifies an unresolved index entry which Jiff must read from Git.
     match files {
         [repository_path] => Ok(InputPaths::Unmerged { repository_path }),
         [repository_path, left, _, _, right, _, _] => Ok(InputPaths::Comparison {
@@ -384,7 +387,7 @@ fn parse_unmerged_stages(
             .split(|byte| byte.is_ascii_whitespace())
             .filter(|field| !field.is_empty())
             .collect();
-        let [_, object_id, stage] = fields.as_slice() else {
+        let [mode, object_id, stage] = fields.as_slice() else {
             return Err(format!(
                 "Git returned a malformed unmerged entry for {repository_path}"
             ));
@@ -398,6 +401,8 @@ fn parse_unmerged_stages(
             })?;
         let object_id = std::str::from_utf8(object_id)
             .map_err(|_| format!("Git returned an invalid object ID for {repository_path}"))?;
+        let mode = std::str::from_utf8(mode)
+            .map_err(|_| format!("Git returned an invalid mode for {repository_path}"))?;
         let slot = &mut stages[stage - 1];
         if slot.is_some() {
             return Err(format!(
@@ -405,6 +410,7 @@ fn parse_unmerged_stages(
             ));
         }
         *slot = Some(GitIndexStage {
+            mode: mode.to_string(),
             object_id: object_id.to_string(),
         });
     }
@@ -424,6 +430,17 @@ fn git_error(action: &str, repository_path: &str, output: &process::Output) -> S
     }
 }
 
+fn run_git(arguments: &[&str], action: &str, repository_path: &str) -> Result<Vec<u8>, String> {
+    let output = Command::new("git")
+        .args(arguments)
+        .output()
+        .map_err(|error| format!("Could not {action} for {repository_path}: {error}"))?;
+    if !output.status.success() {
+        return Err(git_error(action, repository_path, &output));
+    }
+    Ok(output.stdout)
+}
+
 fn read_git_stage(
     stage: Option<&GitIndexStage>,
     repository_path: &str,
@@ -433,19 +450,23 @@ fn read_git_stage(
         // An empty input lets the ordinary three-way renderer show that side.
         return Ok(FileContents::from_bytes(Vec::new()));
     };
-    let output = Command::new("git")
-        .args(["cat-file", "blob", &stage.object_id])
-        .output()
-        .map_err(|error| format!("Could not read Git object for {repository_path}: {error}"))?;
-    if !output.status.success() {
-        return Err(git_error("read Git object", repository_path, &output));
+    if stage.mode == "160000" {
+        return Ok(FileContents::Text(format!(
+            "Subproject commit {}",
+            stage.object_id
+        )));
     }
-    Ok(FileContents::from_bytes(output.stdout))
+    run_git(
+        &["cat-file", "blob", &stage.object_id],
+        "read Git object",
+        repository_path,
+    )
+    .map(FileContents::from_bytes)
 }
 
 fn read_unmerged_inputs(repository_path: &str) -> Result<[FileContents; 3], String> {
-    let output = Command::new("git")
-        .args([
+    let output = run_git(
+        &[
             "--literal-pathspecs",
             "ls-files",
             "--unmerged",
@@ -453,14 +474,12 @@ fn read_unmerged_inputs(repository_path: &str) -> Result<[FileContents; 3], Stri
             "-z",
             "--",
             repository_path,
-        ])
-        .output()
-        .map_err(|error| format!("Could not read Git stages for {repository_path}: {error}"))?;
-    if !output.status.success() {
-        return Err(git_error("read Git stages", repository_path, &output));
-    }
+        ],
+        "read Git stages",
+        repository_path,
+    )?;
 
-    let stages = parse_unmerged_stages(&output.stdout, repository_path)?;
+    let stages = parse_unmerged_stages(&output, repository_path)?;
     if stages.iter().all(Option::is_none) {
         return Err(format!("Git has no unmerged entries for {repository_path}"));
     }
@@ -876,12 +895,15 @@ mod tests {
         assert_eq!(
             [
                 Some(GitIndexStage {
+                    mode: "100644".to_string(),
                     object_id: "base-object".to_string(),
                 }),
                 Some(GitIndexStage {
+                    mode: "100644".to_string(),
                     object_id: "local-object".to_string(),
                 }),
                 Some(GitIndexStage {
+                    mode: "100644".to_string(),
                     object_id: "remote-object".to_string(),
                 }),
             ],
@@ -903,6 +925,19 @@ mod tests {
         assert_eq!(None, stages[0]);
         assert_eq!("local-object", stages[1].as_ref().unwrap().object_id);
         assert_eq!("remote-object", stages[2].as_ref().unwrap().object_id);
+    }
+
+    #[test]
+    fn gitlink_stage_is_rendered_as_a_subproject_commit() {
+        let stage = GitIndexStage {
+            mode: "160000".to_string(),
+            object_id: "deadbeef".to_string(),
+        };
+
+        assert_eq!(
+            FileContents::Text("Subproject commit deadbeef".to_string()),
+            read_git_stage(Some(&stage), "muppets").expect("gitlinks do not need object lookup")
+        );
     }
 
     #[test]

@@ -394,7 +394,8 @@ same three-way view as three explicit file arguments. Git only passes Jiff the
 repository path in this case, so Jiff reads the three versions from Git's index
 and labels them `Local`, `Base` and `Remote`. A missing version is shown as an
 empty pane; this covers add/add and modify/delete conflicts without making them
-a special case.
+a special case. Submodule stages are shown in Git's usual
+`Subproject commit HASH` form.
 
 The view deliberately represents the index, not the working-tree file. Any
 conflict markers or edits made since the merge are therefore not included.

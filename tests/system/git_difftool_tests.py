@@ -241,6 +241,51 @@ class GitDifftoolTests(unittest.TestCase):
         self.assertIn("Local song", result.stdout)
         self.assertIn("Remote song", result.stdout)
 
+    def test_unmerged_protocol_renders_a_modify_delete_conflict(self) -> None:
+        path = "closing number.txt"
+        self.write(path, "Original song\n")
+        self.commit("Write the closing number")
+        base = self.git("rev-parse", "HEAD").stdout.strip()
+
+        self.git("switch", "--quiet", "--create", "remote")
+        (self.repository / path).unlink()
+        self.commit("Cut the remote closing number")
+        self.git("switch", "--quiet", "--create", "local", base)
+        self.write(path, "Local rewrite\n")
+        self.commit("Rewrite the local closing number")
+        merge = self.git("merge", "--no-edit", "remote", check=False)
+        self.assertNotEqual(0, merge.returncode)
+
+        result = subprocess.run(
+            [*JIFF_COMMAND, "--git-external-diff", "--no-color", path],
+            cwd=self.repository,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("=== Unmerged: closing number.txt ===\n", result.stdout)
+        panes = [line.split("│") for line in result.stdout.splitlines()]
+        # The base and local edit remain visible, while Git's missing remote
+        # stage becomes the deliberately empty third pane on both rows.
+        self.assertTrue(
+            any(
+                "Local rewrite" in row[0] and not row[2].strip()
+                for row in panes
+                if len(row) == 3
+            ),
+            result.stdout,
+        )
+        self.assertTrue(
+            any(
+                "Original song" in row[1] and not row[2].strip()
+                for row in panes
+                if len(row) == 3
+            ),
+            result.stdout,
+        )
+
     def test_unmerged_protocol_rejects_a_merged_path(self) -> None:
         result = subprocess.run(
             [

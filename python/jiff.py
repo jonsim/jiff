@@ -29,6 +29,8 @@ class ComparisonPaths:
 
 @dataclass(frozen=True)
 class ThreeWayPaths:
+    """Three explicit inputs ordered as local, common base and remote."""
+
     left: str
     middle: str
     right: str
@@ -36,11 +38,16 @@ class ThreeWayPaths:
 
 @dataclass(frozen=True)
 class UnmergedPath:
+    """One unresolved repository path supplied by Git."""
+
     repository_path: str
 
 
 @dataclass(frozen=True)
 class GitIndexStage:
+    """An object and mode from one stage of Git's unmerged index."""
+
+    mode: str
     object_id: str
 
 
@@ -86,7 +93,8 @@ def _parse_input_paths(
         raise ValueError("jiff expects two or three files, or two directories")
 
     # Keep Git's unusual positional protocol behind its explicit mode. The
-    # object IDs and modes are available here when Jiff eventually needs them.
+    # seven-argument form supplies temporary files; the one-argument form
+    # identifies an unresolved index entry which Jiff must read from Git.
     if len(files) == 1:
         return UnmergedPath(files[0])
     if len(files) == 7:
@@ -114,13 +122,14 @@ def _parse_unmerged_stages(
             raise GitError(
                 f"Git returned a malformed unmerged entry for {repository_path}"
             )
-        _, object_id_bytes, stage_bytes = fields
+        mode_bytes, object_id_bytes, stage_bytes = fields
         try:
+            mode = mode_bytes.decode("ascii")
             object_id = object_id_bytes.decode("ascii")
             stage = int(stage_bytes)
         except (UnicodeDecodeError, ValueError) as error:
             raise GitError(
-                f"Git returned an invalid stage or object ID for {repository_path}"
+                f"Git returned an invalid mode, stage or object ID for {repository_path}"
             ) from error
         if stage not in (1, 2, 3):
             raise GitError(
@@ -130,7 +139,7 @@ def _parse_unmerged_stages(
             raise GitError(
                 f"Git returned stage {stage} more than once for {repository_path}"
             )
-        stages[stage - 1] = GitIndexStage(object_id)
+        stages[stage - 1] = GitIndexStage(mode, object_id)
 
     return stages[0], stages[1], stages[2]
 
@@ -154,6 +163,8 @@ def _read_git_stage(stage: GitIndexStage | None, repository_path: str) -> str | 
         # Add/add and modify/delete conflicts omit one or more index stages.
         # An empty input lets the ordinary three-way renderer show that side.
         return file_contents(b"")
+    if stage.mode == "160000":
+        return f"Subproject commit {stage.object_id}"
     return file_contents(
         _run_git(
             ["cat-file", "blob", stage.object_id],

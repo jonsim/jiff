@@ -116,9 +116,9 @@ class GitIndexTests(unittest.TestCase):
 
         self.assertEqual(
             (
-                jiff.GitIndexStage("base-object"),
-                jiff.GitIndexStage("local-object"),
-                jiff.GitIndexStage("remote-object"),
+                jiff.GitIndexStage("100644", "base-object"),
+                jiff.GitIndexStage("100644", "local-object"),
+                jiff.GitIndexStage("100644", "remote-object"),
             ),
             jiff._parse_unmerged_stages(output, "muppet cast.txt"),
         )
@@ -134,8 +134,8 @@ class GitIndexTests(unittest.TestCase):
         self.assertEqual(
             (
                 None,
-                jiff.GitIndexStage("local-object"),
-                jiff.GitIndexStage("remote-object"),
+                jiff.GitIndexStage("100644", "local-object"),
+                jiff.GitIndexStage("100644", "remote-object"),
             ),
             jiff._parse_unmerged_stages(output, "new.txt"),
         )
@@ -164,6 +164,14 @@ class GitIndexTests(unittest.TestCase):
             contents = jiff._read_unmerged_inputs("muppet.txt")
 
         self.assertEqual(("Local", "Base", "Remote"), contents)
+
+    def test_gitlink_stage_is_rendered_as_a_subproject_commit(self):
+        stage = jiff.GitIndexStage("160000", "deadbeef")
+
+        self.assertEqual(
+            "Subproject commit deadbeef",
+            jiff._read_git_stage(stage, "muppets"),
+        )
 
 
 class OutputTests(unittest.TestCase):
