@@ -7,6 +7,7 @@ Test Template    Three-way Renderers Agree
 Independent           independent    py
 Overlapping           overlapping    py
 Line Shapes           line-shapes    txt
+Repeated Lines        repeated       txt
 
 
 *** Keywords ***

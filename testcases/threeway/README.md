@@ -18,7 +18,8 @@ The examples exercise different shapes of merge:
 
 - `independent` changes separate parts of a Python file on each side;
 - `overlapping` changes the same Python lines in two different ways;
-- `line-shapes` mixes insertions, removals and reordering in plain text.
+- `line-shapes` mixes insertions, removals and reordering in plain text;
+- `repeated` keeps duplicate lines anchored consistently.
 
 Swap `uv run jiff` for `cargo run --` to try the Rust implementation. Voilà,
 the three paths and every other option stay the same.

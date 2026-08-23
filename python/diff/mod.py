@@ -216,12 +216,37 @@ def calculate_diff(left: str, right: str, split: str) -> list[Diff]:
         left_parts = list(left)
         right_parts = list(right)
 
-    matcher = difflib.SequenceMatcher(None, left_parts, right_parts)
     diffs: list[Diff] = []
 
+    # `similar` trims stable ends before Rust's Myers search. Do the same here:
+    # as well as reducing the search, this makes a repeated line at either end
+    # the same unambiguous anchor in both implementations.
+    prefix_count = 0
+    for left_part, right_part in zip(left_parts, right_parts, strict=False):
+        if left_part != right_part:
+            break
+        prefix_count += 1
+
+    suffix_count = 0
+    while (
+        suffix_count < len(left_parts) - prefix_count
+        and suffix_count < len(right_parts) - prefix_count
+        and left_parts[-suffix_count - 1] == right_parts[-suffix_count - 1]
+    ):
+        suffix_count += 1
+
+    if prefix_count:
+        diffs.append(Diff(DiffType.SAME, split.join(left_parts[:prefix_count])))
+
+    left_end = len(left_parts) - suffix_count if suffix_count else len(left_parts)
+    right_end = len(right_parts) - suffix_count if suffix_count else len(right_parts)
+    left_middle = left_parts[prefix_count:left_end]
+    right_middle = right_parts[prefix_count:right_end]
+    matcher = difflib.SequenceMatcher(None, left_middle, right_middle)
+
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
-        l = split.join(left_parts[i1:i2])
-        r = split.join(right_parts[j1:j2])
+        l = split.join(left_middle[i1:i2])
+        r = split.join(right_middle[j1:j2])
 
         if tag == "equal":
             diffs.append(Diff(DiffType.SAME, l))
@@ -231,6 +256,9 @@ def calculate_diff(left: str, right: str, split: str) -> list[Diff]:
             diffs.append(Diff(DiffType.REMOVE, l))
         elif tag == "replace":
             diffs.append(Diff(DiffType.REPLACE, l, r))
+
+    if suffix_count:
+        diffs.append(Diff(DiffType.SAME, split.join(left_parts[-suffix_count:])))
 
     return diffs
 

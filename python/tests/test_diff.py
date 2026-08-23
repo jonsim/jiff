@@ -61,6 +61,19 @@ class LineDiffTests(unittest.TestCase):
         self.assertEqual("REMOVE", diffs[0].kind.name)
         self.assertEqual("Kermit", diffs[0].left)
 
+    def test_repeated_line_at_the_end_is_used_as_the_stable_anchor(self):
+        # Matching the final Kermit agrees with Rust and keeps both preceding
+        # lines together as one insertion.
+        diffs = diff.calculate_line_diff("Kermit", "Fozzie\nKermit\nKermit")
+
+        self.assertEqual(
+            [
+                Diff(DiffType.ADD, "Fozzie\nKermit"),
+                Diff(DiffType.SAME, "Kermit"),
+            ],
+            diffs,
+        )
+
 
 class CharacterDiffTests(unittest.TestCase):
     def test_coalesces_accidental_matches_in_an_unrelated_suffix(self):
