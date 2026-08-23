@@ -82,6 +82,26 @@ Run Rust Jiff
     ${res} =    Run Process Check Output    @{cmd}
     RETURN    ${res}
 
+Run Python Jiff At Width
+    [Documentation]    Runs Python with a terminal width supplied through `COLUMNS`.
+    [Arguments]    ${width}    @{args}
+    VAR    @{cmd}    python3
+    ...    ${CURDIR}/../../python/jiff.py
+    ...    @{args}
+    ${res} =    Run Process Check Output At Width    ${width}    @{cmd}
+    RETURN    ${res}
+
+Run Rust Jiff At Width
+    [Documentation]    Runs Rust with a terminal width supplied through `COLUMNS`.
+    [Arguments]    ${width}    @{args}
+    VAR    @{cmd}    cargo
+    ...    run
+    ...    --manifest-path=${CURDIR}/../../Cargo.toml
+    ...    --
+    ...    @{args}
+    ${res} =    Run Process Check Output At Width    ${width}    @{cmd}
+    RETURN    ${res}
+
 Run Python Jiff With Colour
     [Documentation]    Runs the Python version with terminal colour forced on.
     [Arguments]    @{args}
@@ -127,6 +147,15 @@ Run Process Check Output
     ...    checks for successful execution and returns the result object.
     [Arguments]    @{cmd}
     ${res} =    Run Process    @{cmd}    env:JIFF_CONFIG=${CURDIR}/default-config.toml
+    Process Should Succeed    ${res}    @{cmd}
+    RETURN    ${res}
+
+Run Process Check Output At Width
+    [Documentation]    Captures output with `COLUMNS` set to the requested width.
+    [Arguments]    ${width}    @{cmd}
+    ${res} =    Run Process    @{cmd}
+    ...    env:COLUMNS=${width}
+    ...    env:JIFF_CONFIG=${CURDIR}/default-config.toml
     Process Should Succeed    ${res}    @{cmd}
     RETURN    ${res}
 

@@ -11,6 +11,7 @@ use ansi_term::{ANSIString, ANSIStrings, Style};
 use itertools::EitherOrBoth;
 use itertools::Itertools;
 use similar::{capture_diff_slices, Algorithm, DiffTag, TextDiff};
+use std::env;
 use std::fmt::Write;
 use std::ops::Range;
 use std::sync::LazyLock;
@@ -19,6 +20,7 @@ use wrap::wrap_ansistrings;
 
 static DEBUG: LazyLock<bool> =
     LazyLock::new(|| matches!(std::env::var("JIFF_DEBUG").as_deref(), Ok("1")));
+const DEFAULT_TERMINAL_WIDTH: usize = 120;
 
 /// One contiguous region in a text diff.
 #[derive(Debug, Eq, PartialEq)]
@@ -519,6 +521,17 @@ fn three_way_line_width(term_width: usize, lineno_width: usize, separator: &str)
     term_width.saturating_sub(fixed_width).div_euclid(3).max(1)
 }
 
+fn terminal_width() -> usize {
+    // `COLUMNS` is how Git, CI and terminal wrappers pass a useful width when
+    // none of Jiff's standard streams is itself attached to the terminal.
+    env::var("COLUMNS")
+        .ok()
+        .and_then(|columns| columns.parse().ok())
+        .filter(|columns| *columns > 0)
+        .or_else(|| term_size::dimensions().map(|(columns, _)| columns))
+        .unwrap_or(DEFAULT_TERMINAL_WIDTH)
+}
+
 /// Renders a two-column diff sized to the current terminal.
 pub(super) fn render_diffs_side_by_side(
     diffs: &[Diff],
@@ -532,12 +545,7 @@ pub(super) fn render_diffs_side_by_side(
 
     let sep = "\u{2502}";
     let lineno_width = max_line_count.max(1).to_string().len();
-    // Git's external diff protocol sends stdout to Git's pager. Check all
-    // standard streams so an attached stdin or stderr can still provide the
-    // real terminal width.
-    let term_width = term_size::dimensions()
-        .map(|(term_width, _)| term_width)
-        .unwrap_or(120);
+    let term_width = terminal_width();
     let line_width = side_by_side_line_width(term_width, lineno_width, sep);
     let line_width = (line_width, line_width);
 

@@ -1,7 +1,7 @@
 use super::align::align;
 use super::wrap::wrap_ansistrings;
 use super::{
-    calculate_line_diff, indicator_styling, line_diff_overrides, omission_text,
+    calculate_line_diff, indicator_styling, line_diff_overrides, omission_text, terminal_width,
     three_way_line_width, Diff, DiffStyling, StyleOverride,
 };
 use crate::config::ColorScheme;
@@ -514,9 +514,7 @@ pub(crate) fn render_three_way_side_by_side(
     let lineno_width = max_line_count.max(1).to_string().len();
     let empty_lineno = " ".repeat(lineno_width + 1);
     let separator = "\u{2502}";
-    let term_width = term_size::dimensions()
-        .map(|(term_width, _)| term_width)
-        .unwrap_or(120);
+    let term_width = terminal_width();
     let line_width = three_way_line_width(term_width, lineno_width, separator);
     let margin_styling = indicator_styling(colors);
     let highlighting = ThreeWayHighlighting {
