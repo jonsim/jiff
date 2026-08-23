@@ -1,0 +1,5 @@
+	b
+a	b
+ab	b
+abc	b
+abcd	b

@@ -11,11 +11,7 @@ fn split_at_width(s: &str, width: usize) -> (usize, usize) {
     let mut byte_len = 0;
     let mut display_width = 0;
     for grapheme in s.graphemes(true) {
-        let grapheme_width = if grapheme == "\t" {
-            4
-        } else {
-            grapheme.width()
-        };
+        let grapheme_width = grapheme.width();
         if byte_len > 0 && display_width + grapheme_width > width {
             break;
         }
@@ -212,14 +208,6 @@ mod tests {
         let wrapped: Vec<&str> = wrap_str("👩‍💻a", 2).collect();
 
         assert_eq!(vec!["👩‍💻", "a"], wrapped);
-    }
-
-    #[test]
-    fn wrap_str_counts_tabs_as_four_columns() {
-        // Match Rich's four-column tab setting used by the Python implementation.
-        let wrapped: Vec<&str> = wrap_str("\tA", 4).collect();
-
-        assert_eq!(vec!["\t", "A"], wrapped);
     }
 
     #[test]

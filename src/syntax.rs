@@ -1,5 +1,6 @@
 use crate::config::ColorScheme;
 use ansi_term::{ANSIString, Style};
+use std::borrow::Cow;
 use std::fmt;
 use std::ops::Range;
 use std::path::Path;
@@ -9,9 +10,31 @@ use syntect::easy::ScopeRangeIterator;
 use syntect::highlighting::ScopeSelector;
 use syntect::parsing::{ParseState, Scope, ScopeStack, SyntaxReference, SyntaxSet};
 use syntect::util::LinesWithEndings;
+use unicode_width::UnicodeWidthStr;
 
 static SYNTAX_SET: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
 static SELECTORS: LazyLock<SyntaxSelectors> = LazyLock::new(SyntaxSelectors::new);
+const TAB_WIDTH: usize = 4;
+
+fn expand_tabs<'a>(content: &'a str, column: &mut usize) -> Cow<'a, str> {
+    if !content.contains('\t') {
+        *column += content.width();
+        return Cow::Borrowed(content);
+    }
+
+    let mut expanded = String::with_capacity(content.len());
+    let mut parts = content.split('\t').peekable();
+    while let Some(part) = parts.next() {
+        expanded.push_str(part);
+        *column += part.width();
+        if parts.peek().is_some() {
+            let spaces = TAB_WIDTH - *column % TAB_WIDTH;
+            expanded.extend(std::iter::repeat_n(' ', spaces));
+            *column += spaces;
+        }
+    }
+    Cow::Owned(expanded)
+}
 
 #[derive(Debug)]
 pub(crate) struct HighlightError {
@@ -80,6 +103,7 @@ impl HighlightedFile {
         boundaries.dedup();
         let mut syntax_spans = line.spans.iter().peekable();
         let mut diff_overrides = overrides.iter().peekable();
+        let mut column = 0;
 
         boundaries
             .windows(2)
@@ -117,7 +141,7 @@ impl HighlightedFile {
                     // complete style wins where the two kinds of span overlap.
                     style = *override_style;
                 }
-                Some(style.paint(&content[start..end]))
+                Some(style.paint(expand_tabs(&content[start..end], &mut column)))
             })
             .collect()
     }
@@ -430,6 +454,17 @@ mod tests {
         assert_eq!(
             Color::Purple.on(Color::Red).paint("def").to_string(),
             rendered[0].to_string()
+        );
+    }
+
+    #[test]
+    fn tabs_expand_relative_to_the_source_line() {
+        // Margins differ between output modes, but source tab stops must not.
+        let rendered = HighlightedFile::default().render_line(0, "a\tb", Style::default(), &[]);
+
+        assert_eq!(
+            "a   b",
+            ansi_term::unstyle(&ansi_term::ANSIStrings(&rendered))
         );
     }
 

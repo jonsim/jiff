@@ -9,6 +9,8 @@ from pygments.util import ClassNotFound
 from rich.style import Style
 from rich.text import Span, Text
 
+TAB_WIDTH = 4
+
 
 class UnknownSyntaxError(ValueError):
     """The explicitly requested Pygments lexer does not exist."""
@@ -37,8 +39,14 @@ class HighlightedFile:
     def render_line(self, index: int, content: str, base_style: Style) -> Text:
         """Styles a source line, falling back to its diff style when absent."""
         if index >= len(self.lines):
-            return Text(content, style=base_style)
-        return self.lines[index].render(content, base_style)
+            rendered = Text(content, style=base_style)
+        else:
+            rendered = self.lines[index].render(content, base_style)
+        # Expand before the renderer adds margins. Otherwise Rich uses its
+        # eight-column console tabs and the same source line moves between
+        # inline and side-by-side output.
+        rendered.expand_tabs(TAB_WIDTH)
+        return rendered
 
 
 @dataclass(frozen=True)

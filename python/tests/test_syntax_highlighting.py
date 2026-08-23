@@ -67,6 +67,12 @@ class SyntaxDetectionTests(unittest.TestCase):
 
 
 class SyntaxRenderingTests(unittest.TestCase):
+    def test_tabs_expand_relative_to_the_source_line(self):
+        # Margins differ between output modes, but source tab stops must not.
+        rendered = syntax_highlighting.HighlightedFile().render_line(0, "a\tb", Style())
+
+        self.assertEqual("a   b", rendered.plain)
+
     def test_syntax_foreground_keeps_the_diff_background(self):
         # Token colour is intentionally subordinate to the stronger diff background.
         highlighted = syntax_highlighting.highlight_file(
