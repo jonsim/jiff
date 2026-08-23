@@ -7,34 +7,38 @@ use super::{
 use crate::config::ColorScheme;
 use crate::syntax::HighlightedFile;
 use ansi_term::{ANSIString, Style};
+use itertools::Itertools;
 use std::fmt::Write;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct IndexedLine {
-    index: usize,
-    text: String,
-}
+/// A zero-based line number in one of the three original files.
+type LineIndex = usize;
 
 #[derive(Debug, Eq, PartialEq)]
 struct LinePair {
-    left: Option<IndexedLine>,
-    right: Option<IndexedLine>,
+    // A pair describes either Local -> Base or Base -> Remote. Missing indices
+    // are outer-file insertions or removals at the next shared boundary.
+    left: Option<LineIndex>,
+    right: Option<LineIndex>,
 }
 
 #[derive(Debug, Eq, PartialEq)]
 struct ThreeWayLine {
-    left: Option<IndexedLine>,
-    middle: Option<IndexedLine>,
-    right: Option<IndexedLine>,
+    // Rows with a middle index are anchored to that original base-file line.
+    // Rows without one contain outer-file lines inserted at the same boundary.
+    left: Option<LineIndex>,
+    middle: Option<LineIndex>,
+    right: Option<LineIndex>,
 }
 
 impl ThreeWayLine {
-    fn is_unchanged(&self) -> bool {
-        matches!(
-            (&self.left, &self.middle, &self.right),
-            (Some(left), Some(middle), Some(right))
-                if left.text == middle.text && middle.text == right.text
-        )
+    fn is_unchanged(&self, source_lines: [&[&str]; 3]) -> bool {
+        match (self.left, self.middle, self.right) {
+            (Some(left), Some(middle), Some(right)) => {
+                source_lines[0][left] == source_lines[1][middle]
+                    && source_lines[1][middle] == source_lines[2][right]
+            }
+            _ => false,
+        }
     }
 }
 
@@ -50,21 +54,15 @@ fn append_line_pairs<'a>(
     alignment: impl IntoIterator<Item = (Option<&'a str>, Option<&'a str>)>,
 ) {
     for (left, right) in alignment {
-        let left = left.map(|text| {
-            let line = IndexedLine {
-                index: *left_index,
-                text: text.to_string(),
-            };
+        let left = left.map(|_| {
+            let index = *left_index;
             *left_index += 1;
-            line
+            index
         });
-        let right = right.map(|text| {
-            let line = IndexedLine {
-                index: *right_index,
-                text: text.to_string(),
-            };
+        let right = right.map(|_| {
+            let index = *right_index;
             *right_index += 1;
-            line
+            index
         });
         pairs.push(LinePair { left, right });
     }
@@ -111,11 +109,7 @@ fn aligned_lines(left: &str, right: &str) -> Vec<LinePair> {
     pairs
 }
 
-fn append_outer_lines(
-    rows: &mut Vec<ThreeWayLine>,
-    left: Vec<IndexedLine>,
-    right: Vec<IndexedLine>,
-) {
+fn append_outer_lines(rows: &mut Vec<ThreeWayLine>, left: Vec<LineIndex>, right: Vec<LineIndex>) {
     // Both sides inserted at the same middle-file boundary. Put corresponding
     // insertions on one visual row without claiming they match each other.
     let line_count = left.len().max(right.len());
@@ -130,27 +124,19 @@ fn append_outer_lines(
     }
 }
 
-fn take_left_only(pairs: &[LinePair], cursor: &mut usize) -> Vec<IndexedLine> {
+fn take_left_only(pairs: &[LinePair], cursor: &mut usize) -> Vec<LineIndex> {
     let mut lines = Vec::new();
     while let Some(pair) = pairs.get(*cursor).filter(|pair| pair.right.is_none()) {
-        lines.push(
-            pair.left
-                .clone()
-                .expect("an aligned row cannot omit both sides"),
-        );
+        lines.push(pair.left.expect("an aligned row cannot omit both sides"));
         *cursor += 1;
     }
     lines
 }
 
-fn take_right_only(pairs: &[LinePair], cursor: &mut usize) -> Vec<IndexedLine> {
+fn take_right_only(pairs: &[LinePair], cursor: &mut usize) -> Vec<LineIndex> {
     let mut lines = Vec::new();
     while let Some(pair) = pairs.get(*cursor).filter(|pair| pair.left.is_none()) {
-        lines.push(
-            pair.right
-                .clone()
-                .expect("an aligned row cannot omit both sides"),
-        );
+        lines.push(pair.right.expect("an aligned row cannot omit both sides"));
         *cursor += 1;
     }
     lines
@@ -182,14 +168,13 @@ fn three_way_lines(left: &str, middle: &str, right: &str) -> Vec<ThreeWayLine> {
         let right_pair = &right_pairs[right_cursor];
         let middle_line = left_pair
             .right
-            .clone()
             .expect("every middle line appears in the left alignment");
-        debug_assert_eq!(middle_index, middle_line.index);
-        debug_assert_eq!(right_pair.left.as_ref(), Some(&middle_line));
+        debug_assert_eq!(middle_index, middle_line);
+        debug_assert_eq!(right_pair.left, Some(middle_line));
         rows.push(ThreeWayLine {
-            left: left_pair.left.clone(),
+            left: left_pair.left,
             middle: Some(middle_line),
-            right: right_pair.right.clone(),
+            right: right_pair.right,
         });
         left_cursor += 1;
         right_cursor += 1;
@@ -205,13 +190,17 @@ fn three_way_lines(left: &str, middle: &str, right: &str) -> Vec<ThreeWayLine> {
     rows
 }
 
-fn limit_three_way_context(lines: Vec<ThreeWayLine>, context_lines: usize) -> Vec<ThreeWayRow> {
+fn limit_three_way_context(
+    lines: Vec<ThreeWayLine>,
+    source_lines: [&[&str]; 3],
+    context_lines: usize,
+) -> Vec<ThreeWayRow> {
     let mut keep = vec![false; lines.len()];
     // Two linear passes retain nearby context before and after every change,
     // including changes which exist on only one outer side.
     let mut distance = usize::MAX;
     for (index, line) in lines.iter().enumerate() {
-        distance = if line.is_unchanged() {
+        distance = if line.is_unchanged(source_lines) {
             distance.saturating_add(1)
         } else {
             0
@@ -220,7 +209,7 @@ fn limit_three_way_context(lines: Vec<ThreeWayLine>, context_lines: usize) -> Ve
     }
     distance = usize::MAX;
     for (index, line) in lines.iter().enumerate().rev() {
-        distance = if line.is_unchanged() {
+        distance = if line.is_unchanged(source_lines) {
             distance.saturating_add(1)
         } else {
             0
@@ -311,15 +300,23 @@ fn render_three_way_line(
     }
 }
 
-fn three_way_margin_style(line: &ThreeWayLine, styling: &DiffStyling) -> (Style, Style, Style) {
-    let left = match (&line.left, &line.middle) {
-        (Some(left), Some(middle)) if left.text == middle.text => styling.same,
+fn three_way_margin_style(
+    line: &ThreeWayLine,
+    source_lines: [&[&str]; 3],
+    styling: &DiffStyling,
+) -> (Style, Style, Style) {
+    let left = match (line.left, line.middle) {
+        (Some(left), Some(middle)) if source_lines[0][left] == source_lines[1][middle] => {
+            styling.same
+        }
         (Some(_), Some(_)) => styling.remove,
         (Some(_), None) => styling.remove_highlight,
         (None, _) => styling.same,
     };
-    let right = match (&line.middle, &line.right) {
-        (Some(middle), Some(right)) if middle.text == right.text => styling.same,
+    let right = match (line.middle, line.right) {
+        (Some(middle), Some(right)) if source_lines[1][middle] == source_lines[2][right] => {
+            styling.same
+        }
         (Some(_), Some(_)) => styling.add,
         (None, Some(_)) => styling.add_highlight,
         (_, None) => styling.same,
@@ -332,25 +329,45 @@ fn merge_middle_overrides(
     from_right: &[StyleOverride],
     overlap: Style,
 ) -> Vec<StyleOverride> {
-    let mut boundaries = Vec::new();
-    for (range, _) in from_left.iter().chain(from_right) {
-        boundaries.push(range.start);
-        boundaries.push(range.end);
-    }
-    boundaries.sort_unstable();
-    boundaries.dedup();
+    // Each input is already ordered and non-overlapping. Merge their boundary
+    // streams and advance through the spans once rather than rescanning every
+    // span for every resulting segment.
+    let boundaries: Vec<_> = from_left
+        .iter()
+        .flat_map(|(range, _)| [range.start, range.end])
+        .merge(
+            from_right
+                .iter()
+                .flat_map(|(range, _)| [range.start, range.end]),
+        )
+        .dedup()
+        .collect();
 
     let mut merged: Vec<StyleOverride> = Vec::new();
+    let mut left_index = 0;
+    let mut right_index = 0;
     for boundary in boundaries.windows(2) {
         let start = boundary[0];
         let end = boundary[1];
+        while from_left
+            .get(left_index)
+            .is_some_and(|(range, _)| range.end <= start)
+        {
+            left_index += 1;
+        }
+        while from_right
+            .get(right_index)
+            .is_some_and(|(range, _)| range.end <= start)
+        {
+            right_index += 1;
+        }
         let left_style = from_left
-            .iter()
-            .find(|(range, _)| range.start <= start && start < range.end)
+            .get(left_index)
+            .filter(|(range, _)| range.start <= start && start < range.end)
             .map(|(_, style)| *style);
         let right_style = from_right
-            .iter()
-            .find(|(range, _)| range.start <= start && start < range.end)
+            .get(right_index)
+            .filter(|(range, _)| range.start <= start && start < range.end)
             .map(|(_, style)| *style);
         let style = match (left_style, right_style) {
             (Some(_), Some(_)) => overlap,
@@ -369,85 +386,81 @@ fn merge_middle_overrides(
     merged
 }
 
-fn full_line_override(line: &IndexedLine, style: Style) -> Vec<StyleOverride> {
-    if line.text.is_empty() {
+fn full_line_override(line: &str, style: Style) -> Vec<StyleOverride> {
+    if line.is_empty() {
         Vec::new()
     } else {
-        vec![(0..line.text.len(), style)]
+        vec![(0..line.len(), style)]
     }
 }
 
 fn style_three_way_line<'a>(
-    line: &'a ThreeWayLine,
+    line: &ThreeWayLine,
+    source_lines: [&[&'a str]; 3],
     colors: &ColorScheme,
     highlighting: &ThreeWayHighlighting,
 ) -> [Vec<ANSIString<'a>>; 3] {
-    let (left, middle_from_left) = match (&line.left, &line.middle) {
-        (Some(left), Some(middle)) if left.text != middle.text => {
-            let (left_overrides, middle_overrides) =
-                line_diff_overrides(&left.text, &middle.text, colors);
+    let left = line.left.map(|index| (index, source_lines[0][index]));
+    let middle = line.middle.map(|index| (index, source_lines[1][index]));
+    let right = line.right.map(|index| (index, source_lines[2][index]));
+    let (left, middle_from_left) = match (left, middle) {
+        (Some((left_index, left)), Some((_, middle))) if left != middle => {
+            let (left_overrides, middle_overrides) = line_diff_overrides(left, middle, colors);
             (
-                highlighting.left.render_line(
-                    left.index,
-                    &left.text,
-                    colors.remove,
-                    &left_overrides,
-                ),
+                highlighting
+                    .left
+                    .render_line(left_index, left, colors.remove, &left_overrides),
                 middle_overrides,
             )
         }
-        (Some(left), Some(_)) => (
+        (Some((left_index, left)), Some(_)) => (
             highlighting
                 .left
-                .render_line(left.index, &left.text, colors.same, &[]),
+                .render_line(left_index, left, colors.same, &[]),
             Vec::new(),
         ),
-        (Some(left), None) => (
+        (Some((left_index, left)), None) => (
             highlighting
                 .left
-                .render_line(left.index, &left.text, colors.remove_highlight, &[]),
+                .render_line(left_index, left, colors.remove_highlight, &[]),
             Vec::new(),
         ),
-        (None, Some(middle)) => (
+        (None, Some((_, middle))) => (
             vec![colors.same.paint("")],
             full_line_override(middle, colors.add_highlight),
         ),
         (None, None) => (vec![colors.same.paint("")], Vec::new()),
     };
-    let (middle_from_right, right) = match (&line.middle, &line.right) {
-        (Some(middle), Some(right)) if middle.text != right.text => {
-            let (middle_overrides, right_overrides) =
-                line_diff_overrides(&middle.text, &right.text, colors);
+    let (middle_from_right, right) = match (middle, right) {
+        (Some((_, middle)), Some((right_index, right))) if middle != right => {
+            let (middle_overrides, right_overrides) = line_diff_overrides(middle, right, colors);
             (
                 middle_overrides,
-                highlighting.right.render_line(
-                    right.index,
-                    &right.text,
-                    colors.add,
-                    &right_overrides,
-                ),
+                highlighting
+                    .right
+                    .render_line(right_index, right, colors.add, &right_overrides),
             )
         }
-        (Some(_), Some(right)) => (
+        (Some(_), Some((right_index, right))) => (
             Vec::new(),
             highlighting
                 .right
-                .render_line(right.index, &right.text, colors.same, &[]),
+                .render_line(right_index, right, colors.same, &[]),
         ),
-        (Some(middle), None) => (
+        (Some((_, middle)), None) => (
             full_line_override(middle, colors.remove_highlight),
             vec![colors.same.paint("")],
         ),
-        (None, Some(right)) => (
+        (None, Some((right_index, right))) => (
             Vec::new(),
             highlighting
                 .right
-                .render_line(right.index, &right.text, colors.add_highlight, &[]),
+                .render_line(right_index, right, colors.add_highlight, &[]),
         ),
         (None, None) => (Vec::new(), vec![colors.same.paint("")]),
     };
-    let middle = match &line.middle {
-        Some(middle) => {
+    let middle = match middle {
+        Some((middle_index, middle)) => {
             let overrides = merge_middle_overrides(
                 &middle_from_left,
                 &middle_from_right,
@@ -455,7 +468,7 @@ fn style_three_way_line<'a>(
             );
             highlighting
                 .middle
-                .render_line(middle.index, &middle.text, colors.same, &overrides)
+                .render_line(middle_index, middle, colors.same, &overrides)
         }
         None => vec![colors.same.paint("")],
     };
@@ -470,9 +483,21 @@ pub(crate) fn render_three_way_side_by_side(
     highlighting: [&HighlightedFile; 3],
     context_lines: Option<usize>,
 ) -> String {
+    let split_lines: [Vec<_>; 3] = contents.map(|content| {
+        if content.is_empty() {
+            Vec::new()
+        } else {
+            content.split('\n').collect()
+        }
+    });
+    let source_lines = [
+        split_lines[0].as_slice(),
+        split_lines[1].as_slice(),
+        split_lines[2].as_slice(),
+    ];
     let lines = three_way_lines(contents[0], contents[1], contents[2]);
     let rows = match context_lines {
-        Some(context_lines) => limit_three_way_context(lines, context_lines),
+        Some(context_lines) => limit_three_way_context(lines, source_lines, context_lines),
         None => lines.into_iter().map(ThreeWayRow::Line).collect(),
     };
     let max_line_count = contents
@@ -570,12 +595,12 @@ pub(crate) fn render_three_way_side_by_side(
                 );
             }
             ThreeWayRow::Line(line) => {
-                let rendered = style_three_way_line(&line, colors, &highlighting);
-                let margin_styles = three_way_margin_style(&line, &margin_styling);
+                let rendered = style_three_way_line(&line, source_lines, colors, &highlighting);
+                let margin_styles = three_way_margin_style(&line, source_lines, &margin_styling);
                 let numbers = [
-                    line.left.as_ref().map(|line| line.index + 1),
-                    line.middle.as_ref().map(|line| line.index + 1),
-                    line.right.as_ref().map(|line| line.index + 1),
+                    line.left.map(|line| line + 1),
+                    line.middle.map(|line| line + 1),
+                    line.right.map(|line| line + 1),
                 ];
                 let number_text: Vec<_> = numbers
                     .iter()
@@ -632,35 +657,43 @@ mod tests {
 
     #[test]
     fn three_way_alignment_uses_the_middle_file_as_its_anchor() {
-        let lines = three_way_lines(
+        let contents = [
             "start\nLOCAL ONLY\nanchor",
             "start\nanchor",
             "start\nREMOTE ONLY\nanchor",
-        );
+        ];
+        let split_lines: [Vec<_>; 3] = contents.map(|content| content.split('\n').collect());
+        let source_lines = [
+            split_lines[0].as_slice(),
+            split_lines[1].as_slice(),
+            split_lines[2].as_slice(),
+        ];
+        let lines = three_way_lines(contents[0], contents[1], contents[2]);
 
         assert_eq!(3, lines.len());
-        assert!(lines[0].is_unchanged());
-        assert_eq!(
-            Some("LOCAL ONLY"),
-            lines[1].left.as_ref().map(|line| line.text.as_str())
-        );
+        assert!(lines[0].is_unchanged(source_lines));
+        assert_eq!(Some(1), lines[1].left);
         assert!(lines[1].middle.is_none());
-        assert_eq!(
-            Some("REMOTE ONLY"),
-            lines[1].right.as_ref().map(|line| line.text.as_str())
-        );
-        assert!(lines[2].is_unchanged());
+        assert_eq!(Some(1), lines[1].right);
+        assert!(lines[2].is_unchanged(source_lines));
     }
 
     #[test]
     fn three_way_context_is_measured_from_changes_on_either_side() {
-        let lines = three_way_lines(
+        let contents = [
             "zero\nvalue = 11\ntwo\nthree\nfour",
             "zero\nvalue = 10\ntwo\nthree\nfour",
             "zero\nvalue = 10\ntwo\nthree\nfour",
-        );
+        ];
+        let split_lines: [Vec<_>; 3] = contents.map(|content| content.split('\n').collect());
+        let source_lines = [
+            split_lines[0].as_slice(),
+            split_lines[1].as_slice(),
+            split_lines[2].as_slice(),
+        ];
+        let lines = three_way_lines(contents[0], contents[1], contents[2]);
 
-        let rows = limit_three_way_context(lines, 1);
+        let rows = limit_three_way_context(lines, source_lines, 1);
 
         assert_eq!(4, rows.len());
         assert!(matches!(rows[3], ThreeWayRow::Omitted(2)));

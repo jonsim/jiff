@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from heapq import merge
 
 from jiff_config import ColorScheme
 from rich.cells import cell_len
@@ -16,18 +17,24 @@ from .mod import DiffStyling, DiffType
 
 @dataclass(frozen=True)
 class IndexedLine:
+    """A source line with its zero-based index in the original file."""
+
     index: int
     text: str
 
 
 @dataclass(frozen=True)
 class LinePair:
+    """One Local-to-Base or Base-to-Remote alignment row."""
+
     left: IndexedLine | None
     right: IndexedLine | None
 
 
 @dataclass(frozen=True)
 class ThreeWayLine:
+    """A display row anchored by a base line or shared insertion boundary."""
+
     left: IndexedLine | None
     middle: IndexedLine | None
     right: IndexedLine | None
@@ -43,11 +50,15 @@ class ThreeWayLine:
 
 @dataclass(frozen=True)
 class OmittedLines:
+    """A run of unchanged lines hidden by the context limit."""
+
     line_count: int
 
 
 @dataclass(frozen=True)
 class PaneLine:
+    """Styled content and margins for one pane of a display row."""
+
     lineno: Text
     wrapno: Text
     text: Text
@@ -205,31 +216,51 @@ def _limit_context(
     return rows
 
 
-def _style_at(spans: list[Span], offset: int) -> Style | None:
-    for span in spans:
-        if span.start <= offset < span.end:
-            if not isinstance(span.style, Style):
-                raise AssertionError("three-way spans must contain resolved styles")
-            return span.style
-    return None
-
-
 def _merge_middle_spans(
     from_left: list[Span],
     from_right: list[Span],
     overlap: Style,
 ) -> list[Span]:
-    boundaries = sorted(
-        {
-            boundary
-            for span in (*from_left, *from_right)
-            for boundary in (span.start, span.end)
-        }
+    # Both span lists are already ordered and non-overlapping. Merge their
+    # boundary streams and advance through each list once; rescanning the full
+    # lists for every small changed region is painfully slow on minified text.
+    boundaries = list(
+        dict.fromkeys(
+            merge(
+                (boundary for span in from_left for boundary in (span.start, span.end)),
+                (
+                    boundary
+                    for span in from_right
+                    for boundary in (span.start, span.end)
+                ),
+            )
+        )
     )
     merged: list[Span] = []
+    left_index = 0
+    right_index = 0
     for start, end in zip(boundaries, boundaries[1:], strict=False):
-        left_style = _style_at(from_left, start)
-        right_style = _style_at(from_right, start)
+        while left_index < len(from_left) and from_left[left_index].end <= start:
+            left_index += 1
+        while right_index < len(from_right) and from_right[right_index].end <= start:
+            right_index += 1
+
+        left_span = from_left[left_index] if left_index < len(from_left) else None
+        right_span = from_right[right_index] if right_index < len(from_right) else None
+        left_style = (
+            left_span.style
+            if left_span is not None and left_span.start <= start < left_span.end
+            else None
+        )
+        right_style = (
+            right_span.style
+            if right_span is not None and right_span.start <= start < right_span.end
+            else None
+        )
+        if left_style is not None and not isinstance(left_style, Style):
+            raise AssertionError("three-way spans must contain resolved styles")
+        if right_style is not None and not isinstance(right_style, Style):
+            raise AssertionError("three-way spans must contain resolved styles")
         if left_style is not None and right_style is not None:
             style = overlap
         elif left_style is not None:
