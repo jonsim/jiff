@@ -2,7 +2,7 @@ import os
 import unittest
 from unittest import mock
 
-from diff.align import align
+from diff.align import _edit_distance, align
 from diff.mod import Diff, DiffType
 
 import diff
@@ -132,6 +132,10 @@ class CharacterDiffTests(unittest.TestCase):
 
 
 class LineAlignmentTests(unittest.TestCase):
+    def test_edit_distance_stops_above_the_pairing_cutoff(self):
+        # The aligner only needs to know that Animal is too far from Kermit.
+        self.assertEqual(3, _edit_distance("Kermit", "Animal", 2))
+
     def test_pairs_lines_with_a_shared_prefix_and_unrelated_suffixes(self):
         # The stable prefix makes these the most useful side-by-side pairing,
         # even though the remaining text should be one character replacement.

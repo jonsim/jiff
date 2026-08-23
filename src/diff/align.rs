@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::LazyLock;
 
 static DEBUG: LazyLock<bool> =
@@ -12,7 +13,12 @@ enum AlignmentOperation {
     Pair,
 }
 
-fn edit_distance(before: &[char], after: &[char], distances: &mut Vec<usize>) -> usize {
+fn edit_distance(
+    before: &[char],
+    after: &[char],
+    cutoff: usize,
+    distances: &mut Vec<usize>,
+) -> usize {
     // Matching ends can always be retained by an optimal edit script. Removing
     // them keeps the quadratic part small for the common case of a local change
     // in an otherwise stable line.
@@ -36,25 +42,71 @@ fn edit_distance(before: &[char], after: &[char], distances: &mut Vec<usize>) ->
     } else {
         (after, before)
     };
+    let above_cutoff = cutoff + 1;
+    if rows.len() - columns.len() > cutoff {
+        return above_cutoff;
+    }
+    if columns.is_empty() {
+        return rows.len().min(above_cutoff);
+    }
 
     distances.clear();
-    distances.extend(0..=columns.len());
-    for (row_index, row) in rows.iter().enumerate() {
-        let mut diagonal = distances[0];
-        distances[0] = row_index + 1;
-        for (column_index, column) in columns.iter().enumerate() {
+    distances.resize(columns.len() + 1, above_cutoff);
+    for (index, distance) in distances
+        .iter_mut()
+        .take(columns.len().min(cutoff) + 1)
+        .enumerate()
+    {
+        *distance = index;
+    }
+    for (row_offset, row) in rows.iter().enumerate() {
+        let row_index = row_offset + 1;
+        let start = row_index.saturating_sub(cutoff).max(1);
+        let end = row_index.saturating_add(cutoff).min(columns.len());
+        if start > end {
+            return above_cutoff;
+        }
+
+        let mut diagonal = distances[start - 1];
+        if start == 1 {
+            distances[0] = row_index.min(above_cutoff);
+        } else {
+            distances[start - 1] = above_cutoff;
+        }
+        for column_index in start..=end {
+            let column = &columns[column_index - 1];
             // Keep the previous row's value before overwriting it so the next
             // cell still has its diagonal and deletion costs available.
-            let previous_row = distances[column_index + 1];
+            let previous_row = distances[column_index];
             let deletion = previous_row + 1;
-            let insertion = distances[column_index] + 1;
+            let insertion = distances[column_index - 1] + 1;
             let substitution = diagonal + usize::from(row != column);
-            distances[column_index + 1] = deletion.min(insertion).min(substitution);
+            distances[column_index] = deletion.min(insertion).min(substitution).min(above_cutoff);
             diagonal = previous_row;
+        }
+        if end < columns.len() {
+            distances[end + 1] = above_cutoff;
         }
     }
 
     distances[columns.len()]
+}
+
+#[derive(Debug)]
+struct LineCharacters {
+    characters: Vec<char>,
+    counts: HashMap<char, usize>,
+}
+
+impl LineCharacters {
+    fn new(line: &str) -> Self {
+        let characters: Vec<_> = line.chars().collect();
+        let mut counts = HashMap::new();
+        for character in &characters {
+            *counts.entry(*character).or_insert(0) += 1;
+        }
+        Self { characters, counts }
+    }
 }
 
 fn is_contiguous_extension(before: &[char], after: &[char]) -> bool {
@@ -67,16 +119,16 @@ fn is_contiguous_extension(before: &[char], after: &[char]) -> bool {
     !shorter.is_empty() && longer.windows(shorter.len()).any(|part| part == shorter)
 }
 
-fn pair_cost(before: &[char], after: &[char], distances: &mut Vec<usize>) -> usize {
-    if before == after {
+fn pair_cost(before: &LineCharacters, after: &LineCharacters, distances: &mut Vec<usize>) -> usize {
+    if before.characters == after.characters {
         return 0;
     }
 
-    let unpaired_cost = before.len() + after.len();
+    let unpaired_cost = before.characters.len() + after.characters.len();
     // One more than remove-plus-add makes a dissimilar pair strictly worse
     // without introducing a separate "not a candidate" value in the main DP.
     let dissimilar_cost = unpaired_cost + 1;
-    let length_difference = before.len().abs_diff(after.len());
+    let length_difference = before.characters.len().abs_diff(after.characters.len());
 
     // A line at least three times longer than the other has too little shared
     // context to make a useful pair, even when it contains the shorter line.
@@ -84,18 +136,32 @@ fn pair_cost(before: &[char], after: &[char], distances: &mut Vec<usize>) -> usi
         return dissimilar_cost;
     }
 
-    let distance = edit_distance(before, after, distances);
     // A common subsequence can be made from isolated spaces and letters in two
     // unrelated sentences. Levenshtein distance requires those matches to be
     // locally coherent. Keep contiguous extensions as a useful special case
     // for indentation and text added at either end of a line.
-    if !is_contiguous_extension(before, after)
-        && distance.saturating_mul(2) >= before.len().max(after.len())
-    {
-        dissimilar_cost
-    } else {
-        distance
+    if is_contiguous_extension(&before.characters, &after.characters) {
+        return length_difference;
     }
+
+    let maximum_length = before.characters.len().max(after.characters.len());
+    let cutoff = (maximum_length - 1) / 2;
+    let shared_characters: usize = before
+        .counts
+        .iter()
+        .map(|(character, count)| count.min(after.counts.get(character).unwrap_or(&0)))
+        .sum();
+    // This frequency difference is a lower bound on edit distance. Character
+    // order can only make the actual result worse, never rescue the pairing.
+    if maximum_length - shared_characters > cutoff {
+        return dissimilar_cost;
+    }
+
+    let distance = edit_distance(&before.characters, &after.characters, cutoff, distances);
+    if distance > cutoff {
+        return dissimilar_cost;
+    }
+    distance
 }
 
 fn choose_operation(pair: usize, remove: usize, add: usize) -> (usize, AlignmentOperation) {
@@ -136,26 +202,32 @@ pub(super) fn align<'a>(
     let mut operations = vec![AlignmentOperation::Start; (lines_b.len() + 1) * width];
     let mut previous_costs = vec![0; width];
     let mut current_costs = vec![0; width];
-    let before_chars: Vec<Vec<char>> = lines_b.iter().map(|line| line.chars().collect()).collect();
-    let after_chars: Vec<Vec<char>> = lines_a.iter().map(|line| line.chars().collect()).collect();
+    let before_chars: Vec<_> = lines_b
+        .iter()
+        .map(|line| LineCharacters::new(line))
+        .collect();
+    let after_chars: Vec<_> = lines_a
+        .iter()
+        .map(|line| LineCharacters::new(line))
+        .collect();
     let mut edit_distances = Vec::new();
 
     // The first row and column describe paths which can only add or remove.
     for (after_index, after) in after_chars.iter().enumerate() {
-        previous_costs[after_index + 1] = previous_costs[after_index] + after.len();
+        previous_costs[after_index + 1] = previous_costs[after_index] + after.characters.len();
         operations[after_index + 1] = AlignmentOperation::Add;
     }
 
     for (before_index, before) in before_chars.iter().enumerate() {
-        current_costs[0] = previous_costs[0] + before.len();
+        current_costs[0] = previous_costs[0] + before.characters.len();
         operations[(before_index + 1) * width] = AlignmentOperation::Remove;
 
         for (after_index, after) in after_chars.iter().enumerate() {
             let column = after_index + 1;
             let score = pair_cost(before, after, &mut edit_distances);
             let pair = previous_costs[column - 1] + score;
-            let remove = previous_costs[column] + before.len();
-            let add = current_costs[column - 1] + after.len();
+            let remove = previous_costs[column] + before.characters.len();
+            let add = current_costs[column - 1] + after.characters.len();
             let (cost, operation) = choose_operation(pair, remove, add);
 
             if *DEBUG {
@@ -217,7 +289,7 @@ mod tests {
         let before = characters("abcXYZdef");
         let after = characters("abcX123YZdef");
 
-        let distance = edit_distance(&before, &after, &mut Vec::new());
+        let distance = edit_distance(&before, &after, 3, &mut Vec::new());
 
         assert_eq!(3, distance);
     }
@@ -225,12 +297,34 @@ mod tests {
     #[test]
     fn pair_cost_rejects_lines_at_the_similarity_boundary() {
         // One changed character in a two-character line is too little context.
-        let before = characters("ab");
-        let after = characters("ac");
+        let before = LineCharacters::new("ab");
+        let after = LineCharacters::new("ac");
 
         let cost = pair_cost(&before, &after, &mut Vec::new());
 
-        assert!(cost > before.len() + after.len());
+        assert!(cost > before.characters.len() + after.characters.len());
+    }
+
+    #[test]
+    fn edit_distance_stops_above_the_pairing_cutoff() {
+        // The caller only needs to know that a distant line is not pairable.
+        let before = characters("Kermit");
+        let after = characters("Animal");
+
+        let distance = edit_distance(&before, &after, 2, &mut Vec::new());
+
+        assert_eq!(3, distance);
+    }
+
+    #[test]
+    fn character_counts_reject_an_obviously_unrelated_pair() {
+        // Disjoint alphabets cannot become similar through character ordering.
+        let before = LineCharacters::new("aaaaabbbbb");
+        let after = LineCharacters::new("xxxxxzzzzz");
+
+        let cost = pair_cost(&before, &after, &mut Vec::new());
+
+        assert!(cost > before.characters.len() + after.characters.len());
     }
 
     #[test]

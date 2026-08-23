@@ -3,11 +3,12 @@ from __future__ import annotations
 import enum
 import os
 import sys
+from collections import Counter
 
 debug = os.environ.get("JIFF_DEBUG", "0") == "1"
 
 
-def _edit_distance(before: str, after: str) -> int:
+def _edit_distance(before: str, after: str, cutoff: int) -> int:
     # Matching ends can always be retained by an optimal edit script. Trimming
     # them avoids the quadratic work for the common case of a small change in
     # an otherwise stable line.
@@ -32,25 +33,52 @@ def _edit_distance(before: str, after: str) -> int:
     before = before[common_prefix:before_end]
     after = after[common_prefix:after_end]
     rows, columns = (before, after) if len(before) >= len(after) else (after, before)
+    above_cutoff = cutoff + 1
+    if len(rows) - len(columns) > cutoff:
+        return above_cutoff
+    if not columns:
+        return min(len(rows), above_cutoff)
 
-    distances = list(range(len(columns) + 1))
+    # Cells outside this diagonal band already cost more than `cutoff` through
+    # insertions or removals alone. They cannot affect a useful line pairing.
+    distances = [above_cutoff] * (len(columns) + 1)
+    for index in range(min(len(columns), cutoff) + 1):
+        distances[index] = index
     for row_index, row in enumerate(rows, start=1):
-        diagonal = distances[0]
-        distances[0] = row_index
-        for column_index, column in enumerate(columns):
+        start = max(1, row_index - cutoff)
+        end = min(len(columns), row_index + cutoff)
+        if start > end:
+            return above_cutoff
+
+        diagonal = distances[start - 1]
+        if start == 1:
+            distances[0] = min(row_index, above_cutoff)
+        else:
+            distances[start - 1] = above_cutoff
+        for column_index in range(start, end + 1):
+            column = columns[column_index - 1]
             # Keep the previous row's value before overwriting it so the next
             # cell still has its diagonal and deletion costs available.
-            previous_row = distances[column_index + 1]
+            previous_row = distances[column_index]
             deletion = previous_row + 1
-            insertion = distances[column_index] + 1
+            insertion = distances[column_index - 1] + 1
             substitution = diagonal + (row != column)
-            distances[column_index + 1] = min(deletion, insertion, substitution)
+            distances[column_index] = min(
+                deletion, insertion, substitution, above_cutoff
+            )
             diagonal = previous_row
+        if end < len(columns):
+            distances[end + 1] = above_cutoff
 
     return distances[-1]
 
 
-def _pair_cost(before: str, after: str) -> int:
+def _pair_cost(
+    before: str,
+    after: str,
+    before_counts: Counter[str],
+    after_counts: Counter[str],
+) -> int:
     if before == after:
         return 0
 
@@ -65,13 +93,26 @@ def _pair_cost(before: str, after: str) -> int:
     if 2 * length_difference >= unpaired_cost:
         return dissimilar_cost
 
-    distance = _edit_distance(before, after)
     # A common subsequence can be made from isolated spaces and letters in two
     # unrelated sentences. Levenshtein distance requires those matches to be
     # locally coherent. Keep contiguous extensions as a useful special case
     # for indentation and text added at either end of a line.
     contiguous_extension = before in after or after in before
-    if not contiguous_extension and 2 * distance >= max(len(before), len(after)):
+    if contiguous_extension:
+        return length_difference
+
+    maximum_length = max(len(before), len(after))
+    cutoff = (maximum_length - 1) // 2
+    shared_characters = sum(
+        min(count, after_counts.get(character, 0))
+        for character, count in before_counts.items()
+    )
+    # Transforming either frequency table needs at least this many edits. If
+    # that is already too many, the exact character order cannot rescue it.
+    if maximum_length - shared_characters > cutoff:
+        return dissimilar_cost
+    distance = _edit_distance(before, after, cutoff)
+    if distance > cutoff:
         return dissimilar_cost
     return distance
 
@@ -111,6 +152,8 @@ def align(
     operations = bytearray((len(lines_b) + 1) * width)
     previous_costs = [0] * width
     current_costs = [0] * width
+    before_counts = [Counter(line) for line in lines_b]
+    after_counts = [Counter(line) for line in lines_a]
 
     # The first row and column can only add or remove lines.
     for after_index, after in enumerate(lines_a):
@@ -123,7 +166,12 @@ def align(
 
         for after_index, after in enumerate(lines_a):
             column = after_index + 1
-            score = _pair_cost(before, after)
+            score = _pair_cost(
+                before,
+                after,
+                before_counts[before_index],
+                after_counts[after_index],
+            )
             pair = previous_costs[column - 1] + score
             remove = previous_costs[column] + len(before)
             add = current_costs[column - 1] + len(after)
