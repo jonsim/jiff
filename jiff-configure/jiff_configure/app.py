@@ -165,7 +165,7 @@ audience = HOUSE_CAPACITY - 4'''
 
 # Three panes leave little room once the controls are visible. Keep this
 # example intentionally terse so its changes remain readable without wrapping.
-THREEWAY_LOCAL = r'''"""Three-way show."""
+THREE_WAY_LOCAL = r'''"""Three-way show."""
 
 COUNT = 3
 HOST = "Kermit"
@@ -178,7 +178,7 @@ CAST = ["K"]
 REMOTE_DROP = "yes"
 LOCAL_ONLY = True'''
 
-THREEWAY_BASE = r'''"""Three-way show."""
+THREE_WAY_BASE = r'''"""Three-way show."""
 
 COUNT = 2
 HOST = "Kermit"
@@ -191,7 +191,7 @@ CAST = ["K", "Fozzie"]
 LOCAL_DROP = "yes"
 REMOTE_DROP = "yes"'''
 
-THREEWAY_REMOTE = r'''"""Three-way show."""
+THREE_WAY_REMOTE = r'''"""Three-way show."""
 
 COUNT = 2
 HOST = "Gonzo"
@@ -433,10 +433,10 @@ class JiffConfigureApp(App[None]):
                 ):
                     yield Static(id="inline-preview", classes="preview")
                 with (
-                    TabPane("Three-way", id="threeway"),
+                    TabPane("Three-way", id="three-way"),
                     VerticalScroll(classes="preview-scroll"),
                 ):
-                    yield Static(id="threeway-preview", classes="preview")
+                    yield Static(id="three-way-preview", classes="preview")
                 with (
                     TabPane("TOML", id="toml"),
                     VerticalScroll(classes="preview-scroll"),
@@ -485,10 +485,10 @@ class JiffConfigureApp(App[None]):
         self.query_one("#inline-preview", Static).update(
             Text.from_ansi(inline.rstrip("\n"))
         )
-        threeway = jiff.render_three_way_output(
-            THREEWAY_LOCAL,
-            THREEWAY_BASE,
-            THREEWAY_REMOTE,
+        three_way = jiff.render_three_way_output(
+            THREE_WAY_LOCAL,
+            THREE_WAY_BASE,
+            THREE_WAY_REMOTE,
             "local.py",
             "base.py",
             "remote.py",
@@ -497,8 +497,8 @@ class JiffConfigureApp(App[None]):
             colors=self.scheme,
             terminal_width=terminal_width,
         )
-        self.query_one("#threeway-preview", Static).update(
-            Text.from_ansi(threeway.rstrip("\n"))
+        self.query_one("#three-way-preview", Static).update(
+            Text.from_ansi(three_way.rstrip("\n"))
         )
         self.query_one("#toml-preview", Static).update(
             Text(color_scheme_to_toml(self.scheme))

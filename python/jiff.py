@@ -22,6 +22,8 @@ TAB_WIDTH = 4
 
 @dataclass(frozen=True)
 class ComparisonPaths:
+    """Two inputs and their optional repository-relative display path."""
+
     left: str
     right: str
     repository_path: str | None

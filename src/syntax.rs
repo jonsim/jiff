@@ -160,6 +160,7 @@ pub(crate) fn highlight_files(
     })
 }
 
+/// Highlights one source file using an explicit or detected syntax.
 pub(crate) fn highlight_file(
     content: &str,
     path: &str,
