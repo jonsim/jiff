@@ -177,9 +177,22 @@ class GitDifftoolTests(unittest.TestCase):
         self.assertIn("--- a/fozzie.txt\n+++ b/fozzie.txt\n", result.stdout)
         self.assertIn("Funny bear", result.stdout)
 
-    def test_external_diff_mode_reports_an_unmerged_path(self) -> None:
+    def test_unmerged_protocol_renders_a_three_way_diff(self) -> None:
+        path = "muppet cast.txt"
+        self.write(path, "same\nbase tune\n")
+        self.commit("Write the original tune")
+        base = self.git("rev-parse", "HEAD").stdout.strip()
+
+        self.git("switch", "--quiet", "--create", "remote")
+        self.write(path, "same\nremote tune\n")
+        self.commit("Rewrite the remote tune")
+        self.git("switch", "--quiet", "--create", "local", base)
+        self.write(path, "same\nlocal tune\n")
+        self.commit("Rewrite the local tune")
+        merge = self.git("merge", "--no-edit", "remote", check=False)
+        self.assertNotEqual(0, merge.returncode)
         result = subprocess.run(
-            [*JIFF_COMMAND, "--git-external-diff", "muppet cast.txt"],
+            [*JIFF_COMMAND, "--git-external-diff", "--no-color", path],
             cwd=self.repository,
             text=True,
             capture_output=True,
@@ -187,7 +200,63 @@ class GitDifftoolTests(unittest.TestCase):
         )
 
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual("Unmerged file: muppet cast.txt\n", result.stdout)
+        self.assertIn("=== Unmerged: muppet cast.txt ===\n", result.stdout)
+        self.assertIn("1: Local", result.stdout)
+        self.assertIn("2: Base", result.stdout)
+        self.assertIn("3: Remote", result.stdout)
+        self.assertIn("local tune", result.stdout)
+        self.assertIn("base tune", result.stdout)
+        self.assertIn("remote tune", result.stdout)
+
+    def test_unmerged_protocol_renders_an_add_add_conflict(self) -> None:
+        self.git("commit", "--quiet", "--allow-empty", "--message", "Start empty")
+        base = self.git("rev-parse", "HEAD").stdout.strip()
+
+        self.git("switch", "--quiet", "--create", "remote")
+        self.write("new song.txt", "Remote song\n")
+        self.commit("Add the remote song")
+        self.git("switch", "--quiet", "--create", "local", base)
+        self.write("new song.txt", "Local song\n")
+        self.commit("Add the local song")
+        merge = self.git("merge", "--no-edit", "remote", check=False)
+        self.assertNotEqual(0, merge.returncode)
+        result = subprocess.run(
+            [
+                *JIFF_COMMAND,
+                "--git-external-diff",
+                "--no-color",
+                "new song.txt",
+            ],
+            cwd=self.repository,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("=== Unmerged: new song.txt ===\n", result.stdout)
+        self.assertIn("1: Local", result.stdout)
+        self.assertIn("2: Base", result.stdout)
+        self.assertIn("3: Remote", result.stdout)
+        self.assertIn("Local song", result.stdout)
+        self.assertIn("Remote song", result.stdout)
+
+    def test_unmerged_protocol_rejects_a_merged_path(self) -> None:
+        result = subprocess.run(
+            [
+                *JIFF_COMMAND,
+                "--git-external-diff",
+                "--no-color",
+                "ordinary.txt",
+            ],
+            cwd=self.repository,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(1, result.returncode)
+        self.assertIn("Git has no unmerged entries for ordinary.txt", result.stderr)
 
     def test_external_diff_mode_keeps_colours_when_git_owns_the_pager(self) -> None:
         self.write("old.txt", "Kermit\n")

@@ -387,8 +387,20 @@ command `git show` imply `--ext-diff`.
 
 External diff output is intended for people to read; it is not a patch. Use
 `git diff --no-ext-diff` for scripts or anything which needs Git's normal patch
-format. Git only supplies the path for an unmerged file, so Jiff currently
-prints `Unmerged file: PATH` rather than attempting a three-way diff.
+format.
+
+When Git invokes its one-argument protocol for an unmerged path, Jiff shows the
+same three-way view as three explicit file arguments. Git only passes Jiff the
+repository path in this case, so Jiff reads the three versions from Git's index
+and labels them `Local`, `Base` and `Remote`. A missing version is shown as an
+empty pane; this covers add/add and modify/delete conflicts without making them
+a special case.
+
+The view deliberately represents the index, not the working-tree file. Any
+conflict markers or edits made since the merge are therefore not included.
+Some Git commands render unresolved paths with Git's built-in combined diff
+instead of calling an external helper; Jiff cannot replace output when it is
+not invoked.
 
 ### Rust
 
