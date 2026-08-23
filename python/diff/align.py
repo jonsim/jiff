@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import math
+import enum
 import os
 import sys
 
@@ -76,200 +76,89 @@ def _pair_cost(before: str, after: str) -> int:
     return distance
 
 
-class Point:
-    def __init__(self, x: int, y: int) -> None:
-        self.x = x
-        self.y = y
-
-    def __repr__(self) -> str:
-        return f"({self.x},{self.y})"
-
-    def __eq__(self, other: object) -> bool:
-        if isinstance(other, Point):
-            return self.x == other.x and self.y == other.y
-        return False
-
-    def __hash__(self) -> int:
-        return hash((self.x, self.y))
+class AlignmentOperation(enum.IntEnum):
+    START = 0
+    REMOVE = 1
+    ADD = 2
+    PAIR = 3
 
 
-class AlignmentNode:
-    def __init__(self, x: int, y: int, weight: int) -> None:
-        self.id = Point(x, y)
-        self.weight = weight
-        self.relax_weight = math.inf
-        self.relax_parent = Point(0, 0)
-
-    def __repr__(self) -> str:
-        if debug:
-            return (
-                f"Alignment Node {self.id}: "
-                f"\U0001d464={self.weight:3}, "
-                f"\U0001d451={self.relax_weight:3}, "
-                f"\U0001d70b={self.relax_parent}"
-            )
-        else:
-            return f"{self.id}: {self.weight}"
-
-    def relax(self, predecessor_id: Point, predecessor_weight: int) -> None:
-        candidate_weight = predecessor_weight + self.weight
-        if self.relax_weight > candidate_weight:
-            self.relax_weight = candidate_weight
-            self.relax_parent = predecessor_id
-
-
-class AlignmentMatrix:
-    def __init__(self, lines_b: list[str], lines_a: list[str]) -> None:
-        lines_b_len = len(lines_b)
-        lines_a_len = len(lines_a)
-        self.line_matrix_x_len = lines_b_len * 2 + 1
-        self.line_matrix_y_len = lines_a_len * 2 + 1
-
-        # Compute the baseline or benchmark 'unalignment' scores - i.e. the
-        # scores if the lines were unaligned. We must do no worse than
-        # unalignment.
-        # First for all the 'before' lines.
-        unalign_b_weights = [len(line) for line in lines_b]
-        # Then for all the 'after' lines.
-        unalign_a_weights = [len(line) for line in lines_a]
-
-        # Next, compute the edit distance for all lines to one another - i.e.
-        # if every line were aligned with one another.
-        self.line_matrix = []
-        for x in range(self.line_matrix_x_len):
-            aligned_x = x % 2 != 0
-            row = []
-            for y in range(self.line_matrix_y_len):
-                aligned_y = y % 2 != 0
-                weight: int | None = None
-                if not aligned_x and not aligned_y:
-                    weight = -1
-                elif aligned_x and not aligned_y:
-                    weight = unalign_b_weights[x // 2]
-                elif not aligned_x and aligned_y:
-                    weight = unalign_a_weights[y // 2]
-                elif aligned_x and aligned_y:
-                    line_b = lines_b[x // 2]
-                    line_a = lines_a[y // 2]
-                    weight = _pair_cost(line_b, line_a)
-                    if debug:
-                        print(
-                            f"  Pair score for {line_b!r} -> {line_a!r}: {weight}",
-                            file=sys.stderr,
-                        )
-                row.append(AlignmentNode(x, y, weight))
-                if debug:
-                    print(f"  Initialised: {row[-1]}", file=sys.stderr)
-            self.line_matrix.append(row)
-
-    def __repr__(self) -> str:
-        s = f"Alignment matrix ({self.line_matrix_x_len} x {self.line_matrix_y_len}):\n"
-        for x in range(self.line_matrix_x_len):
-            for y in range(self.line_matrix_y_len):
-                s += f" {self.line_matrix[x][y].weight:4}"
-            s += "\n"
-        return s
-
-    def root_adjacency(self) -> list[Point]:
-        # The nodes in the output are guaranteed to be in topological order.
-        return [Point(0, 1), Point(1, 0), Point(1, 1)]
-
-    def adjacency(self, node: AlignmentNode) -> list[Point]:
-        # If I just paired node.id.x and node.id.y, what are the remaining
-        # valid alignments?
-        adjacency: list[Point] = []
-        next_x = node.id.x + (node.id.x % 2)  # will exist
-        next_y = node.id.y + (node.id.y % 2)  # will exist
-        next_x_aligned = next_x + 1  # might not exist
-        next_y_aligned = next_y + 1  # might not exist
-        if next_x_aligned < self.line_matrix_x_len:
-            adjacency.append(Point(next_x_aligned, next_y))
-        if next_y_aligned < self.line_matrix_y_len:
-            adjacency.append(Point(next_x, next_y_aligned))
-        if (
-            next_x_aligned < self.line_matrix_x_len
-            and next_y_aligned < self.line_matrix_y_len
-        ):
-            adjacency.append(Point(next_x_aligned, next_y_aligned))
-        # The nodes in the output are guaranteed to be in topological order.
-        return adjacency
-
-    def walk_path(self, exit: AlignmentNode) -> list[Point]:
-        path: list[Point] = []
-        pos = exit
-        while pos.id.x > 0 or pos.id.y > 0:
-            path.append(pos.id)
-            next_pos = self.line_matrix[pos.id.x][pos.id.y].relax_parent
-            pos = self.line_matrix[next_pos.x][next_pos.y]
-        path.reverse()
-        return path
-
-    def shortest_path(self) -> list[Point]:
-        # Each root neighbour represents the first real operation. Starting
-        # it at zero would make the first insertion, removal or pairing free.
-        for adj in self.root_adjacency():
-            vertex = self.line_matrix[adj.x][adj.y]
-            vertex.relax_weight = vertex.weight
-
-        # Walk all nodes.
-        # The line matrix is iterated in topological order, line by line, since
-        # the adjacency for a given node may never go backwards (decrease x or
-        # y). The iteration order is not the most obvious topological ordering
-        # of the matrix, but it is the most cache friendly.
-        # Iterating in topological order permits a single pass through the line
-        # matrix (a weighted DAG) to relax all edges and compute the shortest
-        # path. This is significantly better than conventional shortest-path
-        # finding algorithms both in terms of time and memory complexity, by
-        # exploiting the structure of the data. The walk will visit
-        # 3|A||B| + |A| + |B| nodes, relaxing at most 3 nodes from each (i.e.
-        # O(|A||B|) or linear complexity).
-        for x in range(self.line_matrix_x_len):
-            for y in range(self.line_matrix_y_len):
-                if (x | y) % 2 == 0:
-                    continue
-                vertex = self.line_matrix[x][y]
-                vertex_id = vertex.id
-                vertex_weight = vertex.relax_weight
-                adjacency = self.adjacency(vertex)
-                for adj in adjacency:
-                    child = self.line_matrix[adj.x][adj.y]
-                    child.relax(vertex_id, vertex_weight)
-
-        # Derive the shortest path from the walk.
-        # There are three legal exit points, so choose the best of these and
-        # walk its parents backwards.
-        exit_xy = self.line_matrix[self.line_matrix_x_len - 2][
-            self.line_matrix_y_len - 2
-        ]
-        exit_x = self.line_matrix[self.line_matrix_x_len - 2][
-            self.line_matrix_y_len - 1
-        ]
-        exit_y = self.line_matrix[self.line_matrix_x_len - 1][
-            self.line_matrix_y_len - 2
-        ]
-        if (
-            exit_x.relax_weight < exit_y.relax_weight
-            and exit_x.relax_weight < exit_xy.relax_weight
-        ):
-            return self.walk_path(exit_x)
-        elif exit_y.relax_weight < exit_xy.relax_weight:
-            return self.walk_path(exit_y)
-        else:
-            return self.walk_path(exit_xy)
+def _choose_operation(
+    pair: int, remove: int, add: int
+) -> tuple[int, AlignmentOperation]:
+    if pair <= remove and pair <= add:
+        # A tied pairing gives the renderer useful sub-line highlighting rather
+        # than two unrelated rows.
+        return pair, AlignmentOperation.PAIR
+    if add <= remove:
+        # Walking this choice backwards puts removals before additions in the
+        # final output, matching ordinary diff output.
+        return add, AlignmentOperation.ADD
+    return remove, AlignmentOperation.REMOVE
 
 
 def align(
     lines_b: list[str], lines_a: list[str]
 ) -> list[tuple[str | None, str | None]]:
-    matrix = AlignmentMatrix(lines_b, lines_a)
-    if debug:
-        print(f"  Initialised: {matrix}", file=sys.stderr)
-    path = matrix.shortest_path()
-    if debug:
-        print(f"  Shortest path: {path}", file=sys.stderr)
+    """Pairs similar lines while preserving both input orders.
+
+    Unpaired lines cost their character length. Pairing costs their edit
+    distance, unless the lines are too dissimilar to make sub-line highlighting
+    useful. The dynamic programme keeps two cost rows and one byte of traceback
+    state per pair of input lines.
+    """
+    width = len(lines_a) + 1
+    operations = bytearray((len(lines_b) + 1) * width)
+    previous_costs = [0] * width
+    current_costs = [0] * width
+
+    # The first row and column can only add or remove lines.
+    for after_index, after in enumerate(lines_a):
+        previous_costs[after_index + 1] = previous_costs[after_index] + len(after)
+        operations[after_index + 1] = AlignmentOperation.ADD
+
+    for before_index, before in enumerate(lines_b):
+        current_costs[0] = previous_costs[0] + len(before)
+        operations[(before_index + 1) * width] = AlignmentOperation.REMOVE
+
+        for after_index, after in enumerate(lines_a):
+            column = after_index + 1
+            score = _pair_cost(before, after)
+            pair = previous_costs[column - 1] + score
+            remove = previous_costs[column] + len(before)
+            add = current_costs[column - 1] + len(after)
+            cost, operation = _choose_operation(pair, remove, add)
+
+            if debug:
+                print(
+                    f"  Pair score for {before!r} -> {after!r}: {score}",
+                    file=sys.stderr,
+                )
+
+            current_costs[column] = cost
+            operations[(before_index + 1) * width + column] = operation
+
+        previous_costs, current_costs = current_costs, previous_costs
+
+    # Costs only need the previous row. One byte per cell retains enough of the
+    # chosen path to reconstruct the alignment backwards.
+    before_index = len(lines_b)
+    after_index = len(lines_a)
     alignment: list[tuple[str | None, str | None]] = []
-    for point in path:
-        before = lines_b[point.x // 2] if point.x % 2 else None
-        after = lines_a[point.y // 2] if point.y % 2 else None
-        alignment.append((before, after))
+    while before_index > 0 or after_index > 0:
+        operation = AlignmentOperation(operations[before_index * width + after_index])
+        if operation == AlignmentOperation.REMOVE:
+            alignment.append((lines_b[before_index - 1], None))
+            before_index -= 1
+        elif operation == AlignmentOperation.ADD:
+            alignment.append((None, lines_a[after_index - 1]))
+            after_index -= 1
+        elif operation == AlignmentOperation.PAIR:
+            alignment.append((lines_b[before_index - 1], lines_a[after_index - 1]))
+            before_index -= 1
+            after_index -= 1
+        else:
+            raise AssertionError("alignment path ended before both inputs")
+
+    alignment.reverse()
     return alignment
