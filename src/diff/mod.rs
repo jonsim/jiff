@@ -361,7 +361,7 @@ pub(super) fn render_diffs(
                         (Some(before), Some(after)) => {
                             fmts_b.push(margin_styling.remove.paint("- "));
                             fmts_a.push(margin_styling.add.paint("+ "));
-                            _style_diff_line(
+                            style_diff_line(
                                 before,
                                 after,
                                 line_styling,
@@ -391,7 +391,7 @@ pub(super) fn render_diffs(
 
 // These arguments deliberately mirror the left and right output columns.
 #[allow(clippy::too_many_arguments)]
-fn _render_side_by_side_line(
+fn render_side_by_side_line(
     output: &mut String,
     lineno_l: ANSIString,
     lineno_r: ANSIString,
@@ -478,7 +478,7 @@ fn line_diff_overrides(
     (before_overrides, after_overrides)
 }
 
-fn _style_diff_line<'u>(
+fn style_diff_line<'u>(
     before: &'u str,
     after: &'u str,
     styling: &ColorScheme,
@@ -561,7 +561,7 @@ pub(super) fn render_diffs_side_by_side(
                 for line in same.split('\n') {
                     let lineno_l_fmt = format!("{:w$}:", lineno_l, w = lineno_width);
                     let lineno_r_fmt = format!("{:w$}:", lineno_r, w = lineno_width);
-                    _render_side_by_side_line(
+                    render_side_by_side_line(
                         &mut output,
                         lineno_styling.same.paint(&lineno_l_fmt),
                         lineno_styling.same.paint(&lineno_r_fmt),
@@ -583,7 +583,7 @@ pub(super) fn render_diffs_side_by_side(
             Diff::Add(add) => {
                 for line_r in add.split('\n') {
                     let lineno_r_fmt = format!("{:w$}:", lineno_r, w = lineno_width);
-                    _render_side_by_side_line(
+                    render_side_by_side_line(
                         &mut output,
                         lineno_styling.same.paint(&empty_lineno),
                         lineno_styling.add_highlight.paint(&lineno_r_fmt),
@@ -605,7 +605,7 @@ pub(super) fn render_diffs_side_by_side(
             Diff::Remove(rem) => {
                 for line_l in rem.split('\n') {
                     let lineno_l_fmt = format!("{:w$}:", lineno_l, w = lineno_width);
-                    _render_side_by_side_line(
+                    render_side_by_side_line(
                         &mut output,
                         lineno_styling.remove_highlight.paint(&lineno_l_fmt),
                         lineno_styling.same.paint(&empty_lineno),
@@ -626,7 +626,7 @@ pub(super) fn render_diffs_side_by_side(
             }
             Diff::Omitted(line_count) => {
                 let message = omission_text(*line_count);
-                _render_side_by_side_line(
+                render_side_by_side_line(
                     &mut output,
                     lineno_styling.same.paint(&empty_lineno),
                     lineno_styling.same.paint(&empty_lineno),
@@ -651,7 +651,7 @@ pub(super) fn render_diffs_side_by_side(
                     match aligned {
                         (Some(line_l), None) => {
                             let lineno_l_fmt = format!("{:w$}:", lineno_l, w = lineno_width);
-                            _render_side_by_side_line(
+                            render_side_by_side_line(
                                 &mut output,
                                 lineno_styling.remove_highlight.paint(&lineno_l_fmt),
                                 lineno_styling.same.paint(&empty_lineno),
@@ -671,7 +671,7 @@ pub(super) fn render_diffs_side_by_side(
                         }
                         (None, Some(line_r)) => {
                             let lineno_r_fmt = format!("{:w$}:", lineno_r, w = lineno_width);
-                            _render_side_by_side_line(
+                            render_side_by_side_line(
                                 &mut output,
                                 lineno_styling.same.paint(&empty_lineno),
                                 lineno_styling.add_highlight.paint(&lineno_r_fmt),
@@ -694,7 +694,7 @@ pub(super) fn render_diffs_side_by_side(
                             let lineno_r_fmt = format!("{:w$}:", lineno_r, w = lineno_width);
                             let mut fmt_l = Vec::new();
                             let mut fmt_r = Vec::new();
-                            _style_diff_line(
+                            style_diff_line(
                                 line_l,
                                 line_r,
                                 line_styling,
@@ -703,7 +703,7 @@ pub(super) fn render_diffs_side_by_side(
                                 (&highlighting.left, lineno_l - 1),
                                 (&highlighting.right, lineno_r - 1),
                             );
-                            _render_side_by_side_line(
+                            render_side_by_side_line(
                                 &mut output,
                                 lineno_styling.remove.paint(&lineno_l_fmt),
                                 lineno_styling.add.paint(&lineno_r_fmt),
