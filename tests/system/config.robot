@@ -10,7 +10,8 @@ Rust Config           Run Rust Jiff With Config
 Renderer Loads Custom Colours
     [Documentation]    Checks a TOML palette is applied in both output modes.
     [Arguments]    ${runner}
-    VAR    ${config}    ${TEMPDIR}/jiff-colour-test.toml
+    VAR    ${work_dir}    ${OUTPUT DIR}/jiff-system/${SUITE NAME}/${TEST NAME}
+    VAR    ${config}    ${work_dir}/jiff-colour-test.toml
     VAR    ${config_contents}
     ...    [color]
     ...    \nadd = { color = "blue", bold = true }
@@ -19,6 +20,7 @@ Renderer Loads Custom Colours
     VAR    ${base_dir}    ${CURDIR}/../..
     VAR    ${first}    ${base_dir}/testcases/minimal/02.txt
     VAR    ${first_hello}    ${base_dir}/testcases/minimal/03.txt
+    Create Directory    ${work_dir}
     Create File    ${config}    ${config_contents}
     ${inline} =    Run Keyword
     ...    ${runner}    ${config}    --inline    ${first}    ${first_hello}
@@ -35,6 +37,7 @@ Renderer Loads Custom Colours
     Output Uses Custom Overlap Colour    ${three_way.stdout}
 
 Output Uses Custom Colours
+    [Documentation]    Checks the configured normal and highlighted styles.
     [Arguments]    ${output}
     ${blue} =    Evaluate    chr(27) + "[1;34m"
     ${highlight} =    Evaluate    chr(27) + "[33;44m"
@@ -43,6 +46,7 @@ Output Uses Custom Colours
     Should Contain Any    ${output}    ${highlight}    ${highlight_reordered}
 
 Output Uses Custom Overlap Colour
+    [Documentation]    Checks the configured three-way overlap style.
     [Arguments]    ${output}
     ${overlap} =    Evaluate    chr(27) + "[37;44m"
     ${overlap_reordered} =    Evaluate    chr(27) + "[44;37m"

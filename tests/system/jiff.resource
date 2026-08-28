@@ -43,19 +43,6 @@ Jiff Files
         ...    Rust implementation produced incorrect output
     END
 
-
-Jiff Strings
-    [Documentation]    Writes the left and right strings to temporary files,
-    ...    then runs the Jiff Files keyword with those files and the
-    ...    expectation.
-    [Arguments]    ${left}    ${right}    ${expectation}
-    Create File    ${TEMPDIR}/left.txt           ${left}
-    Create File    ${TEMPDIR}/right.txt          ${right}
-    Create File    ${TEMPDIR}/expectation.txt    ${expectation}
-    Jiff Files     ${TEMPDIR}/left.txt
-    ...            ${TEMPDIR}/right.txt
-    ...            ${TEMPDIR}/expectation.txt
-
 Run Python Jiff
     [Documentation]    Runs the Python version of `jiff` with the given
     ...    arguments, checks for successful execution and returns the result

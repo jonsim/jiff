@@ -12,7 +12,7 @@ Rust Syntax           Run Rust Jiff With Colour      Run Rust Jiff With Config
 Renderer Highlights Source Syntax
     [Documentation]    Checks detection, override and opt-out at the real CLI boundary.
     [Arguments]    ${runner}    ${config_runner}
-    VAR    ${work_dir}    ${TEMPDIR}/${TEST NAME}
+    VAR    ${work_dir}    ${OUTPUT DIR}/jiff-system/${SUITE NAME}/${TEST NAME}
     VAR    ${left_python}    ${work_dir}/muppets-before.py
     VAR    ${right_python}    ${work_dir}/muppets-after.py
     VAR    ${left_text}    ${work_dir}/muppets-before.txt

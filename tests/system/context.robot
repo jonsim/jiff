@@ -12,10 +12,12 @@ Rust                   Run Rust Jiff      Run Rust Jiff With Colour
 Renderer Limits Unchanged Context
     [Documentation]    Checks both option forms and preserves unlimited output by default.
     [Arguments]    ${runner}    ${colour_runner}
-    VAR    ${left}    ${TEMPDIR}/context-left.txt
-    VAR    ${right}    ${TEMPDIR}/context-right.txt
+    VAR    ${work_dir}    ${OUTPUT DIR}/jiff-system/${SUITE NAME}/${TEST NAME}
+    VAR    ${left}    ${work_dir}/context-left.txt
+    VAR    ${right}    ${work_dir}/context-right.txt
     VAR    ${left_contents}     one\ntwo\nthree\nfour\nKermit\nsix\nseven\neight\nnine
     VAR    ${right_contents}    one\ntwo\nthree\nfour\nFozzie\nsix\nseven\neight\nnine
+    Create Directory    ${work_dir}
     Create File    ${left}    ${left_contents}
     Create File    ${right}    ${right_contents}
 
@@ -56,6 +58,7 @@ Renderer Limits Unchanged Context
     Should Not Contain    ${unlimited.stdout}    unchanged lines
 
 Omission Uses Muted Colour
+    [Documentation]    Checks context markers use the palette's quiet colour.
     [Arguments]    ${output}
     ${ansi_bright_black} =    Evaluate    chr(27) + "[90m"
     ${ansi_fixed_gray} =    Evaluate    chr(27) + "[38;5;8m"
