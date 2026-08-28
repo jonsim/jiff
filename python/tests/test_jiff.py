@@ -181,10 +181,10 @@ class OutputTests(unittest.TestCase):
             "Fozzie",
             "/tmp/local",
             "/tmp/remote",
-            "muppet cast.txt",
-            True,
-            False,
-            ColorScheme.plain(),
+            repository_path="muppet cast.txt",
+            inline=True,
+            color=False,
+            colors=ColorScheme.plain(),
         )
 
         self.assertTrue(
@@ -197,10 +197,10 @@ class OutputTests(unittest.TestCase):
             bytes([0, 2]),
             "/tmp/local",
             "/tmp/remote",
-            "animal.dat",
-            False,
-            False,
-            ColorScheme.plain(),
+            repository_path="animal.dat",
+            inline=False,
+            color=False,
+            colors=ColorScheme.plain(),
         )
 
         self.assertEqual("Binary files a/animal.dat and b/animal.dat differ\n", output)
@@ -211,10 +211,10 @@ class OutputTests(unittest.TestCase):
             bytes([0, 1]),
             "/tmp/kermit.dat",
             "/tmp/kermit-copy.dat",
-            None,
-            False,
-            False,
-            ColorScheme.plain(),
+            repository_path=None,
+            inline=False,
+            color=False,
+            colors=ColorScheme.plain(),
         )
 
         self.assertEqual(
@@ -230,9 +230,9 @@ class OutputTests(unittest.TestCase):
             "local.txt",
             "base.txt",
             "remote.txt",
-            True,
-            False,
-            ColorScheme.plain(),
+            inline=True,
+            color=False,
+            colors=ColorScheme.plain(),
         )
 
         self.assertEqual(
@@ -254,9 +254,9 @@ class OutputTests(unittest.TestCase):
             "/tmp/local.txt",
             "/tmp/base.txt",
             "/tmp/remote.txt",
-            False,
-            False,
-            ColorScheme.plain(),
+            inline=False,
+            color=False,
+            colors=ColorScheme.plain(),
             terminal_width=120,
         )
 
@@ -273,9 +273,9 @@ class OutputTests(unittest.TestCase):
             "muppet.txt",
             "muppet.txt",
             "muppet.txt",
-            True,
-            False,
-            ColorScheme.plain(),
+            inline=True,
+            color=False,
+            colors=ColorScheme.plain(),
             labels=("Local", "Base", "Remote"),
         )
 

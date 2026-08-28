@@ -468,8 +468,8 @@ class JiffConfigureApp(App[None]):
         common = {
             "left": source.left,
             "right": source.right,
-            "lpath": source.left_path,
-            "rpath": source.right_path,
+            "left_path": source.left_path,
+            "right_path": source.right_path,
             "repository_path": None,
             "color": True,
             "colors": self.scheme,

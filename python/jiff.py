@@ -199,17 +199,20 @@ def _read_unmerged_inputs(repository_path: str) -> tuple[str | bytes, ...]:
     return tuple(_read_git_stage(stages[index], repository_path) for index in (1, 0, 2))
 
 
-def file_labels(repository_path: str | None, lpath: str, rpath: str) -> tuple[str, str]:
+def file_labels(
+    repository_path: str | None, left_path: str, right_path: str
+) -> tuple[str, str]:
     if repository_path is not None:
         return f"a/{repository_path}", f"b/{repository_path}"
-    return lpath, rpath
+    return left_path, right_path
 
 
 def render_output(
     left: str | bytes,
     right: str | bytes,
-    lpath: str,
-    rpath: str,
+    left_path: str,
+    right_path: str,
+    *,
     repository_path: str | None,
     inline: bool,
     color: bool,
@@ -219,7 +222,27 @@ def render_output(
     syntax_enabled: bool = True,
     terminal_width: int | None = None,
 ) -> str:
-    left_label, right_label = file_labels(repository_path, lpath, rpath)
+    """Renders one file comparison.
+
+    Binary input produces a single status line because the text renderer cannot
+    show useful line changes. ``repository_path`` adds Git-style headings and
+    takes precedence over temporary filenames when detecting syntax.
+
+    Args:
+        left: Before-side text or undecoded binary content.
+        right: After-side text or undecoded binary content.
+        left_path: Filename used for labels and syntax detection.
+        right_path: Filename used for labels and syntax detection.
+        repository_path: Original Git path, or ``None`` for ordinary files.
+        inline: Use unified output instead of the default two panes.
+        color: Include ANSI colours in the output.
+        colors: Styles used for diff and syntax highlighting.
+        context_lines: Unchanged lines to retain around each change.
+        syntax: Explicit lexer name, or ``None`` for detection.
+        syntax_enabled: Whether to apply syntax highlighting.
+        terminal_width: Explicit width for an embedded side-by-side preview.
+    """
+    left_label, right_label = file_labels(repository_path, left_path, right_path)
 
     if isinstance(left, bytes) or isinstance(right, bytes):
         relationship = (
@@ -236,7 +259,13 @@ def render_output(
     highlighting = syntax_highlighting.HighlightedFiles()
     if color and syntax_enabled:
         highlighting = syntax_highlighting.highlight_files(
-            left, right, lpath, rpath, repository_path, syntax, colors
+            left,
+            right,
+            left_path,
+            right_path,
+            repository_path,
+            syntax,
+            colors,
         )
 
     diffs = diff.calculate_line_diff(left, right)
@@ -259,6 +288,7 @@ def render_three_way_output(
     left_path: str,
     middle_path: str,
     right_path: str,
+    *,
     inline: bool,
     color: bool,
     colors: ColorScheme,
@@ -268,7 +298,27 @@ def render_three_way_output(
     terminal_width: int | None = None,
     labels: tuple[str, str, str] | None = None,
 ) -> str:
-    """Renders a comparison whose second input is the common base."""
+    """Renders a comparison whose second input is the common base.
+
+    Text uses three panes unless ``inline`` is selected. Inline and binary
+    inputs fall back to labelled Local-to-Base and Base-to-Remote comparisons.
+
+    Args:
+        left: Local text or undecoded binary content.
+        middle: Common-base text or undecoded binary content.
+        right: Remote text or undecoded binary content.
+        left_path: Local filename used for labels and syntax detection.
+        middle_path: Base filename used for labels and syntax detection.
+        right_path: Remote filename used for labels and syntax detection.
+        inline: Use two labelled unified comparisons instead of three panes.
+        color: Include ANSI colours in the output.
+        colors: Styles used for diff and syntax highlighting.
+        context_lines: Unchanged lines to retain around each change.
+        syntax: Explicit lexer name, or ``None`` for detection.
+        syntax_enabled: Whether to apply syntax highlighting.
+        terminal_width: Explicit width for an embedded three-pane preview.
+        labels: Explicit pane names, or ``None`` to use the filenames.
+    """
     labels = labels or tuple(
         Path(path).name or path for path in (left_path, middle_path, right_path)
     )
@@ -309,28 +359,28 @@ def render_three_way_output(
         middle,
         left_path,
         middle_path,
-        None,
-        inline,
-        color,
-        colors.without_additions(),
-        context_lines,
-        syntax,
-        syntax_enabled,
-        terminal_width,
+        repository_path=None,
+        inline=inline,
+        color=color,
+        colors=colors.without_additions(),
+        context_lines=context_lines,
+        syntax=syntax,
+        syntax_enabled=syntax_enabled,
+        terminal_width=terminal_width,
     )
     second = render_output(
         middle,
         right,
         middle_path,
         right_path,
-        None,
-        inline,
-        color,
-        colors.without_removals(),
-        context_lines,
-        syntax,
-        syntax_enabled,
-        terminal_width,
+        repository_path=None,
+        inline=inline,
+        color=color,
+        colors=colors.without_removals(),
+        context_lines=context_lines,
+        syntax=syntax,
+        syntax_enabled=syntax_enabled,
+        terminal_width=terminal_width,
     )
     return (
         f"=== 1: {labels[0]} vs 2: {labels[1]} ===\n"
@@ -343,6 +393,7 @@ def render_three_way_output(
 def render_directory_output(
     left_root: Path,
     right_root: Path,
+    *,
     inline: bool,
     color: bool,
     colors: ColorScheme,
@@ -350,7 +401,12 @@ def render_directory_output(
     syntax: str | None = None,
     syntax_enabled: bool = True,
 ) -> str:
-    """Renders all changed files from two directory trees as one diff."""
+    """Renders all changed files from two directory trees as one diff.
+
+    Directory entries retain repository-relative headings and are emitted in
+    deterministic path order. Binary files use the same status-line fallback
+    as an ordinary file comparison.
+    """
     output = []
     for directory_entry in directory_diff.directory_diffs(left_root, right_root):
         relative_path = directory_entry.relative_path.as_posix()
@@ -362,13 +418,13 @@ def render_directory_output(
                 file_contents(directory_entry.right or b""),
                 str(left_path),
                 str(right_path),
-                relative_path,
-                inline,
-                color,
-                colors,
-                context_lines,
-                syntax,
-                syntax_enabled,
+                repository_path=relative_path,
+                inline=inline,
+                color=color,
+                colors=colors,
+                context_lines=context_lines,
+                syntax=syntax,
+                syntax_enabled=syntax_enabled,
             )
         )
     return "".join(output)
@@ -535,12 +591,12 @@ def run():
                 repository_path,
                 repository_path,
                 repository_path,
-                args.inline,
-                color,
-                colors,
-                args.unified,
-                args.syntax,
-                not args.no_syntax,
+                inline=args.inline,
+                color=color,
+                colors=colors,
+                context_lines=args.unified,
+                syntax=args.syntax,
+                syntax_enabled=not args.no_syntax,
                 labels=("Local", "Base", "Remote"),
             )
         elif isinstance(input_paths, ThreeWayPaths):
@@ -555,49 +611,49 @@ def run():
             output = render_three_way_output(
                 *(read_file(path) for path in paths),
                 *paths,
-                args.inline,
-                color,
-                colors,
-                args.unified,
-                args.syntax,
-                not args.no_syntax,
+                inline=args.inline,
+                color=color,
+                colors=colors,
+                context_lines=args.unified,
+                syntax=args.syntax,
+                syntax_enabled=not args.no_syntax,
             )
         else:
-            lpath = input_paths.left
-            rpath = input_paths.right
-            left_is_directory = Path(lpath).is_dir()
-            right_is_directory = Path(rpath).is_dir()
+            left_path = input_paths.left
+            right_path = input_paths.right
+            left_is_directory = Path(left_path).is_dir()
+            right_is_directory = Path(right_path).is_dir()
             if left_is_directory != right_is_directory:
                 print(
-                    f"Could not compare {lpath} and {rpath}: both inputs must be "
+                    f"Could not compare {left_path} and {right_path}: both inputs must be "
                     "files or both directories",
                     file=sys.stderr,
                 )
                 sys.exit(1)
             if left_is_directory:
                 output = render_directory_output(
-                    Path(lpath),
-                    Path(rpath),
-                    args.inline,
-                    color,
-                    colors,
-                    args.unified,
-                    args.syntax,
-                    not args.no_syntax,
+                    Path(left_path),
+                    Path(right_path),
+                    inline=args.inline,
+                    color=color,
+                    colors=colors,
+                    context_lines=args.unified,
+                    syntax=args.syntax,
+                    syntax_enabled=not args.no_syntax,
                 )
             else:
                 output = render_output(
-                    read_file(lpath),
-                    read_file(rpath),
-                    lpath,
-                    rpath,
-                    input_paths.repository_path,
-                    args.inline,
-                    color,
-                    colors,
-                    args.unified,
-                    args.syntax,
-                    not args.no_syntax,
+                    read_file(left_path),
+                    read_file(right_path),
+                    left_path,
+                    right_path,
+                    repository_path=input_paths.repository_path,
+                    inline=args.inline,
+                    color=color,
+                    colors=colors,
+                    context_lines=args.unified,
+                    syntax=args.syntax,
+                    syntax_enabled=not args.no_syntax,
                 )
     except GitError as error:
         print(error, file=sys.stderr)
