@@ -63,6 +63,13 @@ class DiffType(enum.Enum):
 
 @dataclass
 class Diff:
+    """One contiguous region in a text diff.
+
+    ``SAME``, ``ADD`` and ``REMOVE`` store their text in ``left``.
+    ``REPLACE`` stores the before and after text in ``left`` and ``right``.
+    ``OMITTED`` leaves both text fields empty and records the hidden line count.
+    """
+
     kind: DiffType
     left: str = ""
     right: str | None = None
@@ -72,6 +79,8 @@ class Diff:
 
 @dataclass
 class DiffStyling:
+    """Resolved Rich styles for every kind of diff text."""
+
     same: Style
     omitted: Style
     add: Style
@@ -133,6 +142,7 @@ def render_file_header(
 
 
 def calculate_line_diff(left: str, right: str) -> list[Diff]:
+    """Calculates contiguous changes between newline-separated source lines."""
     return calculate_diff(left, right, "\n")
 
 
@@ -408,6 +418,7 @@ def render_diffs(
     colors: ColorScheme | None = None,
     highlighting: HighlightedFiles | None = None,
 ) -> str:
+    """Renders calculated changes as one unified stream."""
     with console.capture() as capture:
         print_diffs(diffs, color, colors, highlighting)
     return capture.get()
@@ -656,6 +667,7 @@ def render_diffs_side_by_side(
     highlighting: HighlightedFiles | None = None,
     terminal_width: int | None = None,
 ) -> str:
+    """Renders calculated changes in two terminal-width panes."""
     with console.capture() as capture:
         print_diffs_side_by_side(
             diffs, max_line_count, color, colors, highlighting, terminal_width
