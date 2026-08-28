@@ -173,6 +173,27 @@ class GitIndexTests(unittest.TestCase):
             jiff._read_git_stage(stage, "muppets"),
         )
 
+    def test_unmerged_gitlinks_do_not_request_blob_contents(self):
+        entries = (
+            b"160000 base-object 1\tmuppets\0"
+            b"160000 local-object 2\tmuppets\0"
+            b"160000 remote-object 3\tmuppets\0"
+        )
+        with mock.patch("jiff._run_git", return_value=entries) as run_git:
+            contents = jiff._read_unmerged_inputs("muppets")
+
+        self.assertEqual(
+            (
+                "Subproject commit local-object",
+                "Subproject commit base-object",
+                "Subproject commit remote-object",
+            ),
+            contents,
+        )
+        # Only ls-files is needed: asking cat-file for a gitlink would fail
+        # because its object is a commit rather than a blob.
+        run_git.assert_called_once()
+
 
 class OutputTests(unittest.TestCase):
     def test_repository_path_adds_git_style_headings(self):

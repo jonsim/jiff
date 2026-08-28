@@ -941,6 +941,30 @@ mod tests {
     }
 
     #[test]
+    fn unmerged_gitlinks_are_read_from_the_index_entries() {
+        let output = concat!(
+            "160000 base-object 1\tmuppets\0",
+            "160000 local-object 2\tmuppets\0",
+            "160000 remote-object 3\tmuppets\0",
+        );
+        let stages = parse_unmerged_stages(output.as_bytes(), "muppets")
+            .expect("valid gitlink stages should parse");
+        let contents = [1, 0, 2].map(|index| {
+            read_git_stage(stages[index].as_ref(), "muppets")
+                .expect("gitlinks do not need object lookup")
+        });
+
+        assert_eq!(
+            [
+                FileContents::Text("Subproject commit local-object".to_string()),
+                FileContents::Text("Subproject commit base-object".to_string()),
+                FileContents::Text("Subproject commit remote-object".to_string()),
+            ],
+            contents
+        );
+    }
+
+    #[test]
     fn malformed_unmerged_index_entries_are_rejected() {
         let error = parse_unmerged_stages(
             b"100644 repeated 2\tkermit.txt\0\
