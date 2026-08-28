@@ -286,6 +286,51 @@ class GitDifftoolTests(unittest.TestCase):
             result.stdout,
         )
 
+    def test_unmerged_protocol_renders_a_delete_modify_conflict(self) -> None:
+        path = "opening number.txt"
+        self.write(path, "Original song\n")
+        self.commit("Write the opening number")
+        base = self.git("rev-parse", "HEAD").stdout.strip()
+
+        self.git("switch", "--quiet", "--create", "remote")
+        self.write(path, "Remote rewrite\n")
+        self.commit("Rewrite the remote opening number")
+        self.git("switch", "--quiet", "--create", "local", base)
+        (self.repository / path).unlink()
+        self.commit("Cut the local opening number")
+        merge = self.git("merge", "--no-edit", "remote", check=False)
+        self.assertNotEqual(0, merge.returncode)
+
+        result = subprocess.run(
+            [*JIFF_COMMAND, "--git-external-diff", "--no-color", path],
+            cwd=self.repository,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("=== Unmerged: opening number.txt ===\n", result.stdout)
+        panes = [line.split("│") for line in result.stdout.splitlines()]
+        # This is the mirror image of the remote-deletion case above: the
+        # absent local stage must stay visible as an empty first pane.
+        self.assertTrue(
+            any(
+                not row[0].strip() and "Remote rewrite" in row[2]
+                for row in panes
+                if len(row) == 3
+            ),
+            result.stdout,
+        )
+        self.assertTrue(
+            any(
+                not row[0].strip() and "Original song" in row[1]
+                for row in panes
+                if len(row) == 3
+            ),
+            result.stdout,
+        )
+
     def test_unmerged_protocol_rejects_a_merged_path(self) -> None:
         result = subprocess.run(
             [
