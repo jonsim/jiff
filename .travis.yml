@@ -1,53 +1,24 @@
 language: rust
-# Sudo only needed to workaround travis-ci/travis-ci#9061
-sudo: required
+dist: jammy
+rust: stable
 
 cache:
-  - apt: true
-  - cargo
+  directories:
+    - $HOME/.cache/uv
+    - $HOME/.cargo/registry
+    - $HOME/.cargo/git
 
-# Dependencies - currently all for code coverage (kcov).
-addons:
-  apt:
-    packages:
-      - libcurl4-openssl-dev
-      - libelf-dev
-      - libdw-dev
-      - cmake
-      - gcc
-      - binutils-dev
-      - libiberty-dev
+before_install:
+  - curl -LsSf https://astral.sh/uv/install.sh | sh
+  - export PATH="$HOME/.local/bin:$PATH"
+  - rustup component add clippy rustfmt
 
-# Run builds with all supported rust versions.
-matrix:
-  include:
-    - rust: stable
-    #- rust: beta
-    #- rust: nightly
+install:
+  - uv sync --locked
 
-# Build then test.
 script:
-  - cargo build
+  - uv run pre-commit run --all-files
   - cargo test
-
-after_success:
- # If build and test are good, check the coverage.
- - |
-    if [[ "$TRAVIS_OS_NAME" == "linux" && "$TRAVIS_RUST_VERSION" == "stable" ]]; then
-      wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz &&
-      tar xzf master.tar.gz &&
-      cd kcov-master &&
-      mkdir build &&
-      cd build &&
-      cmake .. &&
-      make &&
-      make install DESTDIR=../../kcov-build &&
-      cd ../.. &&
-      rm -rf kcov-master &&
-      for file in target/debug/jiff-*[^\.d]; do
-        mkdir -p "target/cov/$(basename $file)";
-        ./kcov-build/usr/local/bin/kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename $file)" "$file";
-      done &&
-      bash <(curl -s https://codecov.io/bash) &&
-      echo "Uploaded code coverage"
-    fi
+  - uv run python -m unittest discover -s python/tests
+  - uv run python -m unittest discover -s jiff-configure/tests
+  - uv run robot tests
