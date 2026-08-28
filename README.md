@@ -420,12 +420,12 @@ cargo test
 
 System tests:
 ```sh
-robot tests
+uv run robot tests
 ```
 
 Optionally, the Python tests can be skipped with:
 ```sh
-robot -v SKIP_PYTHON_TESTS:True tests
+uv run robot -v SKIP_PYTHON_TESTS:True tests
 ```
 
 
@@ -455,12 +455,12 @@ uv run python -m unittest discover -s jiff-configure/tests
 
 System tests:
 ```sh
-robot tests
+uv run robot tests
 ```
 
 Optionally, the Rust tests can be skipped with:
 ```sh
-robot -v SKIP_RUST_TESTS:True tests
+uv run robot -v SKIP_RUST_TESTS:True tests
 ```
 
 ## Developing
