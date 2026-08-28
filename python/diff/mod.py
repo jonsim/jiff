@@ -509,17 +509,14 @@ def print_diffs_side_by_side(
     lines = _line_styling(colors)
     highlighting = highlighting or HighlightedFiles()
 
-    # Define separator.
     sep = "\u2502"
     sep_width = len(sep)
 
-    # Calculate widths to draw to.
     lineno_width = int(math.log10(max_line_count)) + 1 if max_line_count > 0 else 1
     if terminal_width is None:
         terminal_width = _terminal_width()
     line_width = max(((terminal_width - sep_width) // 2) - (lineno_width + 2), 1)
 
-    # Print all diffs.
     lineno_l = 1
     lineno_r = 1
     empty_lineno = " " * (lineno_width + 1)

@@ -63,9 +63,9 @@ fn indicator_styling(colors: &ColorScheme) -> DiffStyling {
 
 /// Calculates changes between newline-separated line contents.
 ///
-/// The heuristic Myers algorithm avoids the previous quadratic LCS matrix. It
-/// can choose a non-minimal script when an exact search grows expensive; that
-/// is a deliberate latency trade-off for a command-line tool.
+/// The heuristic Myers algorithm bounds work on difficult inputs by accepting
+/// a potentially non-minimal script. That latency trade-off matters more than
+/// a theoretically perfect edit script in an interactive command-line tool.
 pub(super) fn calculate_line_diff(left: &str, right: &str) -> Vec<Diff> {
     // Rust's `split` represents an empty string as one empty item. Jiff treats
     // empty input as having no lines, consistent with `read_file_or_die`.

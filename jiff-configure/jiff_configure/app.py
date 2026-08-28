@@ -217,7 +217,7 @@ class PreviewSource:
 
     @classmethod
     def built_in(cls) -> PreviewSource:
-        """The Python example which exercises every style category."""
+        """The Python example which exercises every two-way style category."""
         return cls(BUILTIN_LEFT, BUILTIN_RIGHT, "before.py", "after.py", 4)
 
 
