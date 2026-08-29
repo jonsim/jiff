@@ -9,9 +9,8 @@ debug = os.environ.get("JIFF_DEBUG", "0") == "1"
 
 
 def _edit_distance(before: str, after: str, cutoff: int) -> int:
-    # Matching ends can always be retained by an optimal edit script. Trimming
-    # them avoids the quadratic work for the common case of a small change in
-    # an otherwise stable line.
+    # Any best edit can keep matching text at either end. Strip it first: most
+    # lines only change in the middle, and this keeps the quadratic bit small.
     common_prefix = 0
     for before_char, after_char in zip(before, after, strict=False):
         if before_char != after_char:
@@ -93,10 +92,10 @@ def _pair_cost(
     if 2 * length_difference >= unpaired_cost:
         return dissimilar_cost
 
-    # A common subsequence can be made from isolated spaces and letters in two
-    # unrelated sentences. Levenshtein distance requires those matches to be
-    # locally coherent. Keep contiguous extensions as a useful special case
-    # for indentation and text added at either end of a line.
+    # Spaces and common letters can give unrelated sentences a surprisingly
+    # long subsequence. Levenshtein also cares about their order, so that noise
+    # is much less likely to look like a good match. Still allow one line when
+    # the other just adds text around it.
     contiguous_extension = before in after or after in before
     if contiguous_extension:
         return length_difference
@@ -188,8 +187,8 @@ def align(
 
         previous_costs, current_costs = current_costs, previous_costs
 
-    # Costs only need the previous row. One byte per cell retains enough of the
-    # chosen path to reconstruct the alignment backwards.
+    # Costs only need the previous row. Keep one byte per cell so we can trace
+    # the chosen path back afterwards.
     before_index = len(lines_b)
     after_index = len(lines_a)
     alignment: list[tuple[str | None, str | None]] = []

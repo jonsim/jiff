@@ -10,7 +10,7 @@ Rust                   Run Rust Jiff
 
 *** Keywords ***
 Version Comes From Package Metadata
-    [Documentation]    Keeps both installed interfaces on the manifest version.
+    [Documentation]    Checks the CLI reports the package version.
     [Arguments]    ${runner}
     ${result} =    Run Keyword    ${runner}    --version
     Should Be Equal    ${result.stdout}    jiff 0.1.0

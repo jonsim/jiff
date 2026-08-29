@@ -18,8 +18,8 @@ pub(super) fn display(output: &str, no_pager: bool) -> io::Result<()> {
     }
 
     match stdout.lock().write_all(output.as_bytes()) {
-        // `jiff ... | head` closes stdout once it has enough output. This is
-        // an ordinary successful pipeline, just like quitting the pager.
+        // `head` closes stdout once it has enough. That's normal, just like
+        // quitting the pager early.
         Err(error) if error.kind() == io::ErrorKind::BrokenPipe => Ok(()),
         result => result,
     }
@@ -91,8 +91,8 @@ fn run_pager(output: &str) -> io::Result<()> {
     let mut command = Command::new("sh");
     command.arg("-c").arg(pager).stdin(Stdio::piped());
 
-    // These are less's conventional CLI defaults: preserve colour, quit if
-    // our size check was conservative, and leave the output on screen.
+    // These are the usual Jiff defaults for less: keep colour, quit if our size
+    // check was conservative, and leave the output on screen.
     if env::var_os("LESS").is_none() {
         command.env("LESS", "FRX");
     }
@@ -106,8 +106,8 @@ fn run_pager(output: &str) -> io::Result<()> {
     let status = child.wait()?;
 
     if let Err(error) = write_result {
-        // Quitting the pager early closes its input while Jiff may still be
-        // writing. That is an ordinary user action, not a failed diff.
+        // Quitting the pager closes its input while Jiff may still be writing.
+        // That's normal, not a failed diff.
         if error.kind() != io::ErrorKind::BrokenPipe {
             return Err(error);
         }

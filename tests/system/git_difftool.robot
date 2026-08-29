@@ -20,7 +20,7 @@ Build Rust Jiff
     Process Should Succeed    ${result}    @{command}
 
 Git Difftool Behaviour
-    [Documentation]    Runs the real Git difftool contract against one Jiff implementation.
+    [Documentation]    Runs the same Git difftool scenarios against one Jiff implementation.
     [Arguments]    @{jiff_command}
     VAR    @{command}
     ...    python3

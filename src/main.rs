@@ -48,8 +48,8 @@ struct RenderInput<'a> {
 
 #[derive(Debug, Eq, PartialEq)]
 struct GitIndexStage {
-    // The mode determines the Git object type. Most stages are blobs, while a
-    // 160000 gitlink names the checked-out commit of a submodule.
+    // Most index stages are blobs. Mode 160000 is different: it names the
+    // checked-out commit of a submodule.
     mode: String,
     object_id: String,
 }
@@ -63,17 +63,16 @@ struct HighlightOptions<'a> {
 
 impl FileContents {
     fn from_bytes(bytes: Vec<u8>) -> Self {
-        // A NUL is the conventional cheap binary-file check. Invalid UTF-8 is
-        // binary too because Jiff's line and character algorithms operate on
-        // Unicode text rather than arbitrary bytes.
+        // A NUL is a cheap, conventional binary-file check. Invalid UTF-8
+        // counts as binary too because the diff code works on Unicode text.
         if bytes.contains(&0) {
             return Self::Binary(bytes);
         }
 
         match String::from_utf8(bytes) {
             Ok(mut text) => {
-                // Renderers add their own newline. Remove one file terminator
-                // so it does not become a spurious empty line in the diff.
+                // Renderers add their own newline. Drop one file terminator so
+                // it doesn't turn into an extra blank line in the diff.
                 if text.ends_with('\n') {
                     text.pop();
                 }
@@ -116,9 +115,9 @@ fn parse_input_paths<'a>(
         };
     }
 
-    // Keep Git's unusual positional protocol behind its explicit mode. The
-    // seven-argument form supplies temporary files; the one-argument form
-    // identifies an unresolved index entry which Jiff must read from Git.
+    // Git's positional protocol is a bit odd, so only recognise it when the
+    // flag is set. Seven arguments compare temporary files; one names an
+    // unresolved path which Jiff has to read from the index.
     match files {
         [repository_path] => Ok(InputPaths::Unmerged { repository_path }),
         [repository_path, left, _, _, right, _, _] => Ok(InputPaths::Comparison {
@@ -277,8 +276,8 @@ fn render_three_way_output(
         }
     }
 
-    // Inline output and binary inputs remain two ordinary comparisons. There
-    // is no useful three-pane representation for a binary-file status line.
+    // Binary files don't have useful three-pane output. Use the same pair of
+    // comparisons as inline mode.
     let mut output = format!("=== 1: {} vs 2: {} ===\n", labels[0], labels[1]);
     output.push_str(&render_comparison(
         left.contents,
@@ -446,8 +445,9 @@ fn read_git_stage(
     repository_path: &str,
 ) -> Result<FileContents, String> {
     let Some(stage) = stage else {
-        // Add/add and modify/delete conflicts omit one or more index stages.
-        // An empty input lets the ordinary three-way renderer show that side.
+        // Git leaves out stages which don't exist in add/add or modify/delete
+        // conflicts. An empty input makes the missing side visible in the
+        // three-way diff.
         return Ok(FileContents::from_bytes(Vec::new()));
     };
     if stage.mode == "160000" {
@@ -484,8 +484,8 @@ fn read_unmerged_inputs(repository_path: &str) -> Result<[FileContents; 3], Stri
         return Err(format!("Git has no unmerged entries for {repository_path}"));
     }
 
-    // Git names the common ancestor stage 1, ours stage 2 and theirs stage 3.
-    // Jiff's three panes are Local, Base, Remote, hence the deliberate reorder.
+    // Git orders these as Base, Local, Remote. Jiff shows Local, Base, Remote,
+    // so swap the first two here.
     Ok([
         read_git_stage(stages[1].as_ref(), repository_path)?,
         read_git_stage(stages[0].as_ref(), repository_path)?,
@@ -705,8 +705,8 @@ fn main() {
             process::exit(1);
         }
     };
-    // Git sends external diff output through its own pager, so it is still
-    // human-facing even though stdout is a pipe from Jiff's point of view.
+    // Git sends an external diff to its own pager, even though stdout looks
+    // like a pipe to Jiff.
     if color && !git_external_diff {
         let force_color = std::env::var("RICH_FORCE_TERMINAL").is_ok();
         let is_tty = std::io::stdout().is_terminal();

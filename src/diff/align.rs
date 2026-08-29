@@ -19,9 +19,8 @@ fn edit_distance(
     cutoff: usize,
     distances: &mut Vec<usize>,
 ) -> usize {
-    // Matching ends can always be retained by an optimal edit script. Removing
-    // them keeps the quadratic part small for the common case of a local change
-    // in an otherwise stable line.
+    // Any best edit can keep matching text at either end. Strip it first: most
+    // lines only change in the middle, and this keeps the quadratic bit small.
     let common_prefix = before
         .iter()
         .zip(after)
@@ -136,10 +135,10 @@ fn pair_cost(before: &LineCharacters, after: &LineCharacters, distances: &mut Ve
         return dissimilar_cost;
     }
 
-    // A common subsequence can be made from isolated spaces and letters in two
-    // unrelated sentences. Levenshtein distance requires those matches to be
-    // locally coherent. Keep contiguous extensions as a useful special case
-    // for indentation and text added at either end of a line.
+    // Spaces and common letters can give unrelated sentences a surprisingly
+    // long subsequence. Levenshtein also cares about their order, so that noise
+    // is much less likely to look like a good match. Still allow one line when
+    // the other just adds text around it.
     if is_contiguous_extension(&before.characters, &after.characters) {
         return length_difference;
     }
@@ -244,8 +243,8 @@ pub(super) fn align<'a>(
         std::mem::swap(&mut previous_costs, &mut current_costs);
     }
 
-    // Costs need only the previous row, but one byte-sized operation per cell
-    // is retained so the chosen path can be reconstructed backwards.
+    // Costs only need the previous row. Keep one byte per cell so we can trace
+    // the chosen path back afterwards.
     let mut before_index = lines_b.len();
     let mut after_index = lines_a.len();
     let mut alignment = Vec::with_capacity(before_index + after_index);

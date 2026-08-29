@@ -78,7 +78,8 @@ class GitDifftoolTests(unittest.TestCase):
         )
 
     def test_worktree_diff_handles_multiple_files_and_spaces(self) -> None:
-        # Git invokes the tool once per file and retains each repository path.
+        # Git calls the tool once per file and should pass each repository path
+        # through untouched.
         self.write("kermit.txt", "green\n")
         self.write("muppet cast.txt", "Kermit\n")
         self.commit("Introduce the cast")
@@ -272,8 +273,8 @@ class GitDifftoolTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn("=== Unmerged: closing number.txt ===\n", result.stdout)
         panes = [line.split("│") for line in result.stdout.splitlines()]
-        # The base and local edit remain visible, while Git's missing remote
-        # stage becomes the deliberately empty third pane on both rows.
+        # Git's missing remote stage should show up as an empty third pane while
+        # the base and local edit stay visible.
         self.assertTrue(
             any(
                 "Local rewrite" in row[0] and not row[2].strip()
@@ -317,8 +318,8 @@ class GitDifftoolTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn("=== Unmerged: opening number.txt ===\n", result.stdout)
         panes = [line.split("│") for line in result.stdout.splitlines()]
-        # This is the mirror image of the remote-deletion case above: the
-        # absent local stage must stay visible as an empty first pane.
+        # This is the same case the other way round: the missing local stage
+        # should show up as an empty first pane.
         self.assertTrue(
             any(
                 not row[0].strip() and "Remote rewrite" in row[2]
@@ -392,8 +393,8 @@ class GitDifftoolTests(unittest.TestCase):
         self.assertIn("Could not read", result.stderr)
 
     def test_directory_diff_combines_all_changed_files(self) -> None:
-        # Directory mode launches Jiff once, so it must retain each path while
-        # handling additions, removals, empty files and binary content itself.
+        # Git launches directory mode once. Jiff must keep each path attached
+        # to the right content, including empty and binary files.
         self.write("animal.dat", bytes([0, 1, 2, 3]))
         self.write("kermit.txt", "Green\n")
         self.write("statler.txt", "Boo!\n")
@@ -441,8 +442,8 @@ class GitDifftoolTests(unittest.TestCase):
         self.assertIn("both inputs must be files or both directories", result.stderr)
 
     def test_early_pipe_closure_is_successful(self) -> None:
-        # Closing a consumer after one line must not turn a useful diff into a
-        # failure. Make the output larger than a pipe so the close is observed.
+        # Read one line, then close the pipe. Make the output larger than the
+        # pipe buffer so Jiff definitely notices.
         content = "".join(f"Kermit line {line}\n" for line in range(20_000))
         self.write("left.txt", content)
         self.write("right.txt", content)

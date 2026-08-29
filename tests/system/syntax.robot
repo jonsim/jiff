@@ -10,7 +10,7 @@ Rust Syntax           Run Rust Jiff With Colour      Run Rust Jiff With Config
 
 *** Keywords ***
 Renderer Highlights Source Syntax
-    [Documentation]    Checks detection, override and opt-out at the real CLI boundary.
+    [Documentation]    Exercises filename detection, `--syntax` and `--no-syntax` through the CLI.
     [Arguments]    ${runner}    ${config_runner}
     VAR    ${work_dir}    ${OUTPUT DIR}/jiff-system/${SUITE NAME}/${TEST NAME}
     VAR    ${left_python}    ${work_dir}/muppets-before.py

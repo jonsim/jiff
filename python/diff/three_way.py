@@ -139,8 +139,8 @@ def _append_outer_lines(
     left: list[IndexedLine],
     right: list[IndexedLine],
 ) -> None:
-    # Insertions at the same middle-file boundary share visual rows. This does
-    # not claim the outer lines match; it only keeps the three panes compact.
+    # Put insertions at the same base-file boundary on one row. That doesn't
+    # mean the outer lines match; it just keeps the three panes compact.
     line_count = max(len(left), len(right))
     rows.extend(
         ThreeWayLine(
@@ -161,8 +161,8 @@ def _three_way_lines(left: str, middle: str, right: str) -> list[ThreeWayLine]:
     rows: list[ThreeWayLine] = []
 
     for middle_index in range(middle_line_count):
-        # Outer-only rows sit just before their next middle-file anchor in
-        # each pairwise alignment. Merge that boundary before the anchor.
+        # Each pairwise diff puts outer-only rows just before the next base
+        # line. Bring both sides together before adding that base line.
         left_only, left_cursor = _take_left_only(left_pairs, left_cursor)
         right_only, right_cursor = _take_right_only(right_pairs, right_cursor)
         _append_outer_lines(rows, left_only, right_only)
@@ -191,8 +191,8 @@ def _limit_context(
 ) -> list[ThreeWayLine | OmittedLines]:
     keep = [False] * len(lines)
 
-    # The two passes retain context before and after changes made on either
-    # side. A single pairwise context pass would miss changes on the other.
+    # Make one pass in each direction so a change on either outer side keeps
+    # nearby context. A single pairwise pass would miss the other side.
     distance = len(lines) + 1
     for index, line in enumerate(lines):
         distance = distance + 1 if line.is_unchanged() else 0

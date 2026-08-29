@@ -133,8 +133,8 @@ class PagerTests(unittest.TestCase):
         self.assertIn("Kermit line 0", terminal_output)
 
     def test_quitting_the_pager_early_is_successful(self) -> None:
-        # Identical lines avoid an expensive edit search while making the pipe
-        # comfortably larger than its kernel buffer.
+        # Identical lines are cheap to diff but still make the pipe larger than
+        # its kernel buffer.
         self.write_equal_inputs(20_000)
 
         returncode, stderr, _ = self.run_jiff("close")

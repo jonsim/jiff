@@ -21,8 +21,8 @@ debug = os.environ.get("JIFF_DEBUG", "0") == "1"
 
 
 def _console(color: bool) -> Console:
-    # The caller has already applied terminal and command-line policy. Passing
-    # that decision to Rich keeps rendering deterministic in embedded callers.
+    # By this point the CLI has already decided whether colour is safe. Give
+    # Rich the answer directly so embedded renders don't inherit terminal state.
     return Console(force_terminal=color)
 
 
@@ -34,8 +34,8 @@ def _terminal_width() -> int:
     except ValueError:
         pass
 
-    # Git connects stdout to its pager, but stdin or stderr still normally
-    # refers to the terminal which launched Git.
+    # Git may pipe stdout to its pager while stdin or stderr still points at
+    # the terminal. Try those before falling back to 120 columns.
     for stream in (sys.__stdout__, sys.__stdin__, sys.__stderr__):
         try:
             return os.get_terminal_size(stream.fileno()).columns
@@ -72,7 +72,7 @@ class Diff:
     kind: DiffType
     left: str = ""
     right: str | None = None
-    # Only OMITTED diffs set this; their source lines are deliberately absent.
+    # Only OMITTED uses this; those lines aren't present in either text field.
     omitted_lines: int = 0
 
 
@@ -106,8 +106,8 @@ def _indicator_style(style: ColorStyle) -> Style:
 
 
 def _indicator_styling(colors: ColorScheme) -> DiffStyling:
-    # Bold change indicators remain legible beside highlighted text without
-    # introducing a second colour scheme for margins and line numbers.
+    # Bold indicators are easier to pick out beside highlighted text. Reuse the
+    # line colours rather than inventing another palette for the margins.
     return DiffStyling(
         same=_indicator_style(colors.same),
         omitted=_indicator_style(colors.omitted),
@@ -154,8 +154,9 @@ def _coalesce_dissimilar_middle(changes: list[Diff]) -> list[Diff]:
     if len(changes) < 2:
         return changes
 
-    # Stable ends are useful anchors. Judge the changed middle separately so a
-    # long prefix cannot legitimise coincidental matches in unrelated text.
+    # The first and last matches are good anchors. Check the bit between them
+    # on its own, otherwise a long prefix can make random character matches
+    # look meaningful.
     prefix = changes[:1] if changes[0].kind == DiffType.SAME else []
     suffix = changes[-1:] if changes[-1].kind == DiffType.SAME else []
     middle = changes[len(prefix) : len(changes) - len(suffix)]
@@ -163,9 +164,8 @@ def _coalesce_dissimilar_middle(changes: list[Diff]) -> list[Diff]:
     if replacement is not None:
         return prefix + [replacement] + suffix
 
-    # A genuinely common phrase can make the whole line look similar while a
-    # smaller replacement inside it is still full of accidental matches. Use
-    # longer common runs as anchors and judge each intervening region again.
+    # A real common phrase can still hide a noisy replacement inside it. Use
+    # matches of three or more characters as anchors, then check the gaps again.
     refined: list[Diff] = []
     region: list[Diff] = []
     for change in middle:
@@ -246,8 +246,8 @@ def calculate_diff(left: str, right: str, split: str) -> list[Diff]:
         removed.clear()
         added.clear()
 
-    # Collect all additions and removals between stable anchors into one
-    # replacement, regardless of the edit script's internal operation order.
+    # Myers may alternate additions and removals. Keep everything between two
+    # matches in one replacement so the line aligner sees the whole block.
     for edit in calculate_edits(left_parts, right_parts):
         if edit.kind == EditKind.SAME:
             flush_change()
@@ -277,8 +277,7 @@ def limit_context(diffs: list[Diff], context_lines: int) -> list[Diff]:
             continue
 
         lines = change.left.split("\n")
-        # A leading unchanged region only contributes lines before the first
-        # change; a trailing region only contributes lines after the last.
+        # At either end, only keep context on the side facing a change.
         prefix_count = min(context_lines, len(lines)) if index > 0 else 0
         suffix_count = (
             min(context_lines, len(lines) - prefix_count)
@@ -711,7 +710,7 @@ def _print_side_by_side_line(
             wrapped_r = Text()
         left_padding = " " * (line_width - cell_len(wrapped_l.plain))
         if not margin_r.plain.strip() and not wrapped_r.plain:
-            # A missing right line has no line number or text worth padding.
+            # There's nothing useful after the separator for a missing line.
             output_console.print(
                 margin_l,
                 " ",

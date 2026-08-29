@@ -51,8 +51,8 @@ fn indicator_style(mut style: Style) -> Style {
 }
 
 fn indicator_styling(colors: &ColorScheme) -> DiffStyling {
-    // Bold change indicators remain legible beside highlighted text without
-    // introducing a second colour scheme for margins and line numbers.
+    // Bold indicators are easier to pick out beside highlighted text. Reuse the
+    // line colours rather than inventing another palette for the margins.
     DiffStyling {
         same: indicator_style(colors.same),
         add: indicator_style(colors.add),
@@ -100,8 +100,8 @@ fn diffs_from_edits<T: ToString>(edits: Vec<Edit<T>>, separator: &str) -> Vec<Di
     let mut removed = Vec::new();
     let mut added = Vec::new();
 
-    // Collect all additions and removals between stable anchors into one
-    // replacement, regardless of the edit script's internal operation order.
+    // Myers may alternate additions and removals. Keep everything between two
+    // matches in one replacement so the line aligner sees the whole block.
     for edit in edits {
         match edit {
             Edit::Same(value) => {
@@ -157,9 +157,9 @@ fn coalesce_dissimilar_middle(mut changes: Vec<Diff>) -> Vec<Diff> {
         return changes;
     }
 
-    // The ends are reliable anchors. Similarity inside the changed middle is
-    // judged separately so a long common prefix cannot legitimise accidental
-    // one-character matches across otherwise unrelated text.
+    // The first and last matches are good anchors. Check the bit between them
+    // on its own, otherwise a long prefix can make random character matches
+    // look meaningful.
     let suffix = if matches!(changes.last(), Some(Diff::Same(_))) {
         changes.pop()
     } else {
@@ -174,9 +174,9 @@ fn coalesce_dissimilar_middle(mut changes: Vec<Diff>) -> Vec<Diff> {
     if let Some(replacement) = dissimilar_replacement(&changes, false) {
         changes = vec![replacement];
     } else {
-        // A genuinely common phrase can make the whole line look similar while
-        // a smaller replacement inside it is still full of accidental matches.
-        // Longer common runs are reliable anchors for judging those regions.
+        // A real common phrase can still hide a noisy replacement inside it.
+        // Use matches of three or more characters as anchors, then check the
+        // gaps again.
         let mut refined = Vec::new();
         let mut region = Vec::new();
         for change in changes {
@@ -251,8 +251,7 @@ pub(super) fn limit_context(diffs: Vec<Diff>, context_lines: usize) -> Vec<Diff>
         };
 
         let lines: Vec<&str> = same.split('\n').collect();
-        // A leading unchanged region only contributes lines before the first
-        // change; a trailing region only contributes lines after the last.
+        // At either end, only keep context on the side facing a change.
         let prefix_count = if index > 0 {
             context_lines.min(lines.len())
         } else {
@@ -407,7 +406,7 @@ pub(super) fn render_diffs(
     output
 }
 
-// These arguments deliberately mirror the left and right output columns.
+// The long argument list follows the screen: left column, then right column.
 #[allow(clippy::too_many_arguments)]
 fn render_side_by_side_line(
     output: &mut String,
@@ -432,8 +431,8 @@ fn render_side_by_side_line(
             EitherOrBoth::Right(r) => (" ".repeat(line_width.0), r),
         };
 
-        // A missing right line has no line number or text worth padding. Stop
-        // at the separator so redirected output does not contain whitespace.
+        // There's nothing useful after the separator for a missing line. Stop
+        // there so redirected output doesn't end in a trail of spaces.
         if margin_r.trim().is_empty() && wrapped_r.trim().is_empty() {
             writeln!(output, "{} {}{}", margin_l, wrapped_l, separator)
                 .expect("writing to a String cannot fail");
@@ -869,7 +868,8 @@ mod tests {
 
     #[test]
     fn char_diff_coalesces_a_noisy_phrase_between_stable_anchors() {
-        // Shared surrounding clauses should not legitimise scattered letters.
+        // Shared surrounding text shouldn't make scattered matching letters
+        // look useful.
         let before = "Sam keeps one dependable act ready in the wings.";
         let after = "Scooter keeps two unpredictable acts ready in the wings.";
 

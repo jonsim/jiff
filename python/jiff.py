@@ -72,8 +72,8 @@ def read_file(path: str | Path) -> str | bytes:
     with open(path, "rb") as file:
         content = file.read()
 
-    # A NUL is the conventional cheap binary-file check. Invalid UTF-8 is
-    # binary too because the diff algorithms operate on Unicode text.
+    # A NUL is a cheap, conventional binary-file check. Invalid UTF-8 counts
+    # as binary too because the diff code works on Unicode text.
     return file_contents(content)
 
 
@@ -95,9 +95,9 @@ def _parse_input_paths(
             raise ValueError("--path cannot be used with a three-way comparison")
         raise ValueError("jiff expects two or three files, or two directories")
 
-    # Keep Git's unusual positional protocol behind its explicit mode. The
-    # seven-argument form supplies temporary files; the one-argument form
-    # identifies an unresolved index entry which Jiff must read from Git.
+    # Git's positional protocol is a bit odd, so only recognise it when the
+    # flag is set. Seven arguments compare temporary files; one names an
+    # unresolved path which Jiff has to read from the index.
     if len(files) == 1:
         return UnmergedPath(files[0])
     if len(files) == 7:
@@ -163,8 +163,9 @@ def _run_git(arguments: list[str], action: str, repository_path: str) -> bytes:
 
 def _read_git_stage(stage: GitIndexStage | None, repository_path: str) -> str | bytes:
     if stage is None:
-        # Add/add and modify/delete conflicts omit one or more index stages.
-        # An empty input lets the ordinary three-way renderer show that side.
+        # Git leaves out stages which don't exist in add/add or modify/delete
+        # conflicts. An empty input makes the missing side visible in the
+        # three-way diff.
         return file_contents(b"")
     if stage.mode == "160000":
         return f"Subproject commit {stage.object_id}"
@@ -195,8 +196,8 @@ def _read_unmerged_inputs(repository_path: str) -> tuple[str | bytes, ...]:
     if not any(stages):
         raise GitError(f"Git has no unmerged entries for {repository_path}")
 
-    # Git names the common ancestor stage 1, ours stage 2 and theirs stage 3.
-    # Jiff's three panes are Local, Base, Remote, hence the deliberate reorder.
+    # Git orders these as Base, Local, Remote. Jiff shows Local, Base, Remote,
+    # so swap the first two here.
     return tuple(_read_git_stage(stages[index], repository_path) for index in (1, 0, 2))
 
 
@@ -353,8 +354,8 @@ def render_three_way_output(
             terminal_width,
         )
 
-    # Inline output and binary inputs remain two ordinary comparisons. There
-    # is no useful three-pane representation for a binary-file status line.
+    # Binary files don't have useful three-pane output. Use the same pair of
+    # comparisons as inline mode.
     first = render_output(
         left,
         middle,
@@ -404,9 +405,8 @@ def render_directory_output(
 ) -> str:
     """Renders all changed files from two directory trees as one diff.
 
-    Directory entries retain repository-relative headings and are emitted in
-    deterministic path order. Binary files use the same status-line fallback
-    as an ordinary file comparison.
+    Each file gets a repository-relative heading, and paths are sorted. Binary
+    files use the same status line as an ordinary file comparison.
     """
     output = []
     for directory_entry in directory_diff.directory_diffs(left_root, right_root):
@@ -467,8 +467,8 @@ def _run_pager(output: str) -> None:
     environment = os.environ.copy()
     environment.setdefault("LESS", "FRX")
 
-    # PAGER is conventionally a shell command rather than a single executable,
-    # so values such as "less -S" need shell parsing here.
+    # PAGER is a shell command, not necessarily just an executable. This keeps
+    # values such as "less -S" working.
     result = subprocess.run(
         pager,
         input=output,
@@ -495,9 +495,9 @@ def _display(output: str, no_pager: bool) -> None:
             sys.stdout.write(output)
             sys.stdout.flush()
         except BrokenPipeError:
-            # A downstream command such as `head` may deliberately stop
-            # reading early. Redirect the final interpreter flush too.
-            # This deliberately stays open until interpreter shutdown.
+            # `head` may close the pipe once it has enough. Point stdout at
+            # /dev/null as well, otherwise Python tries the broken pipe again
+            # while shutting down.
             sys.stdout = open(os.devnull, "w")  # noqa: SIM115
 
 
@@ -585,8 +585,8 @@ def run():
         print(f"Could not load config: {error}", file=sys.stderr)
         sys.exit(1)
 
-    # Git owns the terminal pager in external-diff mode. Otherwise decide at
-    # the CLI boundary, before the explicit render API sees the final policy.
+    # Git will pass an external diff to its own pager. For normal use, decide
+    # once here so the renderers don't have to inspect the terminal themselves.
     color = not args.no_color and (
         args.git_external_diff
         or sys.stdout.isatty()
@@ -686,7 +686,7 @@ def main():
     try:
         run()
     except KeyboardInterrupt:
-        # Match ordinary Unix command behaviour without printing a traceback.
+        # Ctrl-C should behave like any other Unix command, without a traceback.
         sys.exit(130)
 
 

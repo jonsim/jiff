@@ -504,7 +504,8 @@ mod tests {
 
     #[test]
     fn syntax_colours_cannot_hide_the_diff_background() {
-        // Backgrounds belong to the diff, which is the primary signal in Jiff.
+        // Diff highlighting is the bit users came to see, so syntax must not
+        // overwrite its background.
         let error = parse(
             r#"
             [color.syntax_keyword]

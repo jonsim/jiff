@@ -9,8 +9,8 @@ from pathlib import Path
 def main() -> int:
     mode, destination = sys.argv[1:]
     if mode == "close":
-        # A real pager closes this pipe when the user quits before reading the
-        # complete diff. One byte makes that behaviour deterministic here.
+        # Quitting a pager closes this pipe before the diff is consumed. Read
+        # one byte so the test always reaches that case.
         sys.stdin.buffer.read(1)
         return 0
     if mode == "fail":

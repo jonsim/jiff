@@ -43,16 +43,16 @@ fn calculate_middle<T: Clone + Eq>(old: &[T], new: &[T]) -> Vec<Edit<T>> {
         return old.iter().cloned().map(Edit::Remove).collect();
     }
 
-    // Each row holds the furthest old-side position reached on one diagonal.
-    // Keeping the rows also gives backtracking the exact same tie-break as the
-    // forward search: delete when two paths have equal length.
+    // Each row records how far we got along every diagonal. Keep the old rows
+    // so backtracking makes the same choice as the search: delete on a tie.
     let mut frontiers: Vec<Vec<usize>> = Vec::new();
     let mut visited_states = 0;
     for distance in 0..=old.len() + new.len() {
         visited_states += distance + 1;
         if visited_states > MAX_SEARCH_STATES {
-            // A very different pair can make Myers explore a quadratic number
-            // of states. One replacement is both quicker and easier to read.
+            // Myers can wander through a quadratic number of states when the
+            // inputs barely match. At that point one replacement is faster and
+            // usually clearer anyway.
             return old
                 .iter()
                 .cloned()

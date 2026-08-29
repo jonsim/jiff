@@ -20,7 +20,7 @@ Build Rust Jiff For Pager Tests
     Process Should Succeed    ${result}    @{command}
 
 Pager Behaviour
-    [Documentation]    Exercises the real pager process for one implementation.
+    [Documentation]    Uses a pseudo-terminal so Jiff really starts its pager.
     [Arguments]    @{jiff_command}
     VAR    @{command}
     ...    python3

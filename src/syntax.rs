@@ -122,8 +122,8 @@ impl HighlightedFile {
                     .peek()
                     .filter(|span| span.start <= start && start < span.end)
                 {
-                    // Syntax owns the foreground only. The diff background
-                    // therefore remains visible across the complete line.
+                    // Syntax only supplies the foreground. Leave the background
+                    // alone so the diff still shows across the whole line.
                     style.foreground = span.style.foreground;
                     style.is_bold |= span.style.is_bold;
                 }
@@ -137,8 +137,8 @@ impl HighlightedFile {
                     .peek()
                     .filter(|(range, _)| range.start <= start && start < range.end)
                 {
-                    // Intraline changes are the most useful signal, so their
-                    // complete style wins where the two kinds of span overlap.
+                    // The character diff is the important bit here, so let its
+                    // whole style win where it overlaps syntax.
                     style = *override_style;
                 }
                 Some(style.paint(expand_tabs(&content[start..end], &mut column)))
@@ -268,9 +268,9 @@ fn parse_highlights(
         lines.push(HighlightedLine { spans });
     }
 
-    // `LinesWithEndings` quite reasonably treats the final newline as part
-    // of the preceding line. Jiff treats a retained newline as a meaningful
-    // final blank line because file terminators were removed when reading.
+    // `LinesWithEndings` keeps the final newline on the previous line (fair
+    // enough). Jiff stripped the file terminator earlier, so any newline left
+    // here represents a real final blank line.
     if content.ends_with('\n') {
         lines.push(HighlightedLine::default());
     }
@@ -356,7 +356,7 @@ mod tests {
 
     #[test]
     fn filename_selects_the_python_syntax() {
-        // Automatic detection should be useful without another command-line option.
+        // A normal Python filename should be enough to pick the syntax.
         let highlighted = highlight_file(
             "def kermit():\n    return 3",
             "muppets.py",
@@ -443,7 +443,7 @@ mod tests {
 
     #[test]
     fn syntax_foreground_keeps_the_diff_background() {
-        // Token colour is intentionally subordinate to the stronger diff background.
+        // Diff background matters more than token colour.
         let highlighted =
             highlight_file("def kermit():", "muppets.py", None, &ColorScheme::default())
                 .expect("Python source should highlight");
@@ -470,7 +470,7 @@ mod tests {
 
     #[test]
     fn intraline_diff_style_wins_over_syntax() {
-        // Changed characters need to stand out more strongly than their token type.
+        // Changed characters matter more than their token type.
         let highlighted =
             highlight_file("def kermit():", "muppets.py", None, &ColorScheme::default())
                 .expect("Python source should highlight");
@@ -486,7 +486,7 @@ mod tests {
 
     #[test]
     fn multiline_parser_state_is_kept() {
-        // The second line remains a string because the complete file is parsed at once.
+        // The second line stays a string because we parse the whole file at once.
         let highlighted = highlight_file(
             "muppet = \"\"\"Kermit\nthe Frog\"\"\"",
             "muppets.py",

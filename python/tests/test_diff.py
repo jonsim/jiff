@@ -11,7 +11,8 @@ import diff
 
 class SideBySideRenderingTests(unittest.TestCase):
     def test_explicit_terminal_width_skips_terminal_detection(self):
-        # Embedded previews own their width rather than the surrounding terminal.
+        # A preview gets its width from the widget, not the terminal which
+        # launched it.
         diffs = diff.calculate_line_diff("Kermit", "Kermit the Frog")
 
         with mock.patch("diff.mod._terminal_width") as terminal_width:
@@ -21,8 +22,8 @@ class SideBySideRenderingTests(unittest.TestCase):
         self.assertIn("Kermit", output)
 
     def test_uneven_wrapped_lines_render_to_completion(self):
-        # Once the shorter side is exhausted, wrapping still needs an empty
-        # styled line with the same interface as the remaining chunks.
+        # The shorter side still needs an empty styled line while the other
+        # side wraps.
         left = "Kermit " * 100
         diffs = diff.calculate_line_diff(left, "")
 
@@ -74,8 +75,8 @@ class LineDiffTests(unittest.TestCase):
         self.assertEqual("Kermit", diffs[0].left)
 
     def test_repeated_line_at_the_end_is_used_as_the_stable_anchor(self):
-        # Matching the final Kermit agrees with Rust and keeps both preceding
-        # lines together as one insertion.
+        # Using the final Kermit as the anchor keeps both preceding lines in
+        # one insertion.
         diffs = diff.calculate_line_diff("Kermit", "Fozzie\nKermit\nKermit")
 
         self.assertEqual(
@@ -123,7 +124,8 @@ class CharacterDiffTests(unittest.TestCase):
         )
 
     def test_coalesces_a_noisy_phrase_between_stable_anchors(self):
-        # Shared surrounding clauses should not legitimise scattered letters.
+        # Shared surrounding text shouldn't make scattered matching letters
+        # look useful.
         before = "Sam keeps one dependable act ready in the wings."
         after = "Scooter keeps two unpredictable acts ready in the wings."
 
@@ -149,8 +151,8 @@ class LineAlignmentTests(unittest.TestCase):
         self.assertEqual(3, _edit_distance("Kermit", "Animal", 2))
 
     def test_pairs_lines_with_a_shared_prefix_and_unrelated_suffixes(self):
-        # The stable prefix makes these the most useful side-by-side pairing,
-        # even though the remaining text should be one character replacement.
+        # These lines clearly belong together because of the stable prefix. The
+        # unrelated tail should still be one character replacement.
         before = "version is more portable. Tests assert that the two versions are"
         after = "version is more portable. The core diff behaviour is identical"
 

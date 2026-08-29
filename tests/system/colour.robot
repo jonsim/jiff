@@ -8,7 +8,7 @@ Rust Colouring        Run Rust Jiff With Colour
 
 *** Keywords ***
 Renderer Uses One Colour Palette
-    [Documentation]    Checks inline and side-by-side output use the same semantic colours.
+    [Documentation]    Checks inline and side-by-side output use the same diff colours.
     [Arguments]    ${runner}
     VAR    ${base_dir}    ${CURDIR}/../..
     VAR    ${first}    ${base_dir}/testcases/minimal/02.txt

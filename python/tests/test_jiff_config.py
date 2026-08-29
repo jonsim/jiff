@@ -95,7 +95,8 @@ class ColorConfigTests(unittest.TestCase):
         self.assertEqual("blue", scheme.overlap_highlight.bgcolor)
 
     def test_syntax_colours_cannot_hide_the_diff_background(self):
-        # Backgrounds belong to the diff, which is the primary signal in Jiff.
+        # Diff highlighting is the bit users came to see, so syntax must not
+        # overwrite its background.
         with self.assertRaisesRegex(
             jiff_config.ConfigError, "color.syntax_keyword.bgcolor"
         ):

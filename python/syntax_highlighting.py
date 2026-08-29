@@ -42,9 +42,8 @@ class HighlightedFile:
             rendered = Text(content, style=base_style)
         else:
             rendered = self.lines[index].render(content, base_style)
-        # Expand before the renderer adds margins. Otherwise Rich uses its
-        # eight-column console tabs and the same source line moves between
-        # inline and side-by-side output.
+        # Expand tabs before margins are added. Otherwise Rich uses eight-column
+        # tabs, and the same source line shifts between output modes.
         rendered.expand_tabs(TAB_WIDTH)
         return rendered
 
@@ -154,6 +153,6 @@ def _style_for_token(token_type, colors: ColorScheme) -> Style | None:
 
 
 def _syntax_style(style: ColorStyle) -> Style:
-    # An omitted bold flag must leave a configured diff style alone. Rich
-    # distinguishes that from explicitly disabling bold on each token.
+    # A missing bold flag should leave the diff style alone. Rich treats that
+    # differently from explicitly turning bold off for every token.
     return Style(color=style.color or "default", bold=True if style.bold else None)

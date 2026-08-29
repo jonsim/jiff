@@ -8,7 +8,7 @@ from rich.style import Style
 
 class SyntaxDetectionTests(unittest.TestCase):
     def test_filename_selects_the_python_lexer(self):
-        # Automatic detection should be useful without another command-line option.
+        # A normal Python filename should be enough to pick the lexer.
         source = "def kermit():\n    return 3"
 
         highlighted = syntax_highlighting.highlight_file(
@@ -74,7 +74,7 @@ class SyntaxRenderingTests(unittest.TestCase):
         self.assertEqual("a   b", rendered.plain)
 
     def test_syntax_foreground_keeps_the_diff_background(self):
-        # Token colour is intentionally subordinate to the stronger diff background.
+        # Diff background matters more than token colour.
         highlighted = syntax_highlighting.highlight_file(
             "def kermit():", "muppets.py", None, ColorScheme.default()
         )
@@ -88,7 +88,8 @@ class SyntaxRenderingTests(unittest.TestCase):
         self.assertEqual("red", style.bgcolor.name)
 
     def test_multiline_lexer_state_is_kept(self):
-        # The second line remains a string because the whole file is highlighted at once.
+        # The second line stays a string because we highlight the whole file at
+        # once.
         highlighted = syntax_highlighting.highlight_file(
             '"""Kermit\nthe Frog"""',
             "muppets.py",

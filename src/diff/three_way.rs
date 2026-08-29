@@ -15,16 +15,16 @@ type LineIndex = usize;
 
 #[derive(Debug, Eq, PartialEq)]
 struct LinePair {
-    // A pair describes either Local -> Base or Base -> Remote. Missing indices
-    // are outer-file insertions or removals at the next shared boundary.
+    // This is either Local -> Base or Base -> Remote. A missing index means an
+    // outer-file insertion or removal beside the next base line.
     left: Option<LineIndex>,
     right: Option<LineIndex>,
 }
 
 #[derive(Debug, Eq, PartialEq)]
 struct ThreeWayLine {
-    // Rows with a middle index are anchored to that original base-file line.
-    // Rows without one contain outer-file lines inserted at the same boundary.
+    // A middle index ties the row to that base-file line. Without one, the row
+    // holds outer-file insertions beside the next base line.
     left: Option<LineIndex>,
     middle: Option<LineIndex>,
     right: Option<LineIndex>,
@@ -110,8 +110,8 @@ fn aligned_lines(left: &str, right: &str) -> Vec<LinePair> {
 }
 
 fn append_outer_lines(rows: &mut Vec<ThreeWayLine>, left: Vec<LineIndex>, right: Vec<LineIndex>) {
-    // Both sides inserted at the same middle-file boundary. Put corresponding
-    // insertions on one visual row without claiming they match each other.
+    // Put insertions at the same base-file boundary on one row. That doesn't
+    // mean the outer lines match; it just keeps the three panes compact.
     let line_count = left.len().max(right.len());
     let mut left = left.into_iter();
     let mut right = right.into_iter();
@@ -155,9 +155,8 @@ fn three_way_lines(left: &str, middle: &str, right: &str) -> Vec<ThreeWayLine> {
     let mut rows = Vec::new();
 
     for middle_index in 0..middle_line_count {
-        // Each pairwise alignment orders outer-only lines immediately before
-        // its next middle line. Merge those two boundaries, then consume the
-        // row anchored by this middle-file index from both alignments.
+        // Each pairwise diff puts outer-only rows just before the next base
+        // line. Bring both sides together before adding that base line.
         append_outer_lines(
             &mut rows,
             take_left_only(&left_pairs, &mut left_cursor),
@@ -196,8 +195,8 @@ fn limit_three_way_context(
     context_lines: usize,
 ) -> Vec<ThreeWayRow> {
     let mut keep = vec![false; lines.len()];
-    // Two linear passes retain nearby context before and after every change,
-    // including changes which exist on only one outer side.
+    // Make one pass in each direction so a change on either outer side keeps
+    // nearby context. A single pairwise pass would miss the other side.
     let mut distance = usize::MAX;
     for (index, line) in lines.iter().enumerate() {
         distance = if line.is_unchanged(source_lines) {
@@ -329,9 +328,9 @@ fn merge_middle_overrides(
     from_right: &[StyleOverride],
     overlap: Style,
 ) -> Vec<StyleOverride> {
-    // Each input is already ordered and non-overlapping. Merge their boundary
-    // streams and advance through the spans once rather than rescanning every
-    // span for every resulting segment.
+    // Both span lists are sorted and don't overlap. Merge their boundaries and
+    // walk each list once; rescanning every tiny region gets painfully slow on
+    // minified text.
     let boundaries: Vec<_> = from_left
         .iter()
         .flat_map(|(range, _)| [range.start, range.end])

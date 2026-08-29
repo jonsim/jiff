@@ -18,7 +18,7 @@ Rust Composes Syntax And Diff Colours
 
 *** Keywords ***
 Three-way Inline Renderers Agree
-    [Documentation]    Checks the inline fallback at the real CLI boundary.
+    [Documentation]    Checks the two labelled comparisons used by `--inline`.
     VAR    ${root}    ${CURDIR}/../../testcases/threeway/independent
     VAR    @{args}
     ...    --inline
@@ -40,7 +40,7 @@ Three-way Inline Renderers Agree
     Should Contain    ${python.stdout}    Performer("Miss Piggy", "diva")
 
 Three-way Binary Renderers Agree
-    [Documentation]    Checks binary inputs retain both labelled comparisons.
+    [Documentation]    Checks binary input still shows both labelled comparisons.
     VAR    ${work_dir}    ${OUTPUT DIR}/jiff-system/${SUITE NAME}/${TEST NAME}
     VAR    ${local}    ${work_dir}/local.bin
     VAR    ${base}    ${work_dir}/base.bin
@@ -64,7 +64,7 @@ Three-way Binary Renderers Agree
     Should Contain    ${python.stdout}    Binary files ${base} and ${remote} differ
 
 Three-way Colours Compose
-    [Documentation]    Keeps quiet syntax colours beneath all three diff styles.
+    [Documentation]    Checks syntax colours remain visible under each three-way diff style.
     [Arguments]    ${runner}
     VAR    ${root}    ${CURDIR}/../../testcases/threeway/overlapping
     ${result} =    Run Keyword

@@ -4,7 +4,7 @@ Resource    jiff.resource
 
 *** Test Cases ***
 Two-way Output Honours Columns
-    [Documentation]    Keeps both implementations within a captured 53-column terminal.
+    [Documentation]    Runs both implementations at 53 columns and checks neither spills over.
     VAR    ${root}    ${CURDIR}/../../testcases/minimal
     VAR    @{args}
     ...    --no-color

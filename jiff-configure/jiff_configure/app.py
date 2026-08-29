@@ -374,9 +374,8 @@ class JiffConfigureApp(App[None]):
         preview_source: PreviewSource,
         themes: dict[str, ColorScheme],
     ) -> None:
-        # Textual normally replaces the 16 configurable ANSI colours with its
-        # own RGB palette. The preview needs the terminal to resolve them in
-        # exactly the same way as a real Jiff invocation.
+        # Textual normally replaces the terminal's 16 ANSI colours with its own
+        # RGB palette. If it does that here, the preview won't match Jiff.
         super().__init__(ansi_color=True)
         self.preview_source = preview_source
         self.themes = themes
@@ -494,8 +493,8 @@ class JiffConfigureApp(App[None]):
         if theme.value != name:
             theme.value = name
 
-        # Assigning matching values is harmless and avoids rebuilding the
-        # scroll position and focus state by remounting all the controls.
+        # If the values already match, leave the controls alone. Remounting them
+        # loses the current scroll position and focus.
         for style_name in STYLE_NAMES:
             style = getattr(self.scheme, style_name)
             self.query_one(f"#{style_name}-color", Select).value = (
@@ -521,8 +520,8 @@ class JiffConfigureApp(App[None]):
 
         selected_palette_changed = self.scheme != self.themes[self.selected_theme]
         if self.dirty and selected_palette_changed:
-            # Put the selector back while the confirmation dialog is open. This
-            # also means cancelling leaves the entire editor exactly as it was.
+            # Put the old theme back while the dialog is open. If the user
+            # cancels, the editor then stays exactly as it was.
             event.select.value = self.selected_theme
             self.push_screen(
                 ConfirmDialog(
