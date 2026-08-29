@@ -11,6 +11,7 @@ from pathlib import Path
 import directory_diff
 import syntax_highlighting
 from jiff_config import ColorScheme, ConfigError, load_color_scheme
+from jiff_version import __version__
 from rich.cells import cell_len
 from rich.text import Text
 
@@ -514,6 +515,11 @@ def _non_negative_int(value: str) -> int:
 
 def run():
     parser = argparse.ArgumentParser(description="Colored diff tool")
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"jiff {__version__}",
+    )
     parser.add_argument(
         "--path",
         metavar="PATH",

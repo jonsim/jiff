@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jiff"
-version = "0.1.0"
 description = "A terminal diff tool with sub-line and side-by-side output"
 requires-python = ">=3.9"
+dynamic = ["version"]
 dependencies = [
     "pygments",
     "rich",
@@ -17,7 +17,10 @@ dependencies = [
 jiff = "jiff:main"
 
 [tool.setuptools]
-py-modules = ["directory_diff", "jiff", "jiff_config", "syntax_highlighting"]
+py-modules = ["directory_diff", "jiff", "jiff_config", "jiff_version", "syntax_highlighting"]
+
+[tool.setuptools.dynamic]
+version = { attr = "jiff_version.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["."]

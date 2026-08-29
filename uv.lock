@@ -96,7 +96,6 @@ wheels = [
 
 [[package]]
 name = "jiff"
-version = "0.1.0"
 source = { editable = "python" }
 dependencies = [
     { name = "pygments" },

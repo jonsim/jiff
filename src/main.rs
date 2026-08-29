@@ -605,7 +605,7 @@ fn render_three_paths(
 
 fn main() {
     let matches = App::new("jiff")
-        .version("1.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .about("Colored diff tool")
         .arg(
             Arg::with_name("path")
