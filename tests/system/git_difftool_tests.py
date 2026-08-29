@@ -90,6 +90,8 @@ class GitDifftoolTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn("--- a/kermit.txt\n+++ b/kermit.txt\n", result.stdout)
         self.assertIn("--- a/muppet cast.txt\n+++ b/muppet cast.txt\n", result.stdout)
+        self.assertIn("still green", result.stdout)
+        self.assertIn("Fozzie", result.stdout)
 
     def test_cached_diff_handles_add_delete_and_an_empty_side(self) -> None:
         # Adds and deletes arrive as an empty temporary file on one side.
@@ -107,6 +109,9 @@ class GitDifftoolTests(unittest.TestCase):
         self.assertIn("--- a/statler.txt\n+++ b/statler.txt\n", result.stdout)
         self.assertIn("--- a/gonzo.txt\n+++ b/gonzo.txt\n", result.stdout)
         self.assertIn("--- a/empty.txt\n+++ b/empty.txt\n", result.stdout)
+        self.assertIn("Boo!", result.stdout)
+        self.assertIn("The Great Gonzo", result.stdout)
+        self.assertIn("Fozzie was here", result.stdout)
 
     def test_revision_diff_handles_a_rename(self) -> None:
         # Git supplies the source path through `$MERGED` for a detected rename.
@@ -413,6 +418,9 @@ class GitDifftoolTests(unittest.TestCase):
             result.stdout,
         )
         self.assertIn("--- a/statler.txt\n+++ b/statler.txt\n", result.stdout)
+        self.assertIn("Still green", result.stdout)
+        self.assertIn("Fozzie", result.stdout)
+        self.assertIn("Boo!", result.stdout)
 
     def test_file_and_directory_inputs_fail_cleanly(self) -> None:
         self.write("kermit.txt", "Green\n")
