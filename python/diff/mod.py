@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import difflib
 import enum
 import itertools
 import math
@@ -16,6 +15,7 @@ from rich.text import Span, Text
 from syntax_highlighting import HighlightedFile, HighlightedFiles
 
 from .align import align
+from .myers import EditKind, calculate_edits
 
 console = Console()
 debug = os.environ.get("JIFF_DEBUG", "0") == "1"
@@ -227,49 +227,40 @@ def calculate_diff(left: str, right: str, split: str) -> list[Diff]:
         right_parts = list(right)
 
     diffs: list[Diff] = []
+    same: list[str] = []
+    removed: list[str] = []
+    added: list[str] = []
 
-    # `similar` trims stable ends before Rust's Myers search. Do the same here:
-    # as well as reducing the search, this makes a repeated line at either end
-    # the same unambiguous anchor in both implementations.
-    prefix_count = 0
-    for left_part, right_part in zip(left_parts, right_parts, strict=False):
-        if left_part != right_part:
-            break
-        prefix_count += 1
+    def flush_same() -> None:
+        if same:
+            diffs.append(Diff(DiffType.SAME, split.join(same)))
+            same.clear()
 
-    suffix_count = 0
-    while (
-        suffix_count < len(left_parts) - prefix_count
-        and suffix_count < len(right_parts) - prefix_count
-        and left_parts[-suffix_count - 1] == right_parts[-suffix_count - 1]
-    ):
-        suffix_count += 1
+    def flush_change() -> None:
+        if removed and added:
+            diffs.append(Diff(DiffType.REPLACE, split.join(removed), split.join(added)))
+        elif removed:
+            diffs.append(Diff(DiffType.REMOVE, split.join(removed)))
+        elif added:
+            diffs.append(Diff(DiffType.ADD, split.join(added)))
+        removed.clear()
+        added.clear()
 
-    if prefix_count:
-        diffs.append(Diff(DiffType.SAME, split.join(left_parts[:prefix_count])))
+    # Collect all additions and removals between stable anchors into one
+    # replacement, regardless of the edit script's internal operation order.
+    for edit in calculate_edits(left_parts, right_parts):
+        if edit.kind == EditKind.SAME:
+            flush_change()
+            same.append(edit.value)
+        elif edit.kind == EditKind.REMOVE:
+            flush_same()
+            removed.append(edit.value)
+        else:
+            flush_same()
+            added.append(edit.value)
 
-    left_end = len(left_parts) - suffix_count if suffix_count else len(left_parts)
-    right_end = len(right_parts) - suffix_count if suffix_count else len(right_parts)
-    left_middle = left_parts[prefix_count:left_end]
-    right_middle = right_parts[prefix_count:right_end]
-    matcher = difflib.SequenceMatcher(None, left_middle, right_middle)
-
-    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
-        l = split.join(left_middle[i1:i2])
-        r = split.join(right_middle[j1:j2])
-
-        if tag == "equal":
-            diffs.append(Diff(DiffType.SAME, l))
-        elif tag == "insert":
-            diffs.append(Diff(DiffType.ADD, r))
-        elif tag == "delete":
-            diffs.append(Diff(DiffType.REMOVE, l))
-        elif tag == "replace":
-            diffs.append(Diff(DiffType.REPLACE, l, r))
-
-    if suffix_count:
-        diffs.append(Diff(DiffType.SAME, split.join(left_parts[-suffix_count:])))
-
+    flush_same()
+    flush_change()
     return diffs
 
 

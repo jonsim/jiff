@@ -1,4 +1,5 @@
 mod align;
+mod myers;
 mod three_way;
 mod wrap;
 
@@ -10,7 +11,7 @@ use align::align;
 use ansi_term::{ANSIString, ANSIStrings, Style};
 use itertools::EitherOrBoth;
 use itertools::Itertools;
-use similar::{capture_diff_slices, Algorithm, DiffTag, TextDiff};
+use myers::{calculate_edits, Edit};
 use std::env;
 use std::fmt::Write;
 use std::ops::Range;
@@ -63,12 +64,9 @@ fn indicator_styling(colors: &ColorScheme) -> DiffStyling {
 
 /// Calculates changes between newline-separated line contents.
 ///
-/// The heuristic Myers algorithm bounds work on difficult inputs by accepting
-/// a potentially non-minimal script. That latency trade-off matters more than
-/// a theoretically perfect edit script in an interactive command-line tool.
 pub(super) fn calculate_line_diff(left: &str, right: &str) -> Vec<Diff> {
     // Rust's `split` represents an empty string as one empty item. Jiff treats
-    // empty input as having no lines, consistent with `read_file_or_die`.
+    // empty input as having no lines.
     let old_lines: Vec<&str> = if left.is_empty() {
         Vec::new()
     } else {
@@ -80,49 +78,78 @@ pub(super) fn calculate_line_diff(left: &str, right: &str) -> Vec<Diff> {
         right.split('\n').collect()
     };
 
-    // Work from operations rather than individual changes so adjacent removed
-    // and added ranges remain one `Replace` for the line-pairing stage.
-    capture_diff_slices(Algorithm::Myers, &old_lines, &new_lines)
-        .iter()
-        .map(|operation| {
-            let old = old_lines[operation.old_range()].join("\n");
-            let new = new_lines[operation.new_range()].join("\n");
-            make_diff(operation.tag(), old, new)
-        })
-        .collect()
+    diffs_from_edits(calculate_edits(&old_lines, &new_lines), "\n")
 }
 
 /// Calculates Unicode-scalar changes within a pair of lines.
 pub(super) fn calculate_char_diff(left: &str, right: &str) -> Vec<Diff> {
-    let diff = TextDiff::configure()
-        .algorithm(Algorithm::Myers)
-        .diff_chars(left, right);
-
-    let changes = diff
-        .ops()
-        .iter()
-        .map(|operation| {
-            // Operation ranges index the character tokens held by `TextDiff`,
-            // not byte offsets into the inputs. Reassemble those source slices
-            // to keep every returned string on a valid UTF-8 boundary.
-            let old = operation
-                .old_range()
-                .fold(String::new(), |mut text, index| {
-                    text.push_str(diff.old_slice(index).expect("diff old range is valid"));
-                    text
-                });
-            let new = operation
-                .new_range()
-                .fold(String::new(), |mut text, index| {
-                    text.push_str(diff.new_slice(index).expect("diff new range is valid"));
-                    text
-                });
-
-            make_diff(operation.tag(), old, new)
-        })
-        .collect();
+    let changes = diffs_from_edits(
+        calculate_edits(
+            &left.chars().collect::<Vec<_>>(),
+            &right.chars().collect::<Vec<_>>(),
+        ),
+        "",
+    );
 
     coalesce_dissimilar_middle(changes)
+}
+
+fn diffs_from_edits<T: ToString>(edits: Vec<Edit<T>>, separator: &str) -> Vec<Diff> {
+    let mut diffs = Vec::new();
+    let mut same = Vec::new();
+    let mut removed = Vec::new();
+    let mut added = Vec::new();
+
+    // Collect all additions and removals between stable anchors into one
+    // replacement, regardless of the edit script's internal operation order.
+    for edit in edits {
+        match edit {
+            Edit::Same(value) => {
+                push_change(&mut diffs, &mut removed, &mut added, separator);
+                same.push(value.to_string());
+            }
+            Edit::Remove(value) => {
+                push_same(&mut diffs, &mut same, separator);
+                removed.push(value.to_string());
+            }
+            Edit::Add(value) => {
+                push_same(&mut diffs, &mut same, separator);
+                added.push(value.to_string());
+            }
+        }
+    }
+    push_same(&mut diffs, &mut same, separator);
+    push_change(&mut diffs, &mut removed, &mut added, separator);
+    diffs
+}
+
+fn push_same(diffs: &mut Vec<Diff>, same: &mut Vec<String>, separator: &str) {
+    if !same.is_empty() {
+        diffs.push(Diff::Same(same.join(separator)));
+        same.clear();
+    }
+}
+
+fn push_change(
+    diffs: &mut Vec<Diff>,
+    removed: &mut Vec<String>,
+    added: &mut Vec<String>,
+    separator: &str,
+) {
+    let change = match (removed.is_empty(), added.is_empty()) {
+        (false, false) => Some(Diff::Replace(
+            removed.join(separator),
+            added.join(separator),
+        )),
+        (false, true) => Some(Diff::Remove(removed.join(separator))),
+        (true, false) => Some(Diff::Add(added.join(separator))),
+        (true, true) => None,
+    };
+    if let Some(change) = change {
+        diffs.push(change);
+    }
+    removed.clear();
+    added.clear();
 }
 
 fn coalesce_dissimilar_middle(mut changes: Vec<Diff>) -> Vec<Diff> {
@@ -257,15 +284,6 @@ pub(super) fn limit_context(diffs: Vec<Diff>, context_lines: usize) -> Vec<Diff>
 fn omission_text(line_count: usize) -> String {
     let noun = if line_count == 1 { "line" } else { "lines" };
     format!("... {line_count} unchanged {noun} ...")
-}
-
-fn make_diff(tag: DiffTag, old: String, new: String) -> Diff {
-    match tag {
-        DiffTag::Equal => Diff::Same(old),
-        DiffTag::Delete => Diff::Remove(old),
-        DiffTag::Insert => Diff::Add(new),
-        DiffTag::Replace => Diff::Replace(old, new),
-    }
 }
 
 /// Renders a unified diff, including character highlighting for paired lines.
