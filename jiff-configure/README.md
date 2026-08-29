@@ -1,8 +1,8 @@
 # jiff-configure
 
 `jiff-configure` is Jiff's interactive colour configuration editor. It uses
-Textual to show side-by-side, inline and TOML previews while you adjust the
-palette.
+Textual to show side-by-side, inline, three-way and TOML previews while you
+adjust the palette.
 
 Run it from the root of the Jiff repository:
 
