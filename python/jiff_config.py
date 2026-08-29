@@ -37,7 +37,7 @@ COLOR_ALIASES = {
     "purple": "magenta",
 }
 SUPPORTED_COLORS = (*CANONICAL_COLORS, *COLOR_ALIASES)
-STYLE_NAMES = (
+DIFF_STYLE_NAMES = (
     "same",
     "omitted",
     "add",
@@ -45,12 +45,15 @@ STYLE_NAMES = (
     "remove",
     "remove_highlight",
     "overlap_highlight",
+)
+SYNTAX_STYLE_NAMES = (
     "syntax_comment",
     "syntax_keyword",
     "syntax_string",
     "syntax_number",
     "syntax_definition",
 )
+STYLE_NAMES = DIFF_STYLE_NAMES + SYNTAX_STYLE_NAMES
 
 
 class ConfigError(Exception):

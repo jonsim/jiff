@@ -11,6 +11,8 @@ from typing import ClassVar
 import jiff
 from jiff_config import (
     CANONICAL_COLORS,
+    DIFF_STYLE_NAMES,
+    SYNTAX_STYLE_NAMES,
     ColorScheme,
     ColorStyle,
     ConfigError,
@@ -37,22 +39,6 @@ from textual.widgets import (
     TabPane,
 )
 
-DIFF_STYLE_NAMES = (
-    "same",
-    "omitted",
-    "add",
-    "add_highlight",
-    "remove",
-    "remove_highlight",
-    "overlap_highlight",
-)
-SYNTAX_STYLE_NAMES = (
-    "syntax_comment",
-    "syntax_keyword",
-    "syntax_string",
-    "syntax_number",
-    "syntax_definition",
-)
 STYLE_NAMES = DIFF_STYLE_NAMES + SYNTAX_STYLE_NAMES
 STYLE_LABELS = {
     "same": "Unchanged text",
