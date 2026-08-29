@@ -1,6 +1,5 @@
 from .mod import (
     calculate_line_diff,
-    force_terminal_colors,
     limit_context,
     render_diffs,
     render_diffs_side_by_side,
@@ -10,7 +9,6 @@ from .three_way import render_three_way_side_by_side
 
 __all__ = [
     "calculate_line_diff",
-    "force_terminal_colors",
     "limit_context",
     "render_diffs",
     "render_diffs_side_by_side",

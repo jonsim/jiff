@@ -17,14 +17,13 @@ from syntax_highlighting import HighlightedFile, HighlightedFiles
 from .align import align
 from .myers import EditKind, calculate_edits
 
-console = Console()
 debug = os.environ.get("JIFF_DEBUG", "0") == "1"
 
 
-def force_terminal_colors() -> None:
-    """Keeps colours when another program owns the terminal pager."""
-    global console
-    console = Console(force_terminal=True)
+def _console(color: bool) -> Console:
+    # The caller has already applied terminal and command-line policy. Passing
+    # that decision to Rich keeps rendering deterministic in embedded callers.
+    return Console(force_terminal=color)
 
 
 def _terminal_width() -> int:
@@ -130,9 +129,10 @@ def render_file_header(
 ) -> str:
     """Renders Git-style labels for a repository path."""
     colors = _colors(color, colors)
-    with console.capture() as capture:
-        console.print(Text(f"--- a/{path}", style=colors.remove.rich_style()))
-        console.print(Text(f"+++ b/{path}", style=colors.add.rich_style()))
+    output_console = _console(color)
+    with output_console.capture() as capture:
+        output_console.print(Text(f"--- a/{path}", style=colors.remove.rich_style()))
+        output_console.print(Text(f"+++ b/{path}", style=colors.add.rich_style()))
     return capture.get()
 
 
@@ -314,6 +314,8 @@ def print_diffs(
     color: bool = True,
     colors: ColorScheme | None = None,
     highlighting: HighlightedFiles | None = None,
+    *,
+    output_console: Console,
 ) -> None:
     colors = _colors(color, colors)
     margin_styling = _indicator_styling(colors)
@@ -325,7 +327,7 @@ def print_diffs(
     for change in diffs:
         if change.kind == DiffType.SAME:
             for line in change.left.split("\n"):
-                console.print(
+                output_console.print(
                     Text("  ", style=margin_styling.same)
                     + highlighting.right.render_line(right_index, line, lines.same)
                 )
@@ -334,7 +336,7 @@ def print_diffs(
 
         elif change.kind == DiffType.ADD:
             for line in change.left.split("\n"):
-                console.print(
+                output_console.print(
                     Text("+ ", style=margin_styling.add)
                     + highlighting.right.render_line(right_index, line, lines.add)
                 )
@@ -342,14 +344,14 @@ def print_diffs(
 
         elif change.kind == DiffType.REMOVE:
             for line in change.left.split("\n"):
-                console.print(
+                output_console.print(
                     Text("- ", style=margin_styling.remove)
                     + highlighting.left.render_line(left_index, line, lines.remove)
                 )
                 left_index += 1
 
         elif change.kind == DiffType.OMITTED:
-            console.print(
+            output_console.print(
                 Text("  ", style=margin_styling.same)
                 + Text(_omission_text(change.omitted_lines), style=lines.omitted)
             )
@@ -399,8 +401,8 @@ def print_diffs(
                     text_a.append("\n")
                     left_index += 1
                     right_index += 1
-            console.print(text_b, end="")
-            console.print(text_a, end="")
+            output_console.print(text_b, end="")
+            output_console.print(text_a, end="")
 
 
 def render_diffs(
@@ -410,8 +412,15 @@ def render_diffs(
     highlighting: HighlightedFiles | None = None,
 ) -> str:
     """Renders calculated changes as one unified stream."""
-    with console.capture() as capture:
-        print_diffs(diffs, color, colors, highlighting)
+    output_console = _console(color)
+    with output_console.capture() as capture:
+        print_diffs(
+            diffs,
+            color,
+            colors,
+            highlighting,
+            output_console=output_console,
+        )
     return capture.get()
 
 
@@ -494,6 +503,8 @@ def print_diffs_side_by_side(
     colors: ColorScheme | None = None,
     highlighting: HighlightedFiles | None = None,
     terminal_width: int | None = None,
+    *,
+    output_console: Console,
 ) -> None:
     colors = _colors(color, colors)
     lineno_styling = _indicator_styling(colors)
@@ -519,6 +530,7 @@ def print_diffs_side_by_side(
                 lineno_l_fmt = f"{lineno_l:>{lineno_width}}:"
                 lineno_r_fmt = f"{lineno_r:>{lineno_width}}:"
                 _print_side_by_side_line(
+                    output_console,
                     Text(lineno_l_fmt, style=lineno_styling.same),
                     Text(lineno_r_fmt, style=lineno_styling.same),
                     Text(empty_lineno, style=lineno_styling.same),
@@ -535,6 +547,7 @@ def print_diffs_side_by_side(
             for line in change.left.split("\n"):
                 lineno_r_fmt = f"{lineno_r:>{lineno_width}}:"
                 _print_side_by_side_line(
+                    output_console,
                     Text(empty_lineno, style=lineno_styling.same),
                     Text(lineno_r_fmt, style=lineno_styling.add_highlight),
                     Text(empty_lineno, style=lineno_styling.same),
@@ -552,6 +565,7 @@ def print_diffs_side_by_side(
             for line in change.left.split("\n"):
                 lineno_l_fmt = f"{lineno_l:>{lineno_width}}:"
                 _print_side_by_side_line(
+                    output_console,
                     Text(lineno_l_fmt, style=lineno_styling.remove_highlight),
                     Text(empty_lineno, style=lineno_styling.same),
                     Text(empty_lineno, style=lineno_styling.remove_highlight),
@@ -568,6 +582,7 @@ def print_diffs_side_by_side(
         elif change.kind == DiffType.OMITTED:
             message = Text(_omission_text(change.omitted_lines), style=lines.omitted)
             _print_side_by_side_line(
+                output_console,
                 Text(empty_lineno, style=lineno_styling.same),
                 Text(empty_lineno, style=lineno_styling.same),
                 Text(empty_lineno, style=lineno_styling.same),
@@ -590,6 +605,7 @@ def print_diffs_side_by_side(
                 if line_l is None and line_r is not None:
                     lineno_r_fmt = f"{lineno_r:>{lineno_width}}:"
                     _print_side_by_side_line(
+                        output_console,
                         Text(empty_lineno, style=lineno_styling.same),
                         Text(lineno_r_fmt, style=lineno_styling.add_highlight),
                         Text(empty_lineno, style=lineno_styling.same),
@@ -605,6 +621,7 @@ def print_diffs_side_by_side(
                 elif line_l is not None and line_r is None:
                     lineno_l_fmt = f"{lineno_l:>{lineno_width}}:"
                     _print_side_by_side_line(
+                        output_console,
                         Text(lineno_l_fmt, style=lineno_styling.remove_highlight),
                         Text(empty_lineno, style=lineno_styling.same),
                         Text(empty_lineno, style=lineno_styling.remove_highlight),
@@ -634,6 +651,7 @@ def print_diffs_side_by_side(
                         lineno_r - 1,
                     )
                     _print_side_by_side_line(
+                        output_console,
                         Text(lineno_l_fmt, style=lineno_styling.remove),
                         Text(lineno_r_fmt, style=lineno_styling.add),
                         Text(empty_lineno, style=lineno_styling.remove),
@@ -656,14 +674,22 @@ def render_diffs_side_by_side(
     terminal_width: int | None = None,
 ) -> str:
     """Renders calculated changes in two terminal-width panes."""
-    with console.capture() as capture:
+    output_console = _console(color)
+    with output_console.capture() as capture:
         print_diffs_side_by_side(
-            diffs, max_line_count, color, colors, highlighting, terminal_width
+            diffs,
+            max_line_count,
+            color,
+            colors,
+            highlighting,
+            terminal_width,
+            output_console=output_console,
         )
     return capture.get()
 
 
 def _print_side_by_side_line(
+    output_console: Console,
     lineno_l: Text,
     lineno_r: Text,
     wrapno_l: Text,
@@ -686,7 +712,7 @@ def _print_side_by_side_line(
         left_padding = " " * (line_width - cell_len(wrapped_l.plain))
         if not margin_r.plain.strip() and not wrapped_r.plain:
             # A missing right line has no line number or text worth padding.
-            console.print(
+            output_console.print(
                 margin_l,
                 " ",
                 wrapped_l,
@@ -696,7 +722,7 @@ def _print_side_by_side_line(
                 soft_wrap=True,
             )
         else:
-            console.print(
+            output_console.print(
                 margin_l,
                 " ",
                 wrapped_l,

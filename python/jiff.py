@@ -579,9 +579,13 @@ def run():
         print(f"Could not load config: {error}", file=sys.stderr)
         sys.exit(1)
 
-    color = not args.no_color
-    if args.git_external_diff and color:
-        diff.force_terminal_colors()
+    # Git owns the terminal pager in external-diff mode. Otherwise decide at
+    # the CLI boundary, before the explicit render API sees the final policy.
+    color = not args.no_color and (
+        args.git_external_diff
+        or sys.stdout.isatty()
+        or os.environ.get("RICH_FORCE_TERMINAL") is not None
+    )
     try:
         if isinstance(input_paths, UnmergedPath):
             repository_path = input_paths.repository_path

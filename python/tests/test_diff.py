@@ -4,6 +4,7 @@ from unittest import mock
 
 from diff.align import _edit_distance, align
 from diff.mod import Diff, DiffType
+from jiff_config import ColorScheme
 
 import diff
 
@@ -43,6 +44,17 @@ class SideBySideRenderingTests(unittest.TestCase):
             width = diff.mod._terminal_width()
 
         self.assertEqual(173, width)
+
+
+class ColourRenderingTests(unittest.TestCase):
+    def test_each_render_uses_its_explicit_colour_policy(self):
+        changes = [Diff(DiffType.REMOVE, "Kermit")]
+
+        coloured = diff.render_diffs(changes, True, ColorScheme.default())
+        plain = diff.render_diffs(changes, False, ColorScheme.default())
+
+        self.assertIn("\x1b[", coloured)
+        self.assertNotIn("\x1b[", plain)
 
 
 class LineDiffTests(unittest.TestCase):

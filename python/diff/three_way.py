@@ -6,6 +6,7 @@ from heapq import merge
 
 from jiff_config import ColorScheme
 from rich.cells import cell_len
+from rich.console import Console
 from rich.style import Style
 from rich.text import Span, Text
 from syntax_highlighting import HighlightedFile
@@ -386,7 +387,11 @@ def _margin_styles(
     return left, styling.same, right
 
 
-def _render_line(panes: tuple[PaneLine, PaneLine, PaneLine], width: int) -> None:
+def _render_line(
+    output_console: Console,
+    panes: tuple[PaneLine, PaneLine, PaneLine],
+    width: int,
+) -> None:
     separator = "\u2502"
     wrapped = [diff_mod._hard_wrap(pane.text, width) for pane in panes]
     height = max(len(lines) for lines in wrapped)
@@ -415,7 +420,7 @@ def _render_line(panes: tuple[PaneLine, PaneLine, PaneLine], width: int) -> None
             if content.plain:
                 row.append(" ")
                 row.append_text(content)
-        diff_mod.console.print(row, soft_wrap=True)
+        output_console.print(row, soft_wrap=True)
 
 
 def _line_width(terminal_width: int, lineno_width: int) -> int:
@@ -459,13 +464,15 @@ def render_three_way_side_by_side(
     line_styling = diff_mod._line_styling(colors)
     margin_styling = diff_mod._indicator_styling(colors)
 
-    with diff_mod.console.capture() as capture:
+    output_console = diff_mod._console(color)
+    with output_console.capture() as capture:
         headings = tuple(
             Text(f"{index}: {label}", style=line_styling.same)
             for index, label in enumerate(labels, start=1)
         )
         heading_margin = Text(empty_lineno, style=margin_styling.same)
         _render_line(
+            output_console,
             tuple(
                 PaneLine(
                     heading_margin.copy(),
@@ -486,6 +493,7 @@ def render_three_way_side_by_side(
                 )
                 margin = Text(empty_lineno, style=margin_styling.same)
                 _render_line(
+                    output_console,
                     tuple(
                         PaneLine(margin.copy(), margin.copy(), message.copy(), True)
                         for _ in range(3)
@@ -514,5 +522,5 @@ def render_three_way_side_by_side(
                         source_line is not None,
                     )
                 )
-            _render_line(tuple(panes), line_width)
+            _render_line(output_console, tuple(panes), line_width)
     return capture.get()

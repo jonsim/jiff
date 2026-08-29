@@ -37,8 +37,6 @@ from textual.widgets import (
     TabPane,
 )
 
-import diff
-
 DIFF_STYLE_NAMES = (
     "same",
     "omitted",
@@ -399,7 +397,6 @@ class JiffConfigureApp(App[None]):
         self.scheme = themes["Default"]
         self.selected_theme = "Default"
         self.dirty = False
-        diff.force_terminal_colors()
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
