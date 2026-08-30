@@ -18,23 +18,86 @@ class UnknownSyntaxError(ValueError):
 
 
 @dataclass(frozen=True)
+class SyntaxSpan:
+    """A range of characters with its normal and highlighted syntax styles."""
+
+    start: int
+    end: int
+    style: Style
+    highlight_style: Style
+
+
+@dataclass(frozen=True)
 class HighlightedLine:
     """Syntax spans for one source line, using character offsets."""
 
-    spans: tuple[Span, ...] = ()
+    spans: tuple[SyntaxSpan, ...] = ()
 
     def render(
         self,
         content: str,
         base_style: Style,
         overrides: Sequence[Span] = (),
+        highlight_styles: tuple[Style, ...] = (),
     ) -> Text:
         """Combines syntax foregrounds with the diff style for this line."""
-        rendered = Text(content, style=base_style)
-        for span in overrides:
-            rendered.stylize(span.style, span.start, span.end)
+        if not content:
+            return Text(content, style=base_style)
+
+        boundaries = [0, len(content)]
         for span in self.spans:
-            rendered.stylize(span.style, span.start, span.end)
+            boundaries.append(min(span.start, len(content)))
+            boundaries.append(min(span.end, len(content)))
+        for span in overrides:
+            boundaries.append(min(span.start, len(content)))
+            boundaries.append(min(span.end, len(content)))
+        boundaries = sorted(set(boundaries))
+
+        syntax_iter = iter(self.spans)
+        current_syntax = next(syntax_iter, None)
+
+        override_iter = iter(overrides)
+        current_override = next(override_iter, None)
+
+        rendered = Text()
+        for start, end in zip(boundaries, boundaries[1:]):
+            if start == end:
+                continue
+
+            style = base_style
+            is_highlight = base_style in highlight_styles
+
+            while current_override is not None and current_override.end <= start:
+                current_override = next(override_iter, None)
+            if (
+                current_override is not None
+                and current_override.start <= start < current_override.end
+            ):
+                style = current_override.style
+                is_highlight = True
+
+            while current_syntax is not None and current_syntax.end <= start:
+                current_syntax = next(syntax_iter, None)
+            if (
+                current_syntax is not None
+                and current_syntax.start <= start < current_syntax.end
+            ):
+                syntax = (
+                    current_syntax.highlight_style
+                    if is_highlight
+                    else current_syntax.style
+                )
+                bold = (
+                    style.bold if syntax.bold is None else (style.bold or syntax.bold)
+                )
+                style = Style(
+                    color=syntax.color,
+                    bgcolor=style.bgcolor,
+                    bold=bold,
+                )
+
+            rendered.append(content[start:end], style)
+
         return rendered
 
 
@@ -43,6 +106,7 @@ class HighlightedFile:
     """Syntax spans for a source file, retained in source-line order."""
 
     lines: tuple[HighlightedLine, ...] = ()
+    highlight_styles: tuple[Style, ...] = ()
 
     def render_line(
         self,
@@ -53,11 +117,10 @@ class HighlightedFile:
     ) -> Text:
         """Styles a source line, falling back to its diff style when absent."""
         if index >= len(self.lines):
-            rendered = Text(content, style=base_style)
-            for span in overrides:
-                rendered.stylize(span.style, span.start, span.end)
+            line = HighlightedLine()
         else:
-            rendered = self.lines[index].render(content, base_style, overrides)
+            line = self.lines[index]
+        rendered = line.render(content, base_style, overrides, self.highlight_styles)
         # Expand tabs before margins are added. Otherwise Rich uses eight-column
         # tabs, and the same source line shifts between output modes.
         rendered.expand_tabs(TAB_WIDTH)
@@ -132,14 +195,16 @@ def highlight_file(
             raise UnknownSyntaxError(f"unknown syntax {syntax!r}") from error
         return HighlightedFile()
 
-    lines: list[list[Span]] = [[]]
+    lines: list[list[SyntaxSpan]] = [[]]
     column = 0
     for _, token_type, value in lexer.get_tokens_unprocessed(content):
-        style = _style_for_token(token_type, colors)
+        styles = _style_for_token(token_type, colors)
         parts = value.split("\n")
         for index, part in enumerate(parts):
-            if part and style is not None:
-                lines[-1].append(Span(column, column + len(part), style))
+            if part and styles is not None:
+                lines[-1].append(
+                    SyntaxSpan(column, column + len(part), styles[0], styles[1])
+                )
             column += len(part)
             if index + 1 < len(parts):
                 lines.append([])
@@ -147,24 +212,47 @@ def highlight_file(
 
     if not content:
         return HighlightedFile()
-    return HighlightedFile(tuple(HighlightedLine(tuple(spans)) for spans in lines))
+    highlight_styles = (
+        colors.add_highlight.rich_style(),
+        colors.remove_highlight.rich_style(),
+        colors.overlap_highlight.rich_style(),
+    )
+    return HighlightedFile(
+        tuple(HighlightedLine(tuple(spans)) for spans in lines),
+        highlight_styles,
+    )
 
 
-def _style_for_token(token_type, colors: ColorScheme) -> Style | None:
+def _style_for_token(token_type, colors: ColorScheme) -> tuple[Style, Style] | None:
     if token_type in Comment:
-        return _syntax_style(colors.syntax_comment)
+        return (
+            _syntax_style(colors.syntax_comment),
+            _syntax_style(colors.syntax_comment_highlight),
+        )
     if token_type in Keyword:
-        return _syntax_style(colors.syntax_keyword)
+        return (
+            _syntax_style(colors.syntax_keyword),
+            _syntax_style(colors.syntax_keyword_highlight),
+        )
     if token_type in String:
-        return _syntax_style(colors.syntax_string)
+        return (
+            _syntax_style(colors.syntax_string),
+            _syntax_style(colors.syntax_string_highlight),
+        )
     if token_type in Number:
-        return _syntax_style(colors.syntax_number)
+        return (
+            _syntax_style(colors.syntax_number),
+            _syntax_style(colors.syntax_number_highlight),
+        )
     if (
         token_type in Name.Class
         or token_type in Name.Function
         or token_type in Name.Decorator
     ):
-        return _syntax_style(colors.syntax_definition)
+        return (
+            _syntax_style(colors.syntax_definition),
+            _syntax_style(colors.syntax_definition_highlight),
+        )
     return None
 
 

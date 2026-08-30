@@ -49,10 +49,15 @@ STYLE_LABELS = {
     "remove_highlight": "Removed highlights",
     "overlap_highlight": "Three-way overlap",
     "syntax_comment": "Syntax: comments",
+    "syntax_comment_highlight": "Syntax: highlighted comments",
     "syntax_keyword": "Syntax: keywords",
+    "syntax_keyword_highlight": "Syntax: highlighted keywords",
     "syntax_string": "Syntax: strings",
+    "syntax_string_highlight": "Syntax: highlighted strings",
     "syntax_number": "Syntax: numbers",
+    "syntax_number_highlight": "Syntax: highlighted numbers",
     "syntax_definition": "Syntax: definitions",
+    "syntax_definition_highlight": "Syntax: highlighted definitions",
 }
 COLOR_OPTIONS = tuple(
     ("Terminal default" if name == "default" else name.replace("_", " ").title(), name)

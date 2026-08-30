@@ -73,11 +73,18 @@ class ColorConfigTests(unittest.TestCase):
 
     def test_syntax_colours_are_configurable(self):
         scheme = jiff_config._parse_color_scheme(
-            {"color": {"syntax_comment": {"color": "grey", "bold": True}}}
+            {
+                "color": {
+                    "syntax_comment": {"color": "grey", "bold": True},
+                    "syntax_keyword_highlight": {"color": "black", "bold": True},
+                }
+            }
         )
 
         self.assertEqual("bright_black", scheme.syntax_comment.color)
         self.assertTrue(scheme.syntax_comment.bold)
+        self.assertEqual("black", scheme.syntax_keyword_highlight.color)
+        self.assertTrue(scheme.syntax_keyword_highlight.bold)
 
     def test_three_way_overlap_highlight_is_configurable(self):
         scheme = jiff_config._parse_color_scheme(
@@ -102,6 +109,13 @@ class ColorConfigTests(unittest.TestCase):
         ):
             jiff_config._parse_color_scheme(
                 {"color": {"syntax_keyword": {"bgcolor": "cyan"}}}
+            )
+
+        with self.assertRaisesRegex(
+            jiff_config.ConfigError, "color.syntax_keyword_highlight.bgcolor"
+        ):
+            jiff_config._parse_color_scheme(
+                {"color": {"syntax_keyword_highlight": {"bgcolor": "cyan"}}}
             )
 
 

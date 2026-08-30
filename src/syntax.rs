@@ -62,6 +62,7 @@ struct SyntaxSpan {
     start: usize,
     end: usize,
     style: Style,
+    highlight_style: Style,
 }
 
 #[derive(Debug, Default, PartialEq)]
@@ -73,6 +74,7 @@ struct HighlightedLine {
 #[derive(Debug, Default, PartialEq)]
 pub(crate) struct HighlightedFile {
     lines: Vec<HighlightedLine>,
+    highlight_styles: Vec<Style>,
 }
 
 impl HighlightedFile {
@@ -115,6 +117,7 @@ impl HighlightedFile {
                 }
 
                 let mut style = base_style;
+                let mut is_highlight = self.highlight_styles.contains(&base_style);
                 while diff_overrides
                     .peek()
                     .is_some_and(|(range, _)| range.end <= start)
@@ -126,6 +129,7 @@ impl HighlightedFile {
                     .filter(|(range, _)| range.start <= start && start < range.end)
                 {
                     style = *override_style;
+                    is_highlight = true;
                 }
                 while syntax_spans.peek().is_some_and(|span| span.end <= start) {
                     syntax_spans.next();
@@ -136,8 +140,13 @@ impl HighlightedFile {
                 {
                     // Syntax only supplies the foreground. Leave the background
                     // alone so the diff still shows across the whole line.
-                    style.foreground = span.style.foreground;
-                    style.is_bold |= span.style.is_bold;
+                    let syntax = if is_highlight {
+                        span.highlight_style
+                    } else {
+                        span.style
+                    };
+                    style.foreground = syntax.foreground;
+                    style.is_bold |= syntax.is_bold;
                 }
                 Some(style.paint(expand_tabs(&content[start..end], &mut column)))
             })
@@ -248,7 +257,7 @@ fn parse_highlights(
             })?;
             let start = range.start.min(visible_length);
             let end = range.end.min(visible_length);
-            let Some(style) = syntax_style(stack.as_slice(), colors) else {
+            let Some((style, highlight_style)) = syntax_style(stack.as_slice(), colors) else {
                 continue;
             };
             if start == end {
@@ -256,12 +265,20 @@ fn parse_highlights(
             }
 
             if let Some(previous) = spans.last_mut() {
-                if previous.end == start && previous.style == style {
+                if previous.end == start
+                    && previous.style == style
+                    && previous.highlight_style == highlight_style
+                {
                     previous.end = end;
                     continue;
                 }
             }
-            spans.push(SyntaxSpan { start, end, style });
+            spans.push(SyntaxSpan {
+                start,
+                end,
+                style,
+                highlight_style,
+            });
         }
         lines.push(HighlightedLine { spans });
     }
@@ -273,44 +290,51 @@ fn parse_highlights(
         lines.push(HighlightedLine::default());
     }
 
-    Ok(HighlightedFile { lines })
+    Ok(HighlightedFile {
+        lines,
+        highlight_styles: vec![
+            colors.add_highlight,
+            colors.remove_highlight,
+            colors.overlap_highlight,
+        ],
+    })
 }
 
-fn syntax_style(scopes: &[Scope], colors: &ColorScheme) -> Option<Style> {
+fn syntax_style(scopes: &[Scope], colors: &ColorScheme) -> Option<(Style, Style)> {
     if SELECTORS
         .comment
         .iter()
         .any(|selector| selector.does_match(scopes).is_some())
     {
-        return Some(colors.syntax_comment);
+        return Some((colors.syntax_comment, colors.syntax_comment_highlight));
     }
     if SELECTORS
         .string
         .iter()
         .any(|selector| selector.does_match(scopes).is_some())
     {
-        return Some(colors.syntax_string);
+        return Some((colors.syntax_string, colors.syntax_string_highlight));
     }
     if SELECTORS
         .keyword
         .iter()
         .any(|selector| selector.does_match(scopes).is_some())
     {
-        return Some(colors.syntax_keyword);
+        return Some((colors.syntax_keyword, colors.syntax_keyword_highlight));
     }
     if SELECTORS
         .number
         .iter()
         .any(|selector| selector.does_match(scopes).is_some())
     {
-        return Some(colors.syntax_number);
+        return Some((colors.syntax_number, colors.syntax_number_highlight));
     }
     if SELECTORS
         .name
         .iter()
         .any(|selector| selector.does_match(scopes).is_some())
     {
-        return Some(colors.syntax_definition);
+        return Some((colors.syntax_definition, colors.syntax_definition_highlight));
     }
     None
 }
@@ -478,6 +502,41 @@ mod tests {
         assert_eq!(
             Color::Purple.on(Color::Green).paint("def").to_string(),
             rendered[0].to_string()
+        );
+    }
+
+    #[test]
+    fn highlight_syntax_colors_are_used_on_diff_highlights() {
+        let colors = ColorScheme {
+            syntax_keyword: Color::Purple.normal(),
+            syntax_keyword_highlight: Color::Black.normal(),
+            ..ColorScheme::default()
+        };
+
+        let highlighted = highlight_file("def kermit():", "muppets.py", None, &colors)
+            .expect("Python source should highlight");
+        let changed = vec![(0..3, colors.add_highlight)];
+
+        // On an unhighlighted line:
+        let normal_rendered = highlighted.render_line(0, "def kermit():", Style::default(), &[]);
+        assert_eq!(
+            Color::Purple.paint("def").to_string(),
+            normal_rendered[0].to_string()
+        );
+
+        // On an intraline highlight:
+        let intraline_rendered =
+            highlighted.render_line(0, "def kermit():", Style::default(), &changed);
+        assert_eq!(
+            Color::Black.on(Color::Green).paint("def").to_string(),
+            intraline_rendered[0].to_string()
+        );
+
+        // On a whole-line highlight:
+        let line_rendered = highlighted.render_line(0, "def kermit():", colors.add_highlight, &[]);
+        assert_eq!(
+            Color::Black.on(Color::Green).paint("def").to_string(),
+            line_rendered[0].to_string()
         );
     }
 

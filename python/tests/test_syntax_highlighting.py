@@ -100,6 +100,43 @@ class SyntaxRenderingTests(unittest.TestCase):
         self.assertEqual("magenta", style.color.name)
         self.assertEqual("green", style.bgcolor.name)
 
+    def test_highlight_syntax_colors_are_used_on_diff_highlights(self):
+        from dataclasses import replace
+
+        from jiff_config import ColorStyle
+
+        colors = replace(
+            ColorScheme.default(),
+            syntax_keyword=ColorStyle(color="magenta"),
+            syntax_keyword_highlight=ColorStyle(color="black"),
+        )
+        highlighted = syntax_highlighting.highlight_file(
+            "def kermit():", "muppets.py", None, colors
+        )
+        changed = [Span(0, 3, colors.add_highlight.rich_style())]
+        console = Console(color_system="standard")
+
+        # On an unhighlighted line:
+        normal_rendered = highlighted.render_line(0, "def kermit():", Style())
+        normal_style = normal_rendered.get_style_at_offset(console, 0)
+        self.assertEqual("magenta", normal_style.color.name)
+
+        # On an intraline highlight:
+        intraline_rendered = highlighted.render_line(
+            0, "def kermit():", Style(), changed
+        )
+        intraline_style = intraline_rendered.get_style_at_offset(console, 0)
+        self.assertEqual("black", intraline_style.color.name)
+        self.assertEqual("green", intraline_style.bgcolor.name)
+
+        # On a whole-line highlight:
+        line_rendered = highlighted.render_line(
+            0, "def kermit():", colors.add_highlight.rich_style()
+        )
+        line_style = line_rendered.get_style_at_offset(console, 0)
+        self.assertEqual("black", line_style.color.name)
+        self.assertEqual("green", line_style.bgcolor.name)
+
     def test_multiline_lexer_state_is_kept(self):
         # The second line stays a string because we highlight the whole file at
         # once.

@@ -48,10 +48,15 @@ DIFF_STYLE_NAMES = (
 )
 SYNTAX_STYLE_NAMES = (
     "syntax_comment",
+    "syntax_comment_highlight",
     "syntax_keyword",
+    "syntax_keyword_highlight",
     "syntax_string",
+    "syntax_string_highlight",
     "syntax_number",
+    "syntax_number_highlight",
     "syntax_definition",
+    "syntax_definition_highlight",
 )
 STYLE_NAMES = DIFF_STYLE_NAMES + SYNTAX_STYLE_NAMES
 
@@ -80,10 +85,15 @@ class ColorScheme:
     remove_highlight: ColorStyle
     overlap_highlight: ColorStyle
     syntax_comment: ColorStyle
+    syntax_comment_highlight: ColorStyle
     syntax_keyword: ColorStyle
+    syntax_keyword_highlight: ColorStyle
     syntax_string: ColorStyle
+    syntax_string_highlight: ColorStyle
     syntax_number: ColorStyle
+    syntax_number_highlight: ColorStyle
     syntax_definition: ColorStyle
+    syntax_definition_highlight: ColorStyle
 
     @classmethod
     def default(cls) -> ColorScheme:
@@ -96,10 +106,15 @@ class ColorScheme:
             remove_highlight=ColorStyle(color="black", bgcolor="red"),
             overlap_highlight=ColorStyle(color="black", bgcolor="yellow"),
             syntax_comment=ColorStyle(color="bright_black"),
+            syntax_comment_highlight=ColorStyle(color="bright_black"),
             syntax_keyword=ColorStyle(color="magenta"),
+            syntax_keyword_highlight=ColorStyle(color="magenta"),
             syntax_string=ColorStyle(color="cyan"),
+            syntax_string_highlight=ColorStyle(color="cyan"),
             syntax_number=ColorStyle(color="blue"),
+            syntax_number_highlight=ColorStyle(color="blue"),
             syntax_definition=ColorStyle(color="yellow"),
+            syntax_definition_highlight=ColorStyle(color="yellow"),
         )
 
     @classmethod
@@ -114,10 +129,15 @@ class ColorScheme:
             remove_highlight=plain,
             overlap_highlight=plain,
             syntax_comment=plain,
+            syntax_comment_highlight=plain,
             syntax_keyword=plain,
+            syntax_keyword_highlight=plain,
             syntax_string=plain,
+            syntax_string_highlight=plain,
             syntax_number=plain,
+            syntax_number_highlight=plain,
             syntax_definition=plain,
+            syntax_definition_highlight=plain,
         )
 
     def without_additions(self) -> ColorScheme:

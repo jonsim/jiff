@@ -42,3 +42,15 @@ Renderer Highlights Source Syntax
     ${configured} =    Run Keyword
     ...    ${config_runner}    ${config}    --no-pager    ${left_python}    ${right_python}
     Should Contain    ${configured.stdout}    ${blue}
+
+    VAR    ${config_highlight}    ${work_dir}/syntax-highlight-config.toml
+    VAR    ${left_keyword}    ${work_dir}/keyword-before.py
+    VAR    ${right_keyword}   ${work_dir}/keyword-after.py
+    Create File    ${left_keyword}     def kermit(): pass
+    Create File    ${right_keyword}    class kermit: pass
+    Create File    ${config_highlight}    color.syntax_keyword_highlight = { color = "bright_red" }
+    ${bright_red} =    Evaluate    chr(27) + "[91m"
+
+    ${configured_highlight} =    Run Keyword
+    ...    ${config_runner}    ${config_highlight}    --no-pager    ${left_keyword}    ${right_keyword}
+    Should Contain    ${configured_highlight.stdout}    ${bright_red}

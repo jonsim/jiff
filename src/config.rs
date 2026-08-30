@@ -21,10 +21,15 @@ pub(crate) struct ColorScheme {
     pub(crate) remove_highlight: Style,
     pub(crate) overlap_highlight: Style,
     pub(crate) syntax_comment: Style,
+    pub(crate) syntax_comment_highlight: Style,
     pub(crate) syntax_keyword: Style,
+    pub(crate) syntax_keyword_highlight: Style,
     pub(crate) syntax_string: Style,
+    pub(crate) syntax_string_highlight: Style,
     pub(crate) syntax_number: Style,
+    pub(crate) syntax_number_highlight: Style,
     pub(crate) syntax_definition: Style,
+    pub(crate) syntax_definition_highlight: Style,
 }
 
 impl ColorScheme {
@@ -38,10 +43,15 @@ impl ColorScheme {
             remove_highlight: Style::default(),
             overlap_highlight: Style::default(),
             syntax_comment: Style::default(),
+            syntax_comment_highlight: Style::default(),
             syntax_keyword: Style::default(),
+            syntax_keyword_highlight: Style::default(),
             syntax_string: Style::default(),
+            syntax_string_highlight: Style::default(),
             syntax_number: Style::default(),
+            syntax_number_highlight: Style::default(),
             syntax_definition: Style::default(),
+            syntax_definition_highlight: Style::default(),
         }
     }
 
@@ -69,10 +79,15 @@ impl Default for ColorScheme {
             remove_highlight: Color::Black.on(Color::Red),
             overlap_highlight: Color::Black.on(Color::Yellow),
             syntax_comment: Color::Fixed(8).normal(),
+            syntax_comment_highlight: Color::Fixed(8).normal(),
             syntax_keyword: Color::Purple.normal(),
+            syntax_keyword_highlight: Color::Purple.normal(),
             syntax_string: Color::Cyan.normal(),
+            syntax_string_highlight: Color::Cyan.normal(),
             syntax_number: Color::Blue.normal(),
+            syntax_number_highlight: Color::Blue.normal(),
             syntax_definition: Color::Yellow.normal(),
+            syntax_definition_highlight: Color::Yellow.normal(),
         }
     }
 }
@@ -176,10 +191,15 @@ fn parse_config(contents: &str, path: &Path) -> Result<ColorScheme, ConfigError>
             "remove_highlight",
             "overlap_highlight",
             "syntax_comment",
+            "syntax_comment_highlight",
             "syntax_keyword",
+            "syntax_keyword_highlight",
             "syntax_string",
+            "syntax_string_highlight",
             "syntax_number",
+            "syntax_number_highlight",
             "syntax_definition",
+            "syntax_definition_highlight",
         ],
         "color",
         path,
@@ -230,10 +250,24 @@ fn parse_config(contents: &str, path: &Path) -> Result<ColorScheme, ConfigError>
         path,
         false,
     )?;
+    scheme.syntax_comment_highlight = parse_style(
+        color.get("syntax_comment_highlight"),
+        scheme.syntax_comment_highlight,
+        "color.syntax_comment_highlight",
+        path,
+        false,
+    )?;
     scheme.syntax_keyword = parse_style(
         color.get("syntax_keyword"),
         scheme.syntax_keyword,
         "color.syntax_keyword",
+        path,
+        false,
+    )?;
+    scheme.syntax_keyword_highlight = parse_style(
+        color.get("syntax_keyword_highlight"),
+        scheme.syntax_keyword_highlight,
+        "color.syntax_keyword_highlight",
         path,
         false,
     )?;
@@ -244,6 +278,13 @@ fn parse_config(contents: &str, path: &Path) -> Result<ColorScheme, ConfigError>
         path,
         false,
     )?;
+    scheme.syntax_string_highlight = parse_style(
+        color.get("syntax_string_highlight"),
+        scheme.syntax_string_highlight,
+        "color.syntax_string_highlight",
+        path,
+        false,
+    )?;
     scheme.syntax_number = parse_style(
         color.get("syntax_number"),
         scheme.syntax_number,
@@ -251,10 +292,24 @@ fn parse_config(contents: &str, path: &Path) -> Result<ColorScheme, ConfigError>
         path,
         false,
     )?;
+    scheme.syntax_number_highlight = parse_style(
+        color.get("syntax_number_highlight"),
+        scheme.syntax_number_highlight,
+        "color.syntax_number_highlight",
+        path,
+        false,
+    )?;
     scheme.syntax_definition = parse_style(
         color.get("syntax_definition"),
         scheme.syntax_definition,
         "color.syntax_definition",
+        path,
+        false,
+    )?;
+    scheme.syntax_definition_highlight = parse_style(
+        color.get("syntax_definition_highlight"),
+        scheme.syntax_definition_highlight,
+        "color.syntax_definition_highlight",
         path,
         false,
     )?;
@@ -479,12 +534,21 @@ mod tests {
             [color.syntax_comment]
             color = "grey"
             bold = true
+
+            [color.syntax_keyword_highlight]
+            color = "black"
+            bold = true
             "#,
         )
         .unwrap();
 
         assert_eq!(Some(Color::Fixed(8)), scheme.syntax_comment.foreground);
         assert!(scheme.syntax_comment.is_bold);
+        assert_eq!(
+            Some(Color::Black),
+            scheme.syntax_keyword_highlight.foreground
+        );
+        assert!(scheme.syntax_keyword_highlight.is_bold);
     }
 
     #[test]
@@ -518,6 +582,19 @@ mod tests {
         assert!(error
             .to_string()
             .contains("unknown option color.syntax_keyword.bgcolor"));
+
+        let error = parse(
+            r#"
+            [color.syntax_keyword_highlight]
+            bgcolor = "cyan"
+            "#,
+        )
+        .err()
+        .expect("syntax highlight backgrounds should be rejected");
+
+        assert!(error
+            .to_string()
+            .contains("unknown option color.syntax_keyword_highlight.bgcolor"));
     }
 
     #[test]

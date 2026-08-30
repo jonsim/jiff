@@ -189,12 +189,17 @@ language passed to `--syntax=LANGUAGE`.
 | Style | Used for | Default foreground |
 |---|---|---|
 | `syntax_comment` | Comments and documentation | `bright_black` |
+| `syntax_comment_highlight` | Comments within highlighted text | `bright_black` |
 | `syntax_keyword` | Language keywords | `magenta` |
+| `syntax_keyword_highlight` | Language keywords within highlighted text | `magenta` |
 | `syntax_string` | String literals | `cyan` |
+| `syntax_string_highlight` | String literals within highlighted text | `cyan` |
 | `syntax_number` | Numeric literals | `blue` |
+| `syntax_number_highlight` | Numeric literals within highlighted text | `blue` |
 | `syntax_definition` | Function, type and other definition names | `yellow` |
+| `syntax_definition_highlight` | Function, type and other definition names within highlighted text | `yellow` |
 
-These five styles accept `color` and `bold`; their built-in `bold` value is
+These ten styles accept `color` and `bold`; their built-in `bold` value is
 `false`. They do not accept `bgcolor`. Diff backgrounds must remain in control,
 and syntax highlighting renders on top of diff highlights.
 
