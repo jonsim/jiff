@@ -84,8 +84,8 @@ Pass `--no-syntax` to retain Jiff's diff colours without token highlighting.
 - function and type names are yellow.
 
 Syntax highlighting only changes foreground colour and optional bold text.
-Diff backgrounds remain in control, and intraline changes take priority where
-the two overlap.
+Diff backgrounds remain in control, and syntax highlighting renders on top
+of both whole-line and intraline diff highlights.
 
 ### Configuration
 
@@ -196,8 +196,7 @@ language passed to `--syntax=LANGUAGE`.
 
 These five styles accept `color` and `bold`; their built-in `bold` value is
 `false`. They do not accept `bgcolor`. Diff backgrounds must remain in control,
-and the stronger `add_highlight` and `remove_highlight` styles win when syntax
-and intraline highlighting overlap.
+and syntax highlighting renders on top of diff highlights.
 
 Use `--no-syntax` to ignore the syntax styles while retaining the diff colours.
 Use `--no-color` to disable both diff and syntax styling.

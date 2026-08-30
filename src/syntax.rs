@@ -115,6 +115,18 @@ impl HighlightedFile {
                 }
 
                 let mut style = base_style;
+                while diff_overrides
+                    .peek()
+                    .is_some_and(|(range, _)| range.end <= start)
+                {
+                    diff_overrides.next();
+                }
+                if let Some((_, override_style)) = diff_overrides
+                    .peek()
+                    .filter(|(range, _)| range.start <= start && start < range.end)
+                {
+                    style = *override_style;
+                }
                 while syntax_spans.peek().is_some_and(|span| span.end <= start) {
                     syntax_spans.next();
                 }
@@ -126,20 +138,6 @@ impl HighlightedFile {
                     // alone so the diff still shows across the whole line.
                     style.foreground = span.style.foreground;
                     style.is_bold |= span.style.is_bold;
-                }
-                while diff_overrides
-                    .peek()
-                    .is_some_and(|(range, _)| range.end <= start)
-                {
-                    diff_overrides.next();
-                }
-                if let Some((_, override_style)) = diff_overrides
-                    .peek()
-                    .filter(|(range, _)| range.start <= start && start < range.end)
-                {
-                    // The character diff is the important bit here, so let its
-                    // whole style win where it overlaps syntax.
-                    style = *override_style;
                 }
                 Some(style.paint(expand_tabs(&content[start..end], &mut column)))
             })
@@ -469,8 +467,7 @@ mod tests {
     }
 
     #[test]
-    fn intraline_diff_style_wins_over_syntax() {
-        // Changed characters matter more than their token type.
+    fn syntax_foreground_renders_on_top_of_intraline_diff() {
         let highlighted =
             highlight_file("def kermit():", "muppets.py", None, &ColorScheme::default())
                 .expect("Python source should highlight");
@@ -479,7 +476,7 @@ mod tests {
         let rendered = highlighted.render_line(0, "def kermit():", Style::default(), &changed);
 
         assert_eq!(
-            Color::Black.on(Color::Green).paint("def").to_string(),
+            Color::Purple.on(Color::Green).paint("def").to_string(),
             rendered[0].to_string()
         );
     }

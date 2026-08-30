@@ -282,12 +282,6 @@ def _full_line_span(line: IndexedLine, style: Style) -> list[Span]:
     return [Span(0, len(line.text), style)] if line.text else []
 
 
-def _apply_spans(text: Text, spans: list[Span]) -> Text:
-    for span in spans:
-        text.stylize(span.style, span.start, span.end)
-    return text
-
-
 def _style_three_way_line(
     line: ThreeWayLine,
     colors: ColorScheme,
@@ -305,11 +299,8 @@ def _style_three_way_line(
             left_spans, middle_from_left = diff_mod._line_diff_spans(
                 line.left.text, line.middle.text, styling
             )
-            left = _apply_spans(
-                highlighting[0].render_line(
-                    line.left.index, line.left.text, styling.remove
-                ),
-                left_spans,
+            left = highlighting[0].render_line(
+                line.left.index, line.left.text, styling.remove, left_spans
             )
     elif line.left is not None:
         left = highlighting[0].render_line(
@@ -333,11 +324,8 @@ def _style_three_way_line(
             middle_from_right, right_spans = diff_mod._line_diff_spans(
                 line.middle.text, line.right.text, styling
             )
-            right = _apply_spans(
-                highlighting[2].render_line(
-                    line.right.index, line.right.text, styling.add
-                ),
-                right_spans,
+            right = highlighting[2].render_line(
+                line.right.index, line.right.text, styling.add, right_spans
             )
     elif line.middle is not None:
         middle_from_right = _full_line_span(line.middle, styling.remove_highlight)
@@ -359,11 +347,8 @@ def _style_three_way_line(
             middle_from_right,
             colors.overlap_highlight.rich_style(),
         )
-        middle = _apply_spans(
-            highlighting[1].render_line(
-                line.middle.index, line.middle.text, styling.same
-            ),
-            middle_spans,
+        middle = highlighting[1].render_line(
+            line.middle.index, line.middle.text, styling.same, middle_spans
         )
     return left, middle, right
 

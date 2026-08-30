@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from jiff_config import ColorScheme, ColorStyle
@@ -22,9 +23,16 @@ class HighlightedLine:
 
     spans: tuple[Span, ...] = ()
 
-    def render(self, content: str, base_style: Style) -> Text:
+    def render(
+        self,
+        content: str,
+        base_style: Style,
+        overrides: Sequence[Span] = (),
+    ) -> Text:
         """Combines syntax foregrounds with the diff style for this line."""
         rendered = Text(content, style=base_style)
+        for span in overrides:
+            rendered.stylize(span.style, span.start, span.end)
         for span in self.spans:
             rendered.stylize(span.style, span.start, span.end)
         return rendered
@@ -36,12 +44,20 @@ class HighlightedFile:
 
     lines: tuple[HighlightedLine, ...] = ()
 
-    def render_line(self, index: int, content: str, base_style: Style) -> Text:
+    def render_line(
+        self,
+        index: int,
+        content: str,
+        base_style: Style,
+        overrides: Sequence[Span] = (),
+    ) -> Text:
         """Styles a source line, falling back to its diff style when absent."""
         if index >= len(self.lines):
             rendered = Text(content, style=base_style)
+            for span in overrides:
+                rendered.stylize(span.style, span.start, span.end)
         else:
-            rendered = self.lines[index].render(content, base_style)
+            rendered = self.lines[index].render(content, base_style, overrides)
         # Expand tabs before margins are added. Otherwise Rich uses eight-column
         # tabs, and the same source line shifts between output modes.
         rendered.expand_tabs(TAB_WIDTH)

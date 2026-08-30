@@ -4,6 +4,7 @@ import syntax_highlighting
 from jiff_config import ColorScheme
 from rich.console import Console
 from rich.style import Style
+from rich.text import Span
 
 
 class SyntaxDetectionTests(unittest.TestCase):
@@ -86,6 +87,18 @@ class SyntaxRenderingTests(unittest.TestCase):
 
         self.assertEqual("magenta", style.color.name)
         self.assertEqual("red", style.bgcolor.name)
+
+    def test_syntax_foreground_renders_on_top_of_intraline_diff(self):
+        highlighted = syntax_highlighting.highlight_file(
+            "def kermit():", "muppets.py", None, ColorScheme.default()
+        )
+        changed = [Span(0, 3, Style(color="black", bgcolor="green"))]
+
+        rendered = highlighted.render_line(0, "def kermit():", Style(), changed)
+        style = rendered.get_style_at_offset(Console(color_system="standard"), 0)
+
+        self.assertEqual("magenta", style.color.name)
+        self.assertEqual("green", style.bgcolor.name)
 
     def test_multiline_lexer_state_is_kept(self):
         # The second line stays a string because we highlight the whole file at

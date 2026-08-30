@@ -439,14 +439,13 @@ def _style_diff_line(
     before_index: int,
     after_index: int,
 ) -> None:
-    before_line = before_highlighting.render_line(before_index, before, styling.remove)
-    after_line = after_highlighting.render_line(after_index, after, styling.add)
     before_spans, after_spans = _line_diff_spans(before, after, styling)
-
-    for span in before_spans:
-        before_line.stylize(span.style, span.start, span.end)
-    for span in after_spans:
-        after_line.stylize(span.style, span.start, span.end)
+    before_line = before_highlighting.render_line(
+        before_index, before, styling.remove, before_spans
+    )
+    after_line = after_highlighting.render_line(
+        after_index, after, styling.add, after_spans
+    )
 
     before_text.append_text(before_line)
     after_text.append_text(after_line)
