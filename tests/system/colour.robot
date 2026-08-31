@@ -39,21 +39,15 @@ Renderer Uses One Colour Palette
 Outputs Use Diff Colours
     [Documentation]    Checks normal and highlighted additions and removals.
     [Arguments]    ${addition_output}    ${removal_output}
-    ${red} =    Evaluate    chr(27) + "[31m"
-    ${green} =    Evaluate    chr(27) + "[32m"
-    ${add_highlight} =    Evaluate    chr(27) + "[30;42m"
-    ${add_highlight_reordered} =    Evaluate    chr(27) + "[42;30m"
-    ${remove_highlight} =    Evaluate    chr(27) + "[30;41m"
-    ${remove_highlight_reordered} =    Evaluate    chr(27) + "[41;30m"
-    Should Contain    ${addition_output}    ${red}
-    Should Contain    ${addition_output}    ${green}
-    Should Contain Any
+    Output Should Contain ANSI Style    ${addition_output}    foreground=red
+    Output Should Contain ANSI Style    ${addition_output}    foreground=green
+    Output Should Contain ANSI Style
     ...    ${addition_output}
-    ...    ${add_highlight}
-    ...    ${add_highlight_reordered}
-    Should Contain    ${removal_output}    ${red}
-    Should Contain    ${removal_output}    ${green}
-    Should Contain Any
+    ...    foreground=black
+    ...    background=green
+    Output Should Contain ANSI Style    ${removal_output}    foreground=red
+    Output Should Contain ANSI Style    ${removal_output}    foreground=green
+    Output Should Contain ANSI Style
     ...    ${removal_output}
-    ...    ${remove_highlight}
-    ...    ${remove_highlight_reordered}
+    ...    foreground=black
+    ...    background=red

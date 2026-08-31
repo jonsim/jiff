@@ -24,24 +24,21 @@ Renderer Highlights Source Syntax
     Copy File    ${left_python}    ${left_text}
     Copy File    ${right_python}    ${right_text}
     Create File    ${config}    color.syntax_keyword = { color = "blue" }
-    ${magenta} =    Evaluate    chr(27) + "[35m"
-    ${blue} =    Evaluate    chr(27) + "[34m"
-
     ${detected} =    Run Keyword
     ...    ${runner}    --no-pager    ${left_python}    ${right_python}
-    Should Contain    ${detected.stdout}    ${magenta}
+    Output Should Contain ANSI Style    ${detected.stdout}    foreground=magenta
 
     ${explicit} =    Run Keyword
     ...    ${runner}    --no-pager    --syntax    python    ${left_text}    ${right_text}
-    Should Contain    ${explicit.stdout}    ${magenta}
+    Output Should Contain ANSI Style    ${explicit.stdout}    foreground=magenta
 
     ${disabled} =    Run Keyword
     ...    ${runner}    --no-pager    --no-syntax    ${left_python}    ${right_python}
-    Should Not Contain    ${disabled.stdout}    ${magenta}
+    Output Should Not Contain ANSI Style    ${disabled.stdout}    foreground=magenta
 
     ${configured} =    Run Keyword
     ...    ${config_runner}    ${config}    --no-pager    ${left_python}    ${right_python}
-    Should Contain    ${configured.stdout}    ${blue}
+    Output Should Contain ANSI Style    ${configured.stdout}    foreground=blue
 
     VAR    ${config_highlight}    ${work_dir}/syntax-highlight-config.toml
     VAR    ${left_keyword}    ${work_dir}/keyword-before.py
@@ -49,8 +46,14 @@ Renderer Highlights Source Syntax
     Create File    ${left_keyword}     def kermit(): pass
     Create File    ${right_keyword}    class kermit: pass
     Create File    ${config_highlight}    color.syntax_keyword_highlight = { color = "bright_red" }
-    ${bright_red} =    Evaluate    chr(27) + "[91m"
 
     ${configured_highlight} =    Run Keyword
     ...    ${config_runner}    ${config_highlight}    --no-pager    ${left_keyword}    ${right_keyword}
-    Should Contain    ${configured_highlight.stdout}    ${bright_red}
+    Output Should Contain ANSI Style
+    ...    ${configured_highlight.stdout}
+    ...    foreground=bright_red
+    ...    background=red
+    Output Should Contain ANSI Style
+    ...    ${configured_highlight.stdout}
+    ...    foreground=bright_red
+    ...    background=green

@@ -2,6 +2,7 @@
 Library    Collections
 Library    OperatingSystem
 Library    Process
+Library    ${CURDIR}/ansi.py
 
 *** Keywords ***
 Jiff Files
@@ -131,9 +132,11 @@ Run Rust Jiff With Config
 
 Run Process Check Output
     [Documentation]    Runs a process with the given command and arguments,
-    ...    checks for successful execution and returns the result object.
+    ...    captures it at the fixture width, then checks for successful execution.
     [Arguments]    @{cmd}
-    ${res} =    Run Process    @{cmd}    env:JIFF_CONFIG=${CURDIR}/default-config.toml
+    ${res} =    Run Process    @{cmd}
+    ...    env:COLUMNS=120
+    ...    env:JIFF_CONFIG=${CURDIR}/default-config.toml
     Process Should Succeed    ${res}    @{cmd}
     RETURN    ${res}
 

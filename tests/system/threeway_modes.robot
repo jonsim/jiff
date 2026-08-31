@@ -73,24 +73,17 @@ Three-way Colours Compose
     ...    ${root}/local.py
     ...    ${root}/base.py
     ...    ${root}/remote.py
-    ${syntax_keyword} =    Evaluate    chr(27) + "[35m"
-    ${add_highlight} =    Evaluate    chr(27) + "[42;30m"
-    ${add_highlight_reordered} =    Evaluate    chr(27) + "[30;42m"
-    ${remove_highlight} =    Evaluate    chr(27) + "[41;30m"
-    ${remove_highlight_reordered} =    Evaluate    chr(27) + "[30;41m"
-    ${overlap_highlight} =    Evaluate    chr(27) + "[43;30m"
-    ${overlap_highlight_reordered} =    Evaluate    chr(27) + "[30;43m"
 
-    Should Contain    ${result.stdout}    ${syntax_keyword}
-    Should Contain Any
+    Output Should Contain ANSI Style    ${result.stdout}    foreground=magenta
+    Output Should Contain ANSI Style
     ...    ${result.stdout}
-    ...    ${add_highlight}
-    ...    ${add_highlight_reordered}
-    Should Contain Any
+    ...    foreground=blue
+    ...    background=green
+    Output Should Contain ANSI Style
     ...    ${result.stdout}
-    ...    ${remove_highlight}
-    ...    ${remove_highlight_reordered}
-    Should Contain Any
+    ...    foreground=blue
+    ...    background=red
+    Output Should Contain ANSI Style
     ...    ${result.stdout}
-    ...    ${overlap_highlight}
-    ...    ${overlap_highlight_reordered}
+    ...    foreground=blue
+    ...    background=yellow

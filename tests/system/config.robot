@@ -39,15 +39,16 @@ Renderer Loads Custom Colours
 Output Uses Custom Colours
     [Documentation]    Checks the configured normal and highlighted styles.
     [Arguments]    ${output}
-    ${blue} =    Evaluate    chr(27) + "[1;34m"
-    ${highlight} =    Evaluate    chr(27) + "[33;44m"
-    ${highlight_reordered} =    Evaluate    chr(27) + "[44;33m"
-    Should Contain    ${output}    ${blue}
-    Should Contain Any    ${output}    ${highlight}    ${highlight_reordered}
+    Output Should Contain ANSI Style    ${output}    foreground=blue    bold=${True}
+    Output Should Contain ANSI Style
+    ...    ${output}
+    ...    foreground=yellow
+    ...    background=blue
 
 Output Uses Custom Overlap Colour
     [Documentation]    Checks the configured three-way overlap style.
     [Arguments]    ${output}
-    ${overlap} =    Evaluate    chr(27) + "[37;44m"
-    ${overlap_reordered} =    Evaluate    chr(27) + "[44;37m"
-    Should Contain Any    ${output}    ${overlap}    ${overlap_reordered}
+    Output Should Contain ANSI Style
+    ...    ${output}
+    ...    foreground=white
+    ...    background=blue

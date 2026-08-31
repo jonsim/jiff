@@ -60,6 +60,4 @@ Renderer Limits Unchanged Context
 Omission Uses Muted Colour
     [Documentation]    Checks context markers use the palette's quiet colour.
     [Arguments]    ${output}
-    ${ansi_bright_black} =    Evaluate    chr(27) + "[90m"
-    ${ansi_fixed_gray} =    Evaluate    chr(27) + "[38;5;8m"
-    Should Contain Any    ${output}    ${ansi_bright_black}    ${ansi_fixed_gray}
+    Output Should Contain ANSI Style    ${output}    foreground=bright_black
