@@ -8,8 +8,8 @@ A terminal diff tool supporting sub-line diffs and side-by-side output display
 
 This repo has two separate, fully featured implementations: one written in Rust,
 the other in Python. The Rust version is expected to be faster, but the Python
-version is more portable. The core diff behaviour is kept identical. Syntax
-highlighting can differ slightly because the implementations use different
+version is more portable. The core diff behaviour is identical, though syntax
+highlighting may differ slightly because the implementations use different
 language engines.
 
 ### Installing
@@ -29,6 +29,15 @@ uv tool install ./python
 Both commands install a `jiff` executable. Only install one implementation at a
 time unless you deliberately arrange their order in `$PATH`.
 
+Invoke Jiff with two files or directories to see the difference between them:
+```sh
+jiff FILE1 FILE2
+jiff DIR1 DIR2
+```
+
+By default, Jiff renders diffs in side-by-side mode. To render diffs in the more
+conventional inline mode, pass `--inline`.
+
 Long output from either implementation is sent to `$PAGER`, using `less` by
 default. Output which fits in the terminal, or is redirected to another
 command, is printed directly. Pass `--no-pager` to always print directly.
@@ -44,17 +53,18 @@ jiff -U3 FILE1 FILE2
 Omitted regions are marked with their number of unchanged lines in either
 output layout. `-U0` shows only changed lines and those markers.
 
-Pass three files to compare two versions against a common base. The second
-file is the base, so the order is `LOCAL BASE REMOTE`:
+Jiff also supports three-way merge diffs. Pass three files to compare two
+versions against a common base. The second file is the base, so the order is:
 
 ```sh
 jiff LOCAL BASE REMOTE
 ```
 
 Side-by-side mode draws one pane per file. Changes are highlighted in the two
-outer panes, while the base pane shows the exact text changed by the local
-side, the remote side or both. `--inline` falls back to two labelled diffs,
-`LOCAL` against `BASE` followed by `BASE` against `REMOTE`.
+outer panes, relative to base, while the central (base) pane highlights the
+text changed by the local side, the remote side or both. `--inline` falls back
+to two labelled diffs, `LOCAL` against `BASE` followed by `BASE` against
+`REMOTE`.
 
 ### Syntax highlighting
 
@@ -62,8 +72,7 @@ Jiff automatically detects source languages from the input filenames. Git
 difftool comparisons use the repository path supplied through `--path`, rather
 than trying to identify Git's temporary filenames.
 
-Use `--syntax=LANGUAGE` when the filename is ambiguous or has no useful
-extension:
+Use `--syntax=LANGUAGE` to override automatic detection:
 
 ```sh
 jiff --syntax=python FILE1 FILE2
@@ -83,20 +92,18 @@ Pass `--no-syntax` to retain Jiff's diff colours without token highlighting.
 - numbers are blue;
 - function and type names are yellow.
 
-Syntax highlighting only changes foreground colour and optional bold text.
-Diff backgrounds remain in control, and syntax highlighting renders on top
-of both whole-line and intraline diff highlights.
+Syntax highlighting only changes foreground colour and optional bold text - diff
+highlights control the background colour.
 
 ### Configuration
 
-The configuration file is optional. Jiff uses the first file it finds and does
-not merge settings from several files.
+Jiff supports an optional XDG-style config file for persisting configuration.
 
 #### File location
 
 Jiff uses the first configuration file it finds in this order:
 
-1. The path in `$JIFF_CONFIG`, when set.
+1. The path in `$JIFF_CONFIG`, when set. If no other paths are searched.
 2. `$XDG_CONFIG_HOME/jiff/config.toml`, or `~/.config/jiff/config.toml` when
    `$XDG_CONFIG_HOME` is not set.
 3. `~/.jiffconfig`.
@@ -108,21 +115,16 @@ mkdir -p ~/.config/jiff
 touch ~/.config/jiff/config.toml
 ```
 
-`JIFF_CONFIG` is useful for trying another palette without replacing the usual
-one:
+`JIFF_CONFIG` is useful for trying another theme temporarily:
 
 ```sh
 JIFF_CONFIG=jiff-configure/themes/high-contrast-light.toml jiff OLD NEW
 ```
 
-If `$JIFF_CONFIG` is set, Jiff uses that exact path. It does not fall back to
-the other locations when the file is missing or invalid.
-
 #### TOML structure
 
-The file must contain valid TOML and currently supports one top-level table:
-`[color]`. Unknown tables, styles and fields are reported as errors so a typo
-cannot silently change the result.
+The config file must contain valid TOML and currently supports one top-level
+table: `[color]`. Unknown tables, styles and fields are reported as errors.
 
 Each entry below `[color]` names a style. A style has up to three fields:
 
@@ -140,8 +142,7 @@ add = { color = "blue", bold = true }
 add_highlight = { color = "yellow", bgcolor = "blue" }
 ```
 
-The normal TOML table form is clearer for a longer style and means exactly the
-same thing:
+Alternatively you may use the longer, equivalent, TOML table form:
 
 ```toml
 [color.add_highlight]
@@ -150,7 +151,7 @@ bgcolor = "blue"
 bold = true
 ```
 
-Every style and field is optional. An omitted value keeps its built-in default.
+All styles and fields are optional. Omitted values keep their built-in default.
 Use the colour name `default` when you want to clear a built-in foreground or
 background instead:
 
@@ -173,7 +174,7 @@ These styles control the diff itself:
 | `add_highlight` | Changed characters and unpaired side-by-side additions | `black` | `green` |
 | `remove` | Normal removed text and unchanged characters in paired lines | `red` | Terminal default |
 | `remove_highlight` | Changed characters and unpaired side-by-side removals | `black` | `red` |
-| `overlap_highlight` | Middle-pane characters changed by both outer files in a three-way diff | `black` | `yellow` |
+| `overlap_highlight` | Middle-pane characters changed by both outer files in a three-way | `black` | `yellow` |
 
 All seven accept `color`, `bgcolor` and `bold`. Their built-in `bold` value is
 `false`. Line numbers and the `+`/`-` markers inherit the corresponding diff
@@ -182,9 +183,7 @@ text. `overlap_highlight` is only used in three-way side-by-side output.
 
 #### Syntax highlighting styles
 
-Syntax configuration only changes how token categories are drawn. It does not
-select a language: Jiff still detects that from the filename, or uses the
-language passed to `--syntax=LANGUAGE`.
+Syntax configuration only changes how token categories are drawn.
 
 | Style | Used for | Default foreground |
 |---|---|---|
@@ -208,8 +207,7 @@ Use `--no-color` to disable both diff and syntax styling.
 
 #### Supported colour names
 
-Colour names are case-insensitive and surrounding whitespace is ignored. The
-supported canonical names are:
+The following case-insensitive colour names are supported:
 
 ```text
 default
@@ -232,14 +230,13 @@ bright_white
 ```
 
 `gray` and `grey` are aliases for `bright_black`; `purple` is an alias for
-`magenta`. `default` means the terminal's normal foreground or background—it
-does not mean Jiff's built-in value. Hex colours, RGB values, ANSI colour
-numbers and colours outside the standard 16-colour ANSI palette are not
-currently supported.
+`magenta`. `default` means the terminal's normal foreground or background (not
+Jiff's built-in value). Hex colours, RGB values, ANSI colour numbers and colours
+outside the standard 16-colour ANSI palette are not currently supported.
 
 #### Complete themes
 
-The repository includes seven complete themes:
+The repository includes seven complete themes which you can use as-is or extend:
 
 | Theme | Best suited to | Character |
 |---|---|---|
@@ -252,16 +249,12 @@ The repository includes seven complete themes:
 | [Tokyo Night](jiff-configure/themes/tokyo-night.toml) | Dark terminals | Cyan and magenta with blue syntax |
 
 The first two prioritise contrast and colour-blind accessibility. The other
-five borrow the colour relationships of popular editor themes. Jiff's config
-uses ANSI colour names, so your terminal theme still chooses the exact shades.
-This generally makes the palettes sit naturally alongside a matching terminal
-theme, but they are not exact RGB reproductions.
-
-Gruvbox Dark and High Contrast Dark use bright foregrounds for the main diff
-signal, but retain standard colours for highlight backgrounds. This keeps
-changed spans clear without turning them into high-intensity blocks. The light
-theme and the other editor-inspired themes deliberately keep their standard
-ANSI colours.
+five borrow the colour relationships of popular editor themes and are intended
+to render well in these themes (though bear in mind not all terminals implement
+their themes in the same way). Jiff's config uses ANSI colour names, so your
+terminal theme will choose the exact shades. This generally makes the palettes
+sit naturally alongside a matching terminal theme, but they are not exact RGB
+reproductions.
 
 Copy any theme to the standard XDG location to use it:
 
@@ -270,38 +263,27 @@ mkdir -p ~/.config/jiff
 cp jiff-configure/themes/high-contrast-dark.toml ~/.config/jiff/config.toml
 ```
 
-Replace `high-contrast-dark.toml` with another filename from the table to use
-that theme. Every example is a complete config, so they are also useful as
-starting points for your own palette.
-
 #### Building a theme interactively
 
-`jiff-configure` is a separate Textual application in the uv workspace. Run it
-from the repository with:
+You can build a theme interactively using the separate `jiff-configure` tool.
+Run it from the repository with:
 
 ```sh
 uv run jiff-configure
 ```
 
-It starts with a small built-in Python diff which exercises the normal diff,
-intraline and syntax colours. To preview a pair of your own UTF-8 text files
-instead, pass both paths:
+This starts with a small built-in Python diff which exercises all supported diff
+functionality. To preview a pair of your own files:
 
 ```sh
 uv run jiff-configure OLD NEW
 ```
 
-Pick one of the packaged themes as a starting point, then adjust the text
-colour, background colour and bold setting for each style. The Side-by-side,
-Inline and Three-way tabs use Jiff's real Python renderer, so they update as
-the palette changes. The TOML tab shows the complete configuration which will
-be written.
+Pick one of the packaged themes as a starting point, then adjust the settings
+for each style. The Side-by-side, Inline, and Three-way tabs use Jiff's real
+Python renderer, so they update as the palette changes.
 
-Press `Ctrl+S` or use the Save button to save it. The application asks for a
-path every time, initially suggesting `$XDG_CONFIG_HOME/jiff/config.toml` or
-`~/.config/jiff/config.toml`. It creates missing parent directories and asks
-before replacing an existing file. Changing the starting theme or quitting
-with unsaved edits also requires confirmation.
+Press `Ctrl+S` or use the Save button to save your theme.
 
 ### Git difftool
 
@@ -314,43 +296,22 @@ git config --global difftool.jiff.cmd 'jiff --path "$MERGED" "$LOCAL" "$REMOTE"'
 git config --global difftool.prompt false
 git config --global difftool.trustExitCode true
 ```
-
-`$LOCAL` and `$REMOTE` are Git's temporary before and after files. `$MERGED`
-holds the repository path, which Jiff displays as `a/PATH` and `b/PATH` above
-the diff. Git supplies the source path for a detected rename. Remove `--global`
-from the commands if the configuration should only apply to the current
+Remove `--global` if the configuration should only apply to the current
 repository.
 
-The usual Git forms work as expected. For changes spanning more than one file,
-use Git's directory mode:
-
-```sh
-git difftool
-git difftool --cached
-git difftool HEAD~1 HEAD
-git difftool --dir-diff HEAD~1 HEAD
-```
-
-`--dir-diff` makes Git prepare two temporary directory trees and launch Jiff
-once. Jiff compares their files recursively and sends the complete result to
-one pager, so `q` stops the whole review rather than opening the next file.
-Added and removed files, empty files, nested paths and binary files are all
-handled. The same behaviour is available directly with `jiff DIR1 DIR2`.
-
-For a one-off comparison without changing the Git configuration, use
-`--extcmd`. Git appends the two temporary files to this command and exposes the
-repository path as `$BASE`:
+For a one-off comparison without changing your Git configuration, use
+`--extcmd`:
 
 ```sh
 git difftool --no-prompt --extcmd='jiff --no-pager --path "$BASE"'
 ```
 
 The `--no-pager` in this example avoids opening a pager for each changed file.
-For a multi-file comparison with automatic paging, use the configured
-`--dir-diff` form above instead. Jiff returns zero after displaying a text or
-binary comparison and non-zero when it cannot read, configure or display the
-diff. `difftool.trustExitCode` makes Git report those failures rather than
-silently continuing.
+For a multi-file comparison with automatic paging, use the `--dir-diff` form
+instead. Jiff returns zero after displaying a text or binary comparison and
+non-zero when it cannot read, configure or display the diff.
+`difftool.trustExitCode` makes Git report those failures rather than silently
+continuing.
 
 ### Git diff and Git show
 
@@ -392,19 +353,12 @@ External diff output is intended for people to read; it is not a patch. Use
 `git diff --no-ext-diff` for scripts or anything which needs Git's normal patch
 format.
 
-When Git invokes its one-argument protocol for an unmerged path, Jiff shows the
-same three-way view as three explicit file arguments. Git only passes Jiff the
-repository path in this case, so Jiff reads the three versions from Git's index
-and labels them `Local`, `Base` and `Remote`. A missing version is shown as an
-empty pane; this covers add/add and modify/delete conflicts without making them
-a special case. Submodule stages are shown in Git's usual
-`Subproject commit HASH` form.
-
-The view deliberately represents the index, not the working-tree file. Any
-conflict markers or edits made since the merge are therefore not included.
-Some Git commands render unresolved paths with Git's built-in combined diff
-instead of calling an external helper; Jiff cannot replace output when it is
-not invoked.
+Jiff automatically renders merge conflicts using the same three-way diff
+functionality described above. This deliberately represents the index, not the
+working-tree file. Any conflict markers or edits made since the merge are
+therefore not included. Some Git commands render unresolved paths with Git's
+built-in combined diff instead of calling an external helper; Jiff cannot replace
+output when it is not invoked.
 
 ### Rust
 
@@ -412,6 +366,12 @@ not invoked.
 
 ```sh
 cargo build
+```
+
+#### Running
+
+```sh
+cargo run -- <options>
 ```
 
 #### Testing
@@ -436,16 +396,8 @@ uv run robot -v SKIP_PYTHON_TESTS:True tests
 
 #### Running
 
-Jiff displays a side-by-side diff by default:
-
 ```sh
 uv run jiff FILE1 FILE2
-```
-
-Use `-i` or `--inline` for inline output:
-
-```sh
-uv run jiff --inline FILE1 FILE2
 ```
 
 #### Testing

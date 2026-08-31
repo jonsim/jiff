@@ -4,9 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jiff-configure"
-version = "0.1.0"
+version = "1.0.0"
 description = "Interactive colour configuration for Jiff"
 readme = "README.md"
+maintainers = [
+    { name = "Jonathan Simmonds", email = "jon@jonsim.com" },
+]
+license = "MIT"
+
 requires-python = ">=3.9"
 dependencies = [
     "jiff",

@@ -1,7 +1,10 @@
 [package]
 name = "jiff"
-version = "0.1.0"
-authors = ["jon"]
+version = "1.0.0"
+description = "A terminal diff tool with sub-line and side-by-side output"
+readme = "README.md"
+authors = ["Jonathan Simmonds <jon@jonsim.com>"]
+license = "MIT"
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

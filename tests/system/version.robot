@@ -13,4 +13,4 @@ Version Comes From Package Metadata
     [Documentation]    Checks the CLI reports the package version.
     [Arguments]    ${runner}
     ${result} =    Run Keyword    ${runner}    --version
-    Should Be Equal    ${result.stdout}    jiff 0.1.0
+    Should Be Equal    ${result.stdout}    jiff 1.0.0
