@@ -698,8 +698,8 @@ fn main() {
         eprintln!("Could not highlight diff: {error}");
         process::exit(1);
     }
-    let mut colors = match config::load_color_scheme() {
-        Ok(colors) => colors,
+    let color_config = match config::load_color_config() {
+        Ok(config) => config,
         Err(error) => {
             eprintln!("Could not load config: {error}");
             process::exit(1);
@@ -712,9 +712,11 @@ fn main() {
         let is_tty = std::io::stdout().is_terminal();
         color = force_color || is_tty;
     }
-    if !color {
-        colors = config::ColorScheme::plain();
-    }
+    let colors = if color {
+        color_config.scheme(false)
+    } else {
+        config::ColorScheme::plain()
+    };
 
     let highlight_options = HighlightOptions {
         color,

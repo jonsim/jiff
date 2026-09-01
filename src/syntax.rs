@@ -1,5 +1,5 @@
 use crate::config::ColorScheme;
-use ansi_term::{ANSIString, Style};
+use nu_ansi_term::{AnsiString as ANSIString, Style};
 use std::borrow::Cow;
 use std::fmt;
 use std::ops::Range;
@@ -374,7 +374,7 @@ fn parse_selectors(names: &[&str]) -> Vec<ScopeSelector> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ansi_term::Color;
+    use nu_ansi_term::Color;
 
     #[test]
     fn filename_selects_the_python_syntax() {
@@ -486,7 +486,7 @@ mod tests {
 
         assert_eq!(
             "a   b",
-            ansi_term::unstyle(&ansi_term::ANSIStrings(&rendered))
+            nu_ansi_term::unstyle(&nu_ansi_term::AnsiStrings(&rendered))
         );
     }
 

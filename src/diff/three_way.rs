@@ -6,8 +6,8 @@ use super::{
 };
 use crate::config::ColorScheme;
 use crate::syntax::HighlightedFile;
-use ansi_term::{ANSIString, Style};
 use itertools::Itertools;
+use nu_ansi_term::{AnsiString as ANSIString, Style};
 use std::fmt::Write;
 
 /// A zero-based line number in one of the three original files.
@@ -650,7 +650,7 @@ pub(crate) fn render_three_way_side_by_side(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ansi_term::Color;
+    use nu_ansi_term::Color;
 
     #[test]
     fn three_way_alignment_uses_the_middle_file_as_its_anchor() {

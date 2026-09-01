@@ -1,4 +1,4 @@
-use ansi_term::{ANSIString, ANSIStrings};
+use nu_ansi_term::{AnsiString as ANSIString, AnsiStrings as ANSIStrings};
 use std::iter::Iterator;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
@@ -92,9 +92,9 @@ impl<'u> Iterator for WrappedANSIStringsIter<'u> {
         let (byte_len, display_width) = split_at_width(&self.unstyled[start_pos..], self.wrap_at);
         self.cur_pos += byte_len;
 
-        // `ansi_term` takes byte offsets. `split_at_width` guarantees both
+        // `nu-ansi-term` takes byte offsets. `split_at_width` guarantees both
         // offsets are grapheme boundaries in the concatenated unstyled text.
-        let split = ansi_term::sub_string(start_pos, byte_len, &self.s_ansi);
+        let split = nu_ansi_term::sub_string(start_pos, byte_len, &self.s_ansi);
         let split_fmt = ANSIStrings(split.as_slice());
         let padding_required = if self.pad {
             self.wrap_at.saturating_sub(display_width)
@@ -118,7 +118,7 @@ pub(super) fn wrap_ansistrings<'s, 'u>(
 where
     'u: 's,
 {
-    let unstyled = ansi_term::unstyle(&ANSIStrings(s));
+    let unstyled = nu_ansi_term::unstyle(&ANSIStrings(s));
     // A zero-width terminal can be reported during a resize. Non-empty text
     // still has to advance, while empty text preserves the requested width.
     let wrap_at = if unstyled.is_empty() {
@@ -139,7 +139,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ansi_term::Color::{Green, Red};
+    use nu_ansi_term::Color::{Green, Red};
 
     #[test]
     fn wrap_str_empty() {

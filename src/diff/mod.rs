@@ -8,10 +8,10 @@ pub(super) use three_way::render_three_way_side_by_side;
 use crate::config::ColorScheme;
 use crate::syntax::{HighlightedFile, HighlightedFiles};
 use align::align;
-use ansi_term::{ANSIString, ANSIStrings, Style};
 use itertools::EitherOrBoth;
 use itertools::Itertools;
 use myers::{calculate_edits, Edit};
+use nu_ansi_term::{AnsiString as ANSIString, AnsiStrings as ANSIStrings, Style};
 use std::env;
 use std::fmt::Write;
 use std::ops::Range;
@@ -433,7 +433,7 @@ fn render_side_by_side_line(
 
         // There's nothing useful after the separator for a missing line. Stop
         // there so redirected output doesn't end in a trail of spaces.
-        if margin_r.trim().is_empty() && wrapped_r.trim().is_empty() {
+        if margin_r.as_str().trim().is_empty() && wrapped_r.trim().is_empty() {
             writeln!(output, "{} {}{}", margin_l, wrapped_l, separator)
                 .expect("writing to a String cannot fail");
         } else {

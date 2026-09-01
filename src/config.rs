@@ -1,4 +1,4 @@
-use ansi_term::{Color, Style};
+use nu_ansi_term::{Color, Style};
 use std::env;
 use std::fmt;
 use std::fs;
@@ -10,6 +10,60 @@ const SUPPORTED_COLORS: &str = concat!(
     "yellow, bright_yellow, blue, bright_blue, magenta, bright_magenta, ",
     "cyan, bright_cyan, white, bright_white, gray, grey, or purple",
 );
+
+const STYLE_NAMES: &[&str] = &[
+    "same",
+    "omitted",
+    "add",
+    "add_highlight",
+    "remove",
+    "remove_highlight",
+    "overlap_highlight",
+    "syntax_comment",
+    "syntax_comment_highlight",
+    "syntax_keyword",
+    "syntax_keyword_highlight",
+    "syntax_string",
+    "syntax_string_highlight",
+    "syntax_number",
+    "syntax_number_highlight",
+    "syntax_definition",
+    "syntax_definition_highlight",
+];
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ColorDepth {
+    Ansi16,
+    Ansi256,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct ColorConfig {
+    pub(crate) depth: ColorDepth,
+    pub(crate) ansi16: ColorScheme,
+    pub(crate) ansi256: ColorScheme,
+}
+
+impl Default for ColorConfig {
+    fn default() -> Self {
+        let ansi16 = ColorScheme::default();
+        Self {
+            depth: ColorDepth::Ansi16,
+            ansi16,
+            ansi256: ansi256_scheme(ansi16),
+        }
+    }
+}
+
+impl ColorConfig {
+    pub(crate) fn scheme(self, ansi256_supported: bool) -> ColorScheme {
+        if self.depth == ColorDepth::Ansi256 && ansi256_supported {
+            self.ansi256
+        } else {
+            self.ansi16
+        }
+    }
+}
 
 #[derive(Clone, Copy)]
 pub(crate) struct ColorScheme {
@@ -72,14 +126,14 @@ impl Default for ColorScheme {
     fn default() -> Self {
         Self {
             same: Style::default(),
-            omitted: Color::Fixed(8).normal(),
+            omitted: Color::DarkGray.normal(),
             add: Color::Green.normal(),
             add_highlight: Color::Black.on(Color::Green),
             remove: Color::Red.normal(),
             remove_highlight: Color::Black.on(Color::Red),
             overlap_highlight: Color::Black.on(Color::Yellow),
-            syntax_comment: Color::Fixed(8).normal(),
-            syntax_comment_highlight: Color::Fixed(8).normal(),
+            syntax_comment: Color::DarkGray.normal(),
+            syntax_comment_highlight: Color::DarkGray.normal(),
             syntax_keyword: Color::Purple.normal(),
             syntax_keyword_highlight: Color::Purple.normal(),
             syntax_string: Color::Cyan.normal(),
@@ -89,6 +143,58 @@ impl Default for ColorScheme {
             syntax_definition: Color::Yellow.normal(),
             syntax_definition_highlight: Color::Yellow.normal(),
         }
+    }
+}
+
+fn ansi256_scheme(scheme: ColorScheme) -> ColorScheme {
+    fn indexed_style(mut style: Style) -> Style {
+        style.foreground = style.foreground.map(indexed_color);
+        style.background = style.background.map(indexed_color);
+        style
+    }
+
+    ColorScheme {
+        same: indexed_style(scheme.same),
+        omitted: indexed_style(scheme.omitted),
+        add: indexed_style(scheme.add),
+        add_highlight: indexed_style(scheme.add_highlight),
+        remove: indexed_style(scheme.remove),
+        remove_highlight: indexed_style(scheme.remove_highlight),
+        overlap_highlight: indexed_style(scheme.overlap_highlight),
+        syntax_comment: indexed_style(scheme.syntax_comment),
+        syntax_comment_highlight: indexed_style(scheme.syntax_comment_highlight),
+        syntax_keyword: indexed_style(scheme.syntax_keyword),
+        syntax_keyword_highlight: indexed_style(scheme.syntax_keyword_highlight),
+        syntax_string: indexed_style(scheme.syntax_string),
+        syntax_string_highlight: indexed_style(scheme.syntax_string_highlight),
+        syntax_number: indexed_style(scheme.syntax_number),
+        syntax_number_highlight: indexed_style(scheme.syntax_number_highlight),
+        syntax_definition: indexed_style(scheme.syntax_definition),
+        syntax_definition_highlight: indexed_style(scheme.syntax_definition_highlight),
+    }
+}
+
+fn indexed_color(color: Color) -> Color {
+    match color {
+        Color::Black => Color::Fixed(0),
+        Color::Red => Color::Fixed(1),
+        Color::Green => Color::Fixed(2),
+        Color::Yellow => Color::Fixed(3),
+        Color::Blue => Color::Fixed(4),
+        Color::Purple => Color::Fixed(5),
+        Color::Cyan => Color::Fixed(6),
+        Color::White => Color::Fixed(7),
+        Color::DarkGray => Color::Fixed(8),
+        Color::LightRed => Color::Fixed(9),
+        Color::LightGreen => Color::Fixed(10),
+        Color::LightYellow => Color::Fixed(11),
+        Color::LightBlue => Color::Fixed(12),
+        Color::LightPurple => Color::Fixed(13),
+        Color::LightCyan => Color::Fixed(14),
+        Color::LightGray => Color::Fixed(15),
+        Color::Fixed(index) => Color::Fixed(index),
+        Color::Rgb(red, green, blue) => Color::Rgb(red, green, blue),
+        _ => color,
     }
 }
 
@@ -115,9 +221,9 @@ impl fmt::Display for ConfigError {
 
 impl std::error::Error for ConfigError {}
 
-pub(crate) fn load_color_scheme() -> Result<ColorScheme, ConfigError> {
+pub(crate) fn load_color_config() -> Result<ColorConfig, ConfigError> {
     let Some(path) = find_config_file()? else {
-        return Ok(ColorScheme::default());
+        return Ok(ColorConfig::default());
     };
     let contents = fs::read_to_string(&path)
         .map_err(|error| ConfigError::new(&path, format!("could not read file: {error}")))?;
@@ -168,151 +274,97 @@ fn config_candidates(home: Option<PathBuf>, xdg_home: Option<PathBuf>) -> Vec<Pa
     candidates
 }
 
-fn parse_config(contents: &str, path: &Path) -> Result<ColorScheme, ConfigError> {
+fn parse_config(contents: &str, path: &Path) -> Result<ColorConfig, ConfigError> {
     let document = contents
         .parse::<toml::Table>()
         .map_err(|error| ConfigError::new(path, format!("invalid TOML: {error}")))?;
     reject_unknown_fields(&document, &["color"], "root", path)?;
 
     let Some(color_value) = document.get("color") else {
-        return Ok(ColorScheme::default());
+        return Ok(ColorConfig::default());
     };
     let color = color_value
         .as_table()
         .ok_or_else(|| ConfigError::new(path, "color must be a table"))?;
-    reject_unknown_fields(
-        color,
-        &[
-            "same",
-            "omitted",
-            "add",
-            "add_highlight",
-            "remove",
-            "remove_highlight",
-            "overlap_highlight",
-            "syntax_comment",
-            "syntax_comment_highlight",
-            "syntax_keyword",
-            "syntax_keyword_highlight",
-            "syntax_string",
-            "syntax_string_highlight",
-            "syntax_number",
-            "syntax_number_highlight",
-            "syntax_definition",
-            "syntax_definition_highlight",
-        ],
-        "color",
-        path,
-    )?;
+    reject_unknown_fields(color, &["depth", "ansi16", "ansi256"], "color", path)?;
 
-    let mut scheme = ColorScheme::default();
-    scheme.same = parse_style(color.get("same"), scheme.same, "color.same", path, true)?;
-    scheme.omitted = parse_style(
-        color.get("omitted"),
-        scheme.omitted,
-        "color.omitted",
+    let depth = match color.get("depth") {
+        None | Some(toml::Value::Integer(16)) => ColorDepth::Ansi16,
+        Some(toml::Value::Integer(256)) => ColorDepth::Ansi256,
+        Some(toml::Value::Integer(value)) => {
+            return Err(ConfigError::new(
+                path,
+                format!("color.depth must be 16 or 256, not {value}"),
+            ));
+        }
+        Some(_) => return Err(ConfigError::new(path, "color.depth must be 16 or 256")),
+    };
+
+    let ansi16 = parse_scheme(
+        color.get("ansi16"),
+        ColorScheme::default(),
+        "color.ansi16",
+        path,
+        false,
+    )?;
+    let ansi256 = parse_scheme(
+        color.get("ansi256"),
+        ansi256_scheme(ansi16),
+        "color.ansi256",
         path,
         true,
     )?;
-    scheme.add = parse_style(color.get("add"), scheme.add, "color.add", path, true)?;
-    scheme.add_highlight = parse_style(
-        color.get("add_highlight"),
-        scheme.add_highlight,
-        "color.add_highlight",
-        path,
-        true,
-    )?;
-    scheme.remove = parse_style(
-        color.get("remove"),
-        scheme.remove,
-        "color.remove",
-        path,
-        true,
-    )?;
-    scheme.remove_highlight = parse_style(
-        color.get("remove_highlight"),
-        scheme.remove_highlight,
-        "color.remove_highlight",
-        path,
-        true,
-    )?;
-    scheme.overlap_highlight = parse_style(
-        color.get("overlap_highlight"),
-        scheme.overlap_highlight,
-        "color.overlap_highlight",
-        path,
-        true,
-    )?;
-    scheme.syntax_comment = parse_style(
-        color.get("syntax_comment"),
-        scheme.syntax_comment,
-        "color.syntax_comment",
-        path,
-        false,
-    )?;
-    scheme.syntax_comment_highlight = parse_style(
-        color.get("syntax_comment_highlight"),
-        scheme.syntax_comment_highlight,
-        "color.syntax_comment_highlight",
-        path,
-        false,
-    )?;
-    scheme.syntax_keyword = parse_style(
-        color.get("syntax_keyword"),
-        scheme.syntax_keyword,
-        "color.syntax_keyword",
-        path,
-        false,
-    )?;
-    scheme.syntax_keyword_highlight = parse_style(
-        color.get("syntax_keyword_highlight"),
-        scheme.syntax_keyword_highlight,
-        "color.syntax_keyword_highlight",
-        path,
-        false,
-    )?;
-    scheme.syntax_string = parse_style(
-        color.get("syntax_string"),
-        scheme.syntax_string,
-        "color.syntax_string",
-        path,
-        false,
-    )?;
-    scheme.syntax_string_highlight = parse_style(
-        color.get("syntax_string_highlight"),
-        scheme.syntax_string_highlight,
-        "color.syntax_string_highlight",
-        path,
-        false,
-    )?;
-    scheme.syntax_number = parse_style(
-        color.get("syntax_number"),
-        scheme.syntax_number,
-        "color.syntax_number",
-        path,
-        false,
-    )?;
-    scheme.syntax_number_highlight = parse_style(
-        color.get("syntax_number_highlight"),
-        scheme.syntax_number_highlight,
-        "color.syntax_number_highlight",
-        path,
-        false,
-    )?;
-    scheme.syntax_definition = parse_style(
-        color.get("syntax_definition"),
-        scheme.syntax_definition,
-        "color.syntax_definition",
-        path,
-        false,
-    )?;
-    scheme.syntax_definition_highlight = parse_style(
-        color.get("syntax_definition_highlight"),
-        scheme.syntax_definition_highlight,
-        "color.syntax_definition_highlight",
-        path,
-        false,
-    )?;
+    Ok(ColorConfig {
+        depth,
+        ansi16,
+        ansi256,
+    })
+}
+
+fn parse_scheme(
+    value: Option<&toml::Value>,
+    mut scheme: ColorScheme,
+    field: &str,
+    path: &Path,
+    indexed: bool,
+) -> Result<ColorScheme, ConfigError> {
+    let Some(value) = value else {
+        return Ok(scheme);
+    };
+    let table = value
+        .as_table()
+        .ok_or_else(|| ConfigError::new(path, format!("{field} must be a table")))?;
+    reject_unknown_fields(table, STYLE_NAMES, field, path)?;
+
+    macro_rules! parse {
+        ($name:ident, $background:expr) => {
+            scheme.$name = parse_style(
+                table.get(stringify!($name)),
+                scheme.$name,
+                &format!("{field}.{}", stringify!($name)),
+                path,
+                $background,
+                indexed,
+            )?;
+        };
+    }
+    parse!(same, true);
+    parse!(omitted, true);
+    parse!(add, true);
+    parse!(add_highlight, true);
+    parse!(remove, true);
+    parse!(remove_highlight, true);
+    parse!(overlap_highlight, true);
+    parse!(syntax_comment, false);
+    parse!(syntax_comment_highlight, false);
+    parse!(syntax_keyword, false);
+    parse!(syntax_keyword_highlight, false);
+    parse!(syntax_string, false);
+    parse!(syntax_string_highlight, false);
+    parse!(syntax_number, false);
+    parse!(syntax_number_highlight, false);
+    parse!(syntax_definition, false);
+    parse!(syntax_definition_highlight, false);
     Ok(scheme)
 }
 
@@ -322,6 +374,7 @@ fn parse_style(
     field: &str,
     path: &Path,
     allow_background: bool,
+    indexed: bool,
 ) -> Result<Style, ConfigError> {
     let Some(value) = value else {
         return Ok(style);
@@ -336,12 +389,12 @@ fn parse_style(
     };
     reject_unknown_fields(table, expected, field, path)?;
 
-    if let Some(color) = string_field(table, "color", field, path)? {
-        style.foreground = parse_color(color, &format!("{field}.color"), path)?;
+    if let Some(color) = color_field(table, "color", field, path, indexed)? {
+        style.foreground = color;
     }
     if allow_background {
-        if let Some(color) = string_field(table, "bgcolor", field, path)? {
-            style.background = parse_color(color, &format!("{field}.bgcolor"), path)?;
+        if let Some(color) = color_field(table, "bgcolor", field, path, indexed)? {
+            style.background = color;
         }
     }
     if let Some(bold) = boolean_field(table, "bold", field, path)? {
@@ -350,19 +403,39 @@ fn parse_style(
     Ok(style)
 }
 
-fn string_field<'a>(
-    table: &'a toml::Table,
+fn color_field(
+    table: &toml::Table,
     name: &str,
     parent: &str,
     path: &Path,
-) -> Result<Option<&'a str>, ConfigError> {
-    match table.get(name) {
-        Some(toml::Value::String(value)) => Ok(Some(value)),
-        Some(_) => Err(ConfigError::new(
-            path,
-            format!("{parent}.{name} must be a string"),
-        )),
-        None => Ok(None),
+    indexed: bool,
+) -> Result<Option<Option<Color>>, ConfigError> {
+    let Some(value) = table.get(name) else {
+        return Ok(None);
+    };
+    let field = format!("{parent}.{name}");
+    if indexed {
+        return match value {
+            toml::Value::Integer(index) if (0..=255).contains(index) => {
+                Ok(Some(Some(Color::Fixed(*index as u8))))
+            }
+            toml::Value::Integer(index) => Err(ConfigError::new(
+                path,
+                format!("{field} must be between 0 and 255, not {index}"),
+            )),
+            toml::Value::String(value) if value.trim().eq_ignore_ascii_case("default") => {
+                Ok(Some(None))
+            }
+            _ => Err(ConfigError::new(
+                path,
+                format!("{field} must be an index from 0 to 255 or \"default\""),
+            )),
+        };
+    }
+
+    match value {
+        toml::Value::String(value) => Ok(Some(parse_color(value, &field, path)?)),
+        _ => Err(ConfigError::new(path, format!("{field} must be a string"))),
     }
 }
 
@@ -386,21 +459,21 @@ fn parse_color(name: &str, field: &str, path: &Path) -> Result<Option<Color>, Co
     let color = match name.trim().to_ascii_lowercase().as_str() {
         "default" => None,
         "black" => Some(Color::Black),
-        "bright_black" | "gray" | "grey" => Some(Color::Fixed(8)),
+        "bright_black" | "gray" | "grey" => Some(Color::DarkGray),
         "red" => Some(Color::Red),
-        "bright_red" => Some(Color::Fixed(9)),
+        "bright_red" => Some(Color::LightRed),
         "green" => Some(Color::Green),
-        "bright_green" => Some(Color::Fixed(10)),
+        "bright_green" => Some(Color::LightGreen),
         "yellow" => Some(Color::Yellow),
-        "bright_yellow" => Some(Color::Fixed(11)),
+        "bright_yellow" => Some(Color::LightYellow),
         "blue" => Some(Color::Blue),
-        "bright_blue" => Some(Color::Fixed(12)),
+        "bright_blue" => Some(Color::LightBlue),
         "magenta" | "purple" => Some(Color::Purple),
-        "bright_magenta" => Some(Color::Fixed(13)),
+        "bright_magenta" => Some(Color::LightPurple),
         "cyan" => Some(Color::Cyan),
-        "bright_cyan" => Some(Color::Fixed(14)),
+        "bright_cyan" => Some(Color::LightCyan),
         "white" => Some(Color::White),
-        "bright_white" => Some(Color::Fixed(15)),
+        "bright_white" => Some(Color::LightGray),
         _ => {
             return Err(ConfigError::new(
                 path,
@@ -434,14 +507,14 @@ mod tests {
     use super::*;
 
     fn parse(contents: &str) -> Result<ColorScheme, ConfigError> {
-        parse_config(contents, Path::new("/tmp/.jiffconfig"))
+        parse_config(contents, Path::new("/tmp/.jiffconfig")).map(|config| config.ansi16)
     }
 
     #[test]
     fn partial_styles_merge_with_the_default_palette() {
         let scheme = parse(
             r#"
-            [color]
+            [color.ansi16]
             add = { color = "blue", bold = true }
             omitted = { color = "cyan" }
             "#,
@@ -458,7 +531,7 @@ mod tests {
     fn default_clears_an_existing_colour() {
         let scheme = parse(
             r#"
-            [color.add_highlight]
+            [color.ansi16.add_highlight]
             bgcolor = "default"
             "#,
         )
@@ -474,25 +547,25 @@ mod tests {
         let colours = [
             ("default", None),
             ("black", Some(Color::Black)),
-            ("bright_black", Some(Color::Fixed(8))),
+            ("bright_black", Some(Color::DarkGray)),
             ("red", Some(Color::Red)),
-            ("bright_red", Some(Color::Fixed(9))),
+            ("bright_red", Some(Color::LightRed)),
             ("green", Some(Color::Green)),
-            ("bright_green", Some(Color::Fixed(10))),
+            ("bright_green", Some(Color::LightGreen)),
             ("yellow", Some(Color::Yellow)),
-            ("bright_yellow", Some(Color::Fixed(11))),
+            ("bright_yellow", Some(Color::LightYellow)),
             ("blue", Some(Color::Blue)),
-            ("bright_blue", Some(Color::Fixed(12))),
+            ("bright_blue", Some(Color::LightBlue)),
             ("magenta", Some(Color::Purple)),
-            ("bright_magenta", Some(Color::Fixed(13))),
+            ("bright_magenta", Some(Color::LightPurple)),
             ("cyan", Some(Color::Cyan)),
-            ("bright_cyan", Some(Color::Fixed(14))),
+            ("bright_cyan", Some(Color::LightCyan)),
             ("white", Some(Color::White)),
-            ("bright_white", Some(Color::Fixed(15))),
+            ("bright_white", Some(Color::LightGray)),
         ];
 
         for (name, expected) in colours {
-            let scheme = parse(&format!("[color]\nadd = {{ color = {name:?} }}\n")).unwrap();
+            let scheme = parse(&format!("[color.ansi16]\nadd = {{ color = {name:?} }}\n")).unwrap();
 
             assert_eq!(expected, scheme.add.foreground, "{name}");
         }
@@ -502,14 +575,14 @@ mod tests {
     fn unsupported_colours_report_the_field() {
         let error = parse(
             r#"
-            [color]
+            [color.ansi16]
             add = { color = "orange" }
             "#,
         )
         .err()
         .expect("orange should be rejected");
 
-        assert!(error.to_string().contains("color.add.color"));
+        assert!(error.to_string().contains("color.ansi16.add.color"));
         assert!(error.to_string().contains("orange"));
     }
 
@@ -517,32 +590,34 @@ mod tests {
     fn unknown_options_are_rejected() {
         let error = parse(
             r#"
-            [color]
+            [color.ansi16]
             kermit = { color = "green" }
             "#,
         )
         .err()
         .expect("unknown styles should be rejected");
 
-        assert!(error.to_string().contains("unknown option color.kermit"));
+        assert!(error
+            .to_string()
+            .contains("unknown option color.ansi16.kermit"));
     }
 
     #[test]
     fn syntax_colours_are_configurable() {
         let scheme = parse(
             r#"
-            [color.syntax_comment]
+            [color.ansi16.syntax_comment]
             color = "grey"
             bold = true
 
-            [color.syntax_keyword_highlight]
+            [color.ansi16.syntax_keyword_highlight]
             color = "black"
             bold = true
             "#,
         )
         .unwrap();
 
-        assert_eq!(Some(Color::Fixed(8)), scheme.syntax_comment.foreground);
+        assert_eq!(Some(Color::DarkGray), scheme.syntax_comment.foreground);
         assert!(scheme.syntax_comment.is_bold);
         assert_eq!(
             Some(Color::Black),
@@ -555,7 +630,7 @@ mod tests {
     fn three_way_overlap_highlight_is_configurable() {
         let scheme = parse(
             r#"
-            [color.overlap_highlight]
+            [color.ansi16.overlap_highlight]
             color = "white"
             bgcolor = "blue"
             "#,
@@ -572,7 +647,7 @@ mod tests {
         // overwrite its background.
         let error = parse(
             r#"
-            [color.syntax_keyword]
+            [color.ansi16.syntax_keyword]
             bgcolor = "cyan"
             "#,
         )
@@ -581,11 +656,11 @@ mod tests {
 
         assert!(error
             .to_string()
-            .contains("unknown option color.syntax_keyword.bgcolor"));
+            .contains("unknown option color.ansi16.syntax_keyword.bgcolor"));
 
         let error = parse(
             r#"
-            [color.syntax_keyword_highlight]
+            [color.ansi16.syntax_keyword_highlight]
             bgcolor = "cyan"
             "#,
         )
@@ -594,7 +669,63 @@ mod tests {
 
         assert!(error
             .to_string()
-            .contains("unknown option color.syntax_keyword_highlight.bgcolor"));
+            .contains("unknown option color.ansi16.syntax_keyword_highlight.bgcolor"));
+    }
+
+    #[test]
+    fn ansi256_styles_inherit_the_resolved_ansi16_palette() {
+        let config = parse_config(
+            r#"
+            [color.ansi16]
+            add = { color = "bright_green", bold = true }
+
+            [color.ansi256]
+            add = { color = 114 }
+            "#,
+            Path::new("/tmp/.jiffconfig"),
+        )
+        .unwrap();
+
+        assert_eq!(Some(Color::Fixed(114)), config.ansi256.add.foreground);
+        assert!(config.ansi256.add.is_bold);
+        assert_eq!(Some(Color::Fixed(1)), config.ansi256.remove.foreground);
+    }
+
+    #[test]
+    fn ansi256_default_clears_an_inherited_colour() {
+        let config = parse_config(
+            r#"
+            [color.ansi256]
+            add = { color = "default" }
+            "#,
+            Path::new("/tmp/.jiffconfig"),
+        )
+        .unwrap();
+
+        assert_eq!(None, config.ansi256.add.foreground);
+    }
+
+    #[test]
+    fn invalid_depth_and_indexes_are_rejected() {
+        for contents in [
+            "[color]\ndepth = 24\n",
+            "[color.ansi256]\nadd = { color = -1 }\n",
+            "[color.ansi256]\nadd = { color = 256 }\n",
+        ] {
+            assert!(parse_config(contents, Path::new("/tmp/.jiffconfig")).is_err());
+        }
+    }
+
+    #[test]
+    fn old_palette_layout_is_rejected() {
+        let error = parse_config(
+            "[color]\nadd = { color = \"green\" }\n",
+            Path::new("/tmp/.jiffconfig"),
+        )
+        .err()
+        .expect("the old layout should be rejected");
+
+        assert!(error.to_string().contains("unknown option color.add"));
     }
 
     #[test]
