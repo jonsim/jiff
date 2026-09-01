@@ -1,0 +1,53 @@
+digraph alignment {
+    graph [
+        bgcolor="transparent",
+        margin=0.04,
+        outputorder="edgesfirst",
+        overlap=false,
+        pad=0.1,
+        splines=line
+    ];
+    node [
+        fontname="DejaVu Sans Mono",
+        fontsize=11,
+        height=0.42,
+        shape=box,
+        style="rounded",
+        width=0.9
+    ];
+    edge [
+        arrowsize=0.65,
+        color="#555555",
+        fontname="sans-serif",
+        fontsize=10
+    ];
+
+    n00 [label="∅", pos="0,220!"];
+    n10 [label="K │ –", pos="144,220!"];
+    n20 [label="K │ –\nG │ –", pos="288,220!"];
+    n01 [label="– │ K!", pos="0,110!"];
+    n11 [label="K │ K!", pos="144,110!"];
+    n21 [label="K │ K!\nG │ –", pos="288,110!"];
+    n02 [label="– │ K!\n– │ A", pos="0,0!"];
+    n12 [label="K │ K!\n– │ A", pos="144,0!"];
+    n22 [label="K │ K!\nG │ –\n– │ A", pos="288,0!"];
+
+    n00 -> n10 [label="6"];
+    n10 -> n20 [label="5"];
+    n01 -> n11 [label="6"];
+    n11 -> n21 [color="#111111", label="5", penwidth=3];
+    n02 -> n12 [label="6"];
+    n12 -> n22 [label="5"];
+
+    n00 -> n01 [label="7"];
+    n01 -> n02 [label="6"];
+    n10 -> n11 [label="7"];
+    n11 -> n12 [label="6"];
+    n20 -> n21 [label="7"];
+    n21 -> n22 [color="#111111", label="6", penwidth=3];
+
+    n10 -> n21 [label="13", style=dashed];
+    n01 -> n12 [label="13", style=dashed];
+    n00 -> n11 [color="#111111", label="1", penwidth=3];
+    n11 -> n22 [label="12", style=dashed];
+}
