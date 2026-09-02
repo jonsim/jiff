@@ -1,10 +1,22 @@
 *** Settings ***
 Resource    jiff.resource
-Test Template    Renderer Uses One Colour Palette
 
-*** Test Cases ***    RUNNER
-Python Colouring      Run Python Jiff With Colour
-Rust Colouring        Run Rust Jiff With Colour
+*** Test Cases ***
+Python Colouring
+    [Template]    Renderer Uses One Colour Palette
+    Run Python Jiff With Colour
+
+Rust Colouring
+    [Template]    Renderer Uses One Colour Palette
+    Run Rust Jiff With Colour
+
+Python ANSI256
+    [Template]    Renderer Uses ANSI256 When Supported
+    python3    ${CURDIR}/../../python/jiff.py
+
+Rust ANSI256
+    [Template]    Renderer Uses ANSI256 When Supported
+    cargo    run    --quiet    --manifest-path=${CURDIR}/../../Cargo.toml    --
 
 *** Keywords ***
 Renderer Uses One Colour Palette
@@ -51,3 +63,31 @@ Outputs Use Diff Colours
     ...    ${removal_output}
     ...    foreground=black
     ...    background=red
+
+Renderer Uses ANSI256 When Supported
+    [Documentation]    Checks ANSI256, true-colour and ANSI16 terminal profiles.
+    [Arguments]    @{command}
+    VAR    ${config}    ${CURDIR}/ansi256-config.toml
+    VAR    ${first}    ${CURDIR}/../../testcases/minimal/02.txt
+    VAR    ${changed}    ${CURDIR}/../../testcases/minimal/03.txt
+    ${ansi256} =    Run Process Check Configured Output For Terminal
+    ...    ${config}    xterm-256color    ${EMPTY}
+    ...    @{command}    --inline    ${first}    ${changed}
+    Output Should Contain ANSI Style    ${ansi256.stdout}    foreground=color(114)
+
+    ${true_colour} =    Run Process Check Configured Output For Terminal
+    ...    ${config}    xterm    truecolor
+    ...    @{command}    --inline    ${first}    ${changed}
+    Output Should Contain ANSI Style    ${true_colour.stdout}    foreground=color(114)
+
+    ${ansi16} =    Run Process Check Configured Output For Terminal
+    ...    ${config}    xterm    ${EMPTY}
+    ...    @{command}    --inline    ${first}    ${changed}
+    Output Should Contain ANSI Style    ${ansi16.stdout}    foreground=green
+    Output Should Not Contain ANSI Style    ${ansi16.stdout}    foreground=color(114)
+
+    ${git_diff} =    Run External Diff For Terminal
+    ...    ${config}    xterm-256color
+    ...    @{command}    --git-external-diff
+    ...    muppets.txt    ${first}    old    100644    ${changed}    new    100644
+    Output Should Contain ANSI Style    ${git_diff.stdout}    foreground=color(114)

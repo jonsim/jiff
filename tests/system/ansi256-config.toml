@@ -1,0 +1,14 @@
+[color]
+depth = 256
+
+[color.ansi16]
+add = { color = "green", bold = false }
+add_highlight = { color = "black", bgcolor = "green", bold = true }
+remove = { color = "red", bold = true }
+remove_highlight = { color = "black", bgcolor = "red", bold = true }
+
+[color.ansi256]
+add = { color = 114, bold = true }
+add_highlight = { color = 231, bgcolor = 22, bold = true }
+remove = { color = 203, bold = true }
+remove_highlight = { color = 231, bgcolor = 52, bold = true }

@@ -13,7 +13,7 @@ Renderer Loads Custom Colours
     VAR    ${work_dir}    ${OUTPUT DIR}/jiff-system/${SUITE NAME}/${TEST NAME}
     VAR    ${config}    ${work_dir}/jiff-colour-test.toml
     VAR    ${config_contents}
-    ...    [color]
+    ...    [color.ansi16]
     ...    \nadd = { color = "blue", bold = true }
     ...    \nadd_highlight = { color = "yellow", bgcolor = "blue" }
     ...    \noverlap_highlight = { color = "white", bgcolor = "blue" }

@@ -580,7 +580,12 @@ def run():
         sys.exit(1)
 
     try:
-        colors = load_color_scheme(force_terminal=args.git_external_diff)
+        colors = load_color_scheme(
+            force_terminal=(
+                args.git_external_diff
+                or os.environ.get("RICH_FORCE_TERMINAL") is not None
+            )
+        )
     except ConfigError as error:
         print(f"Could not load config: {error}", file=sys.stderr)
         sys.exit(1)

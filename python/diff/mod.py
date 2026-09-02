@@ -102,7 +102,8 @@ def _line_styling(colors: ColorScheme) -> DiffStyling:
 def _indicator_style(style: ColorStyle) -> Style:
     if style == ColorStyle():
         return Style()
-    return Style(color=style.color, bgcolor=style.bgcolor, bold=True)
+    rich_style = style.rich_style()
+    return Style(color=rich_style.color, bgcolor=rich_style.bgcolor, bold=True)
 
 
 def _indicator_styling(colors: ColorScheme) -> DiffStyling:

@@ -173,6 +173,49 @@ Run Process Check Configured Output
     Process Should Succeed    ${res}    @{cmd}
     RETURN    ${res}
 
+Run Process Check Configured Output For Terminal
+    [Documentation]    Runs with a fixed terminal profile so colour-depth
+    ...    selection can be checked while Robot captures stdout.
+    [Arguments]    ${config}    ${term}    ${colorterm}    @{cmd}
+    VAR    @{clean_command}
+    ...    env
+    ...    -u    NO_COLOR
+    ...    -u    FORCE_COLOR
+    ...    -u    TMUX
+    ...    -u    TERM_PROGRAM
+    ...    -u    TERM_PROGRAM_VERSION
+    ...    @{cmd}
+    ${res} =    Run Process    @{clean_command}
+    ...    env:TTY_FORCE=1
+    ...    env:RICH_FORCE_TERMINAL=1
+    ...    env:TERM=${term}
+    ...    env:COLORTERM=${colorterm}
+    ...    env:COLUMNS=120
+    ...    env:JIFF_CONFIG=${config}
+    Process Should Succeed    ${res}    @{cmd}
+    RETURN    ${res}
+
+Run External Diff For Terminal
+    [Documentation]    Captures Git external-diff output without forcing a TTY.
+    [Arguments]    ${config}    ${term}    @{cmd}
+    VAR    @{clean_command}
+    ...    env
+    ...    -u    NO_COLOR
+    ...    -u    FORCE_COLOR
+    ...    -u    TTY_FORCE
+    ...    -u    RICH_FORCE_TERMINAL
+    ...    -u    TMUX
+    ...    -u    TERM_PROGRAM
+    ...    -u    TERM_PROGRAM_VERSION
+    ...    @{cmd}
+    ${res} =    Run Process    @{clean_command}
+    ...    env:TERM=${term}
+    ...    env:COLORTERM=${EMPTY}
+    ...    env:COLUMNS=120
+    ...    env:JIFF_CONFIG=${config}
+    Process Should Succeed    ${res}    @{cmd}
+    RETURN    ${res}
+
 Process Should Succeed
     [Documentation]    Reports a failed process with its command and captured output.
     [Arguments]    ${res}    @{cmd}

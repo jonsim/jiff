@@ -192,9 +192,9 @@ def terminal_supports_ansi256(force_terminal: bool = False) -> bool:
 
 
 def load_color_scheme(force_terminal: bool = False) -> ColorScheme:
-    """Loads the ANSI16 palette."""
-    del force_terminal
-    return load_color_config().ansi16
+    """Loads the palette suitable for the current terminal."""
+    config = load_color_config()
+    return config.scheme(terminal_supports_ansi256(force_terminal))
 
 
 def parse_color_config(contents: str) -> ColorConfig:
