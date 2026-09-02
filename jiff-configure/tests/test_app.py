@@ -1,24 +1,32 @@
 import tempfile
 import unittest
+from importlib.resources import files
 from pathlib import Path
 from unittest import mock
 
 import syntax_highlighting
 from diff.mod import DiffType
-from jiff_config import CANONICAL_COLORS, ColorScheme, parse_color_scheme
+from jiff_config import (
+    CANONICAL_COLORS,
+    STYLE_NAMES,
+    ColorConfig,
+    ColorScheme,
+    parse_color_config,
+)
 from jiff_configure.app import (
     COLOR_OPTIONS,
     THREE_WAY_BASE,
     THREE_WAY_LOCAL,
     THREE_WAY_REMOTE,
     ConfirmDialog,
+    IndexedColorPicker,
     JiffConfigureApp,
     PreviewSource,
     SavePathDialog,
     load_preview_source,
     load_themes,
 )
-from textual.widgets import Input, Select, Switch, TabbedContent
+from textual.widgets import Button, Input, Label, Select, Switch, TabbedContent
 
 import diff
 
@@ -125,7 +133,7 @@ class ThemeTests(unittest.TestCase):
     def test_packaged_themes_include_default_and_all_examples(self):
         themes = load_themes()
 
-        self.assertEqual(ColorScheme.default(), themes["Default"])
+        self.assertEqual(ColorConfig.default(), themes["Default"])
         self.assertEqual(
             {
                 "Default",
@@ -144,16 +152,31 @@ class ThemeTests(unittest.TestCase):
         # Standard backgrounds keep highlighted spans less overpowering.
         themes = load_themes()
 
-        gruvbox = themes["Gruvbox Dark"]
+        gruvbox = themes["Gruvbox Dark"].ansi16
         self.assertEqual("bright_green", gruvbox.add.color)
         self.assertEqual("green", gruvbox.add_highlight.bgcolor)
         self.assertEqual("bright_red", gruvbox.syntax_keyword.color)
         self.assertEqual("bright_yellow", gruvbox.syntax_definition.color)
 
-        high_contrast = themes["High Contrast Dark"]
+        high_contrast = themes["High Contrast Dark"].ansi16
         self.assertEqual("bright_cyan", high_contrast.add.color)
         self.assertEqual("cyan", high_contrast.add_highlight.bgcolor)
         self.assertEqual("bright_yellow", high_contrast.remove.color)
+
+    def test_every_packaged_theme_contains_both_complete_palettes(self):
+        resources = files("jiff_configure.themes")
+        for resource in resources.iterdir():
+            if not resource.name.endswith(".toml"):
+                continue
+            with self.subTest(theme=resource.name):
+                contents = resource.read_text(encoding="utf-8")
+                config = parse_color_config(contents)
+
+                self.assertEqual(256, config.depth)
+                self.assertIn("[color.ansi16]", contents)
+                self.assertIn("[color.ansi256]", contents)
+                for name in STYLE_NAMES:
+                    self.assertEqual(2, contents.count(f"{name} ="), name)
 
 
 class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
@@ -191,7 +214,7 @@ class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
             app.query_one("#theme", Select).value = "Dracula"
             await pilot.pause()
 
-            self.assertEqual(app.themes["Dracula"], app.scheme)
+            self.assertEqual(app.themes["Dracula"], app.config)
             self.assertTrue(app.dirty)
             self.assertIn(
                 'syntax_keyword = { color = "magenta"',
@@ -211,6 +234,83 @@ class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
                 'add = { color = "blue"',
                 str(app.query_one("#toml-preview").content),
             )
+
+    async def test_depth_and_palette_selectors_are_independent(self):
+        app = self.make_app()
+        async with app.run_test(size=(140, 42)) as pilot:
+            app.query_one("#depth", Select).value = 256
+            app.query_one("#palette", Select).value = "ansi256"
+            await pilot.pause()
+
+            self.assertEqual(256, app.config.depth)
+            self.assertEqual("ansi256", app.edit_palette)
+            self.assertIsInstance(app.query_one("#add-color"), Button)
+
+    async def test_indexed_picker_supports_keyboard_and_mouse_selection(self):
+        app = self.make_app()
+        async with app.run_test(size=(140, 42)) as pilot:
+            app.query_one("#palette", Select).value = "ansi256"
+            await pilot.pause()
+            await pilot.click("#add-color")
+            await pilot.pause()
+
+            self.assertIsInstance(app.screen, IndexedColorPicker)
+            self.assertEqual(257, len(app.screen.query(Button)))
+            self.assertEqual("indexed-2", app.screen.focused.id)
+            await pilot.press("right")
+            self.assertEqual("indexed-3", app.screen.focused.id)
+            await pilot.click("#indexed-114")
+            await pilot.pause()
+
+            self.assertEqual(114, app.config.ansi256.add.color)
+            self.assertEqual("114", str(app.query_one("#add-color", Button).label))
+
+    async def test_ansi256_edit_updates_the_live_preview(self):
+        app = self.make_app()
+        app.ansi256_supported = True
+        async with app.run_test(size=(140, 42)) as pilot:
+            app.query_one("#depth", Select).value = 256
+            app.query_one("#palette", Select).value = "ansi256"
+            await pilot.pause()
+            app._indexed_colour_chosen("add", "color", 114)
+            await pilot.pause()
+
+            preview = app.query_one("#inline-preview").content
+            colour_numbers = {
+                span.style.color.number
+                for span in preview.spans
+                if not isinstance(span.style, str) and span.style.color is not None
+            }
+            self.assertIn(114, colour_numbers)
+
+    async def test_fallback_notice_appears_when_ansi256_is_unavailable(self):
+        app = self.make_app()
+        app.ansi256_supported = False
+        async with app.run_test(size=(140, 42)) as pilot:
+            app.query_one("#depth", Select).value = 256
+            await pilot.pause()
+
+            notice = app.query_one("#fallback-notice", Label)
+            self.assertTrue(notice.display)
+            self.assertIn("ANSI16 fallback", str(notice.content))
+
+    async def test_palette_bold_settings_are_independent(self):
+        app = self.make_app()
+        async with app.run_test(size=(140, 42)) as pilot:
+            app.query_one("#palette", Select).value = "ansi256"
+            await pilot.pause()
+            app.query_one("#add-bold", Switch).value = False
+            await pilot.pause()
+
+            self.assertFalse(app.config.ansi256.add.bold)
+            self.assertFalse(app.config.ansi16.add.bold)
+
+            app.query_one("#palette", Select).value = "ansi16"
+            await pilot.pause()
+            app.query_one("#add-bold", Switch).value = True
+            await pilot.pause()
+            self.assertTrue(app.config.ansi16.add.bold)
+            self.assertFalse(app.config.ansi256.add.bold)
 
     async def test_bold_switch_is_one_row_tall(self):
         app = self.make_app()
@@ -245,7 +345,7 @@ class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
                     self.assertFalse(app.dirty)
                     self.assertEqual(
                         "blue",
-                        parse_color_scheme(destination.read_text()).add.color,
+                        parse_color_config(destination.read_text()).ansi16.add.color,
                     )
 
     async def test_existing_file_requires_overwrite_confirmation(self):
@@ -268,7 +368,7 @@ class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
                     await pilot.click("#accept-confirm")
                     await pilot.pause()
 
-                    parse_color_scheme(destination.read_text())
+                    parse_color_config(destination.read_text())
 
     async def test_unsaved_changes_require_confirmation_before_quit(self):
         app = self.make_app()
@@ -307,7 +407,7 @@ class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
             await pilot.pause()
 
             self.assertEqual("Nord", app.selected_theme)
-            self.assertEqual(app.themes["Nord"], app.scheme)
+            self.assertEqual(app.themes["Nord"], app.config)
 
 
 if __name__ == "__main__":

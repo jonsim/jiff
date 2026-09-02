@@ -13,18 +13,20 @@ from jiff_config import (
     CANONICAL_COLORS,
     DIFF_STYLE_NAMES,
     SYNTAX_STYLE_NAMES,
+    ColorConfig,
     ColorScheme,
     ColorStyle,
     ConfigError,
-    color_scheme_to_toml,
+    color_config_to_toml,
     default_config_path,
-    parse_color_scheme,
+    parse_color_config,
+    terminal_supports_ansi256,
 )
 from rich.text import Text
 from textual import events, on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import Container, Grid, Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import (
     Button,
@@ -238,16 +240,16 @@ def load_preview_source(paths: Sequence[str]) -> PreviewSource:
     return PreviewSource(left, right, paths[0], paths[1], None)
 
 
-def load_themes() -> dict[str, ColorScheme]:
+def load_themes() -> dict[str, ColorConfig]:
     """Loads the built-in default and every packaged TOML theme."""
-    themes = {"Default": ColorScheme.default()}
+    themes = {"Default": ColorConfig.default()}
     resources = files("jiff_configure.themes")
     for resource in sorted(resources.iterdir(), key=lambda item: item.name):
         if not resource.name.endswith(".toml"):
             continue
         name = resource.name.removesuffix(".toml").replace("-", " ").title()
         try:
-            themes[name] = parse_color_scheme(resource.read_text(encoding="utf-8"))
+            themes[name] = parse_color_config(resource.read_text(encoding="utf-8"))
         except ConfigError as error:
             raise ConfigError(f"bundled theme {resource.name}: {error}") from error
     return themes
@@ -260,35 +262,39 @@ def _configured_colour(colour: str) -> str | None:
 class StyleControl(Vertical):
     """Foreground, optional background and bold controls for one Jiff style."""
 
-    def __init__(self, style_name: str, style: ColorStyle) -> None:
+    def __init__(self, style_name: str, style: ColorStyle, palette: str) -> None:
         super().__init__(classes="style-control")
         self.style_name = style_name
         self.style = style
+        self.palette = palette
+
+    def color_control(self, field: str, value: str | int | None):
+        name = f"{self.style_name}.{field}"
+        if self.palette == "ansi16":
+            return Select(
+                COLOR_OPTIONS,
+                value=value or "default",
+                allow_blank=False,
+                compact=True,
+                id=f"{self.style_name}-{field}",
+                name=name,
+                classes="colour-select",
+            )
+        return Button(
+            "Default" if value is None else str(value),
+            id=f"{self.style_name}-{field}",
+            name=name,
+            classes="indexed-colour",
+        )
 
     def compose(self) -> ComposeResult:
         yield Label(STYLE_LABELS[self.style_name], classes="style-title")
         with Horizontal(classes="colour-fields"):
             yield Label("Text", classes="field-label")
-            yield Select(
-                COLOR_OPTIONS,
-                value=self.style.color or "default",
-                allow_blank=False,
-                compact=True,
-                id=f"{self.style_name}-color",
-                name=f"{self.style_name}.color",
-                classes="colour-select",
-            )
+            yield self.color_control("color", self.style.color)
             if self.style_name in DIFF_STYLE_NAMES:
                 yield Label("Background", classes="field-label background-label")
-                yield Select(
-                    COLOR_OPTIONS,
-                    value=self.style.bgcolor or "default",
-                    allow_blank=False,
-                    compact=True,
-                    id=f"{self.style_name}-bgcolor",
-                    name=f"{self.style_name}.bgcolor",
-                    classes="colour-select",
-                )
+                yield self.color_control("bgcolor", self.style.bgcolor)
         with Horizontal(classes="bold-field"):
             yield Label("Bold", classes="field-label")
             yield Switch(
@@ -298,6 +304,67 @@ class StyleControl(Vertical):
                 name=f"{self.style_name}.bold",
                 classes="bold-switch",
             )
+
+
+class IndexedColorPicker(ModalScreen[int | None]):
+    """Selects terminal default or one ANSI256 colour index."""
+
+    BINDINGS: ClassVar[list[Binding]] = [
+        Binding("left", "move(-1)", "Left", show=False),
+        Binding("right", "move(1)", "Right", show=False),
+        Binding("up", "move(-16)", "Up", show=False),
+        Binding("down", "move(16)", "Down", show=False),
+        Binding("escape", "cancel", "Cancel", show=False),
+    ]
+
+    def __init__(self, value: int | None) -> None:
+        super().__init__()
+        self.value = value
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="dialog indexed-dialog"):
+            yield Label("Choose an ANSI256 colour", classes="dialog-title")
+            with Grid(id="indexed-grid"):
+                yield Button(
+                    "Terminal default",
+                    id="indexed-default",
+                    classes="indexed-option",
+                )
+                for index in range(256):
+                    foreground = 15 if index < 7 or 16 <= index < 100 else 0
+                    yield Button(
+                        Text(
+                            f"{index:3}",
+                            style=f"color({foreground}) on color({index})",
+                        ),
+                        id=f"indexed-{index}",
+                        classes="indexed-option indexed-swatch",
+                    )
+
+    def on_mount(self) -> None:
+        selected = "default" if self.value is None else str(self.value)
+        self.query_one(f"#indexed-{selected}", Button).focus()
+
+    def action_move(self, offset: int) -> None:
+        focused = self.focused
+        if not isinstance(focused, Button) or focused.id is None:
+            return
+        if focused.id == "indexed-default":
+            index = self.value or 0
+        else:
+            index = int(focused.id.removeprefix("indexed-"))
+            index = (index + offset) % 256
+        self.query_one(f"#indexed-{index}", Button).focus()
+
+    def action_cancel(self) -> None:
+        self.dismiss(self.value)
+
+    @on(Button.Pressed, ".indexed-option")
+    def choose(self, event: Button.Pressed) -> None:
+        if event.button.id == "indexed-default":
+            self.dismiss(None)
+        else:
+            self.dismiss(int(event.button.id.removeprefix("indexed-")))
 
 
 class ConfirmDialog(ModalScreen[bool]):
@@ -377,16 +444,35 @@ class JiffConfigureApp(App[None]):
     def __init__(
         self,
         preview_source: PreviewSource,
-        themes: dict[str, ColorScheme],
+        themes: dict[str, ColorConfig],
     ) -> None:
         # Textual normally replaces the terminal's 16 ANSI colours with its own
         # RGB palette. If it does that here, the preview won't match Jiff.
         super().__init__(ansi_color=True)
         self.preview_source = preview_source
         self.themes = themes
-        self.scheme = themes["Default"]
+        self.config = themes["Default"]
+        self.edit_palette = "ansi16"
+        self.ansi256_supported = terminal_supports_ansi256(force_terminal=True)
         self.selected_theme = "Default"
         self.dirty = False
+
+    @property
+    def scheme(self) -> ColorScheme:
+        """The palette currently shown in the style controls."""
+        return getattr(self.config, self.edit_palette)
+
+    @scheme.setter
+    def scheme(self, value: ColorScheme) -> None:
+        self.config = replace(self.config, **{self.edit_palette: value})
+
+    def compose_style_controls(self) -> ComposeResult:
+        yield Label("Diff styles", classes="section-title")
+        for name in DIFF_STYLE_NAMES:
+            yield StyleControl(name, getattr(self.scheme, name), self.edit_palette)
+        yield Label("Syntax styles", classes="section-title")
+        for name in SYNTAX_STYLE_NAMES:
+            yield StyleControl(name, getattr(self.scheme, name), self.edit_palette)
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
@@ -399,36 +485,48 @@ class JiffConfigureApp(App[None]):
                     allow_blank=False,
                     id="theme",
                 )
-                yield Label("Diff styles", classes="section-title")
-                for name in DIFF_STYLE_NAMES:
-                    yield StyleControl(name, getattr(self.scheme, name))
-                yield Label("Syntax styles", classes="section-title")
-                for name in SYNTAX_STYLE_NAMES:
-                    yield StyleControl(name, getattr(self.scheme, name))
+                yield Label("Preferred output", classes="section-title")
+                yield Select(
+                    (("ANSI16", 16), ("ANSI256", 256)),
+                    value=self.config.depth,
+                    allow_blank=False,
+                    id="depth",
+                )
+                yield Label("Palette to edit", classes="section-title")
+                yield Select(
+                    (("ANSI16 fallback", "ansi16"), ("ANSI256", "ansi256")),
+                    value=self.edit_palette,
+                    allow_blank=False,
+                    id="palette",
+                )
+                with Container(id="style-controls"):
+                    yield from self.compose_style_controls()
                 with Horizontal(id="main-actions"):
                     yield Button("Save", id="save-config", variant="primary")
                     yield Button("Quit", id="quit")
-            with TabbedContent(initial="side-by-side", id="preview-tabs"):
-                with (
-                    TabPane("Side-by-side", id="side-by-side"),
-                    VerticalScroll(classes="preview-scroll"),
-                ):
-                    yield Static(id="side-preview", classes="preview")
-                with (
-                    TabPane("Inline", id="inline"),
-                    VerticalScroll(classes="preview-scroll"),
-                ):
-                    yield Static(id="inline-preview", classes="preview")
-                with (
-                    TabPane("Three-way", id="three-way"),
-                    VerticalScroll(classes="preview-scroll"),
-                ):
-                    yield Static(id="three-way-preview", classes="preview")
-                with (
-                    TabPane("TOML", id="toml"),
-                    VerticalScroll(classes="preview-scroll"),
-                ):
-                    yield Static(id="toml-preview", classes="preview toml-preview")
+            with Vertical(id="previews"):
+                yield Label(id="fallback-notice", classes="fallback-notice")
+                with TabbedContent(initial="side-by-side", id="preview-tabs"):
+                    with (
+                        TabPane("Side-by-side", id="side-by-side"),
+                        VerticalScroll(classes="preview-scroll"),
+                    ):
+                        yield Static(id="side-preview", classes="preview")
+                    with (
+                        TabPane("Inline", id="inline"),
+                        VerticalScroll(classes="preview-scroll"),
+                    ):
+                        yield Static(id="inline-preview", classes="preview")
+                    with (
+                        TabPane("Three-way", id="three-way"),
+                        VerticalScroll(classes="preview-scroll"),
+                    ):
+                        yield Static(id="three-way-preview", classes="preview")
+                    with (
+                        TabPane("TOML", id="toml"),
+                        VerticalScroll(classes="preview-scroll"),
+                    ):
+                        yield Static(id="toml-preview", classes="preview toml-preview")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -452,6 +550,11 @@ class JiffConfigureApp(App[None]):
         side_preview = self.query_one("#side-preview", Static)
         terminal_width = max(side_preview.size.width, 20)
         source = self.preview_source
+        preview_scheme = self.config.scheme(self.ansi256_supported)
+        fallback = self.config.depth == 256 and not self.ansi256_supported
+        notice = self.query_one("#fallback-notice", Label)
+        notice.update("ANSI256 is unavailable here - previewing the ANSI16 fallback.")
+        notice.display = fallback
         common = {
             "left": source.left,
             "right": source.right,
@@ -459,7 +562,7 @@ class JiffConfigureApp(App[None]):
             "right_path": source.right_path,
             "repository_path": None,
             "color": True,
-            "colors": self.scheme,
+            "colors": preview_scheme,
             "context_lines": source.context_lines,
         }
         side = jiff.render_output(
@@ -481,37 +584,31 @@ class JiffConfigureApp(App[None]):
             "remote.py",
             inline=False,
             color=True,
-            colors=self.scheme,
+            colors=preview_scheme,
             terminal_width=terminal_width,
         )
         self.query_one("#three-way-preview", Static).update(
             Text.from_ansi(three_way.rstrip("\n"))
         )
         self.query_one("#toml-preview", Static).update(
-            Text(color_scheme_to_toml(self.scheme))
+            Text(color_config_to_toml(self.config))
         )
 
     def _apply_theme(self, name: str, mark_dirty: bool) -> None:
         self.selected_theme = name
-        self.scheme = self.themes[name]
+        self.config = self.themes[name]
         theme = self.query_one("#theme", Select)
         if theme.value != name:
             theme.value = name
-
-        # If the values already match, leave the controls alone. Remounting them
-        # loses the current scroll position and focus.
-        for style_name in STYLE_NAMES:
-            style = getattr(self.scheme, style_name)
-            self.query_one(f"#{style_name}-color", Select).value = (
-                style.color or "default"
-            )
-            if style_name in DIFF_STYLE_NAMES:
-                self.query_one(f"#{style_name}-bgcolor", Select).value = (
-                    style.bgcolor or "default"
-                )
-            self.query_one(f"#{style_name}-bold", Switch).value = style.bold
+        self.query_one("#depth", Select).value = self.config.depth
+        self._rebuild_style_controls()
         self._set_dirty(mark_dirty)
         self.refresh_previews()
+
+    def _rebuild_style_controls(self) -> None:
+        controls = self.query_one("#style-controls", Container)
+        controls.remove_children()
+        controls.mount(*list(self.compose_style_controls()))
 
     def _finish_theme_change(self, name: str, confirmed: bool) -> None:
         if confirmed:
@@ -523,8 +620,8 @@ class JiffConfigureApp(App[None]):
         if name == self.selected_theme:
             return
 
-        selected_palette_changed = self.scheme != self.themes[self.selected_theme]
-        if self.dirty and selected_palette_changed:
+        selected_config_changed = self.config != self.themes[self.selected_theme]
+        if self.dirty and selected_config_changed:
             # Put the old theme back while the dialog is open. If the user
             # cancels, the editor then stays exactly as it was.
             event.select.value = self.selected_theme
@@ -538,6 +635,23 @@ class JiffConfigureApp(App[None]):
         else:
             self._apply_theme(name, mark_dirty=True)
 
+    @on(Select.Changed, "#depth")
+    def depth_changed(self, event: Select.Changed) -> None:
+        depth = int(event.value)
+        if depth == self.config.depth:
+            return
+        self.config = replace(self.config, depth=depth)
+        self._set_dirty()
+        self.refresh_previews()
+
+    @on(Select.Changed, "#palette")
+    def palette_changed(self, event: Select.Changed) -> None:
+        palette = str(event.value)
+        if palette == self.edit_palette:
+            return
+        self.edit_palette = palette
+        self._rebuild_style_controls()
+
     @on(Select.Changed, ".colour-select")
     def colour_changed(self, event: Select.Changed) -> None:
         style_name, field = event.select.name.split(".", maxsplit=1)
@@ -546,6 +660,31 @@ class JiffConfigureApp(App[None]):
         if updated == style:
             return
         self.scheme = replace(self.scheme, **{style_name: updated})
+        self._set_dirty()
+        self.refresh_previews()
+
+    @on(Button.Pressed, ".indexed-colour")
+    def indexed_colour_pressed(self, event: Button.Pressed) -> None:
+        style_name, field = event.button.name.split(".", maxsplit=1)
+        style = getattr(self.scheme, style_name)
+        value = getattr(style, field)
+        self.push_screen(
+            IndexedColorPicker(value),
+            lambda selected: self._indexed_colour_chosen(style_name, field, selected),
+        )
+
+    def _indexed_colour_chosen(
+        self, style_name: str, field: str, value: int | None
+    ) -> None:
+        style = getattr(self.scheme, style_name)
+        if getattr(style, field) == value:
+            return
+        self.scheme = replace(
+            self.scheme,
+            **{style_name: replace(style, **{field: value})},
+        )
+        button = self.query_one(f"#{style_name}-{field}", Button)
+        button.label = "Default" if value is None else str(value)
         self._set_dirty()
         self.refresh_previews()
 
@@ -590,7 +729,7 @@ class JiffConfigureApp(App[None]):
     def _write_config(self, path: Path) -> None:
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(color_scheme_to_toml(self.scheme), encoding="utf-8")
+            path.write_text(color_config_to_toml(self.config), encoding="utf-8")
         except OSError as error:
             self.notify(f"Could not save {path}: {error}", severity="error")
             return

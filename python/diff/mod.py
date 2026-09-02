@@ -23,7 +23,7 @@ debug = os.environ.get("JIFF_DEBUG", "0") == "1"
 def _console(color: bool) -> Console:
     # By this point the CLI has already decided whether colour is safe. Give
     # Rich the answer directly so embedded renders don't inherit terminal state.
-    return Console(force_terminal=color)
+    return Console(force_terminal=color, no_color=not color)
 
 
 def _terminal_width() -> int:

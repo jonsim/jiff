@@ -24,6 +24,15 @@ JiffConfigureApp {
     margin-bottom: 1;
 }
 
+#depth,
+#palette {
+    width: 100%;
+}
+
+#style-controls {
+    height: auto;
+}
+
 .style-control {
     height: auto;
     padding: 1 0;
@@ -51,6 +60,11 @@ JiffConfigureApp {
 
 .colour-select {
     width: 1fr;
+}
+
+.indexed-colour {
+    width: 1fr;
+    min-width: 8;
 }
 
 .bold-field {
@@ -84,6 +98,17 @@ Switch.bold-switch:focus {
     height: 1fr;
 }
 
+#previews {
+    width: 1fr;
+    height: 1fr;
+}
+
+.fallback-notice {
+    height: 1;
+    padding: 0 1;
+    color: $warning;
+}
+
 .preview-scroll {
     height: 1fr;
     padding: 1;
@@ -107,6 +132,43 @@ ConfirmDialog,
 SavePathDialog {
     align: center middle;
     background: $background 60%;
+}
+
+IndexedColorPicker {
+    align: center middle;
+    background: $background 60%;
+}
+
+.indexed-dialog {
+    width: 84;
+    height: auto;
+    max-height: 95%;
+}
+
+#indexed-grid {
+    width: 80;
+    height: auto;
+    grid-size: 16;
+    grid-columns: 5;
+    grid-rows: 1;
+    grid-gutter: 0;
+}
+
+#indexed-default {
+    column-span: 16;
+    width: 100%;
+}
+
+#indexed-grid Button {
+    height: 1;
+    min-width: 5;
+    padding: 0;
+    border: none;
+}
+
+#indexed-grid Button:focus {
+    border: none;
+    text-style: reverse;
 }
 
 .dialog {
