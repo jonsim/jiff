@@ -23,9 +23,20 @@ uv run jiff-configure OLD NEW
 Those files replace the Side-by-side and Inline examples. The Three-way tab
 keeps its compact built-in example.
 
-Choose a packaged theme as a starting point, adjust the individual styles and
-press `Ctrl+S` to save a complete Jiff configuration. The save dialog suggests
-the standard XDG configuration path and asks before overwriting a file.
+Choose a packaged theme as a starting point, then set `Preferred output` to
+ANSI16 or ANSI256. `Palette to edit` switches between that indexed palette and
+the named ANSI16 fallback. ANSI256 colour fields open a 16 by 16 grid; use the
+mouse or arrow keys to choose an index from 0 to 255, or select terminal
+default.
+
+The previews use the preferred palette when the terminal can display it. On an
+ANSI16 terminal they show the fallback and a short notice instead. Bold and
+colour settings remain independent between the two palettes.
+
+Press `Ctrl+S` to save both complete palette sections. The save dialog suggests
+the standard XDG configuration path and asks before overwriting a file. Jiff
+silently uses the saved ANSI16 fallback whenever a preferred ANSI256 palette is
+not supported by the output terminal.
 
 The [main Jiff README](../README.md#building-a-theme-interactively) describes
 the controls and the configuration format in more detail.

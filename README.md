@@ -123,44 +123,61 @@ JIFF_CONFIG=jiff-configure/themes/high-contrast-light.toml jiff OLD NEW
 
 #### TOML structure
 
-The config file must contain valid TOML and currently supports one top-level
-table: `[color]`. Unknown tables, styles and fields are reported as errors.
+The config file must contain valid TOML and supports one top-level table:
+`[color]`. Set `color.depth` to `16` or `256` to choose the preferred output;
+it defaults to `16`. The palettes live in `[color.ansi16]` and
+`[color.ansi256]`. Unknown tables, styles and fields are reported as errors.
 
-Each entry below `[color]` names a style. A style has up to three fields:
+The two palette tables use the same style names and fields:
 
 | Field | Value | Meaning |
 |---|---|---|
-| `color` | Colour name | Foreground colour |
-| `bgcolor` | Colour name | Background colour; diff styles only |
+| `color` | Colour name or index | Foreground colour |
+| `bgcolor` | Colour name or index | Background colour; diff styles only |
 | `bold` | `true` or `false` | Enable or disable bold text |
 
 Inline tables keep short styles compact:
 
 ```toml
 [color]
-add = { color = "blue", bold = true }
-add_highlight = { color = "yellow", bgcolor = "blue" }
+depth = 256
+
+[color.ansi16]
+add = { color = "green", bold = true }
+
+[color.ansi256]
+add = { color = 114, bold = true }
+add_highlight = { color = 231, bgcolor = 22 }
 ```
 
 Alternatively you may use the longer, equivalent, TOML table form:
 
 ```toml
-[color.add_highlight]
-color = "yellow"
-bgcolor = "blue"
+[color.ansi256.add_highlight]
+color = 231
+bgcolor = 22
 bold = true
 ```
 
-All styles and fields are optional. Omitted values keep their built-in default.
-Use the colour name `default` when you want to clear a built-in foreground or
-background instead:
+All styles and fields are optional. Missing ANSI16 values use Jiff's built-in
+defaults. Missing ANSI256 values inherit the corresponding resolved ANSI16
+values. Use `"default"` to select the terminal's normal foreground or
+background explicitly:
 
 ```toml
-[color]
+[color.ansi16]
+add = { color = "default" }
+
+[color.ansi256]
 add = { color = "default" }
 ```
 
-That example makes added text use the terminal's normal foreground colour.
+The old layout, where styles appeared directly below `[color]`, is no longer
+accepted.
+
+Jiff uses ANSI256 only when the config asks for it and the terminal reports
+ANSI256 or true-colour support. Otherwise it silently renders the ANSI16
+fallback. `--no-color` continues to disable both palettes.
 
 #### Diff styles
 
@@ -205,9 +222,9 @@ and syntax highlighting renders on top of diff highlights.
 Use `--no-syntax` to ignore the syntax styles while retaining the diff colours.
 Use `--no-color` to disable both diff and syntax styling.
 
-#### Supported colour names
+#### Supported palette values
 
-The following case-insensitive colour names are supported:
+ANSI16 foregrounds and backgrounds use these case-insensitive names:
 
 ```text
 default
@@ -231,8 +248,11 @@ bright_white
 
 `gray` and `grey` are aliases for `bright_black`; `purple` is an alias for
 `magenta`. `default` means the terminal's normal foreground or background (not
-Jiff's built-in value). Hex colours, RGB values, ANSI colour numbers and colours
-outside the standard 16-colour ANSI palette are not currently supported.
+Jiff's built-in value).
+
+ANSI256 foregrounds and backgrounds use integer indexes from `0` to `255`, or
+the string `"default"`. Hex and RGB values are not accepted. A true-colour
+terminal can display the indexed palette but Jiff still emits ANSI256 colours.
 
 #### Complete themes
 
@@ -249,12 +269,10 @@ The repository includes seven complete themes which you can use as-is or extend:
 | [Tokyo Night](jiff-configure/themes/tokyo-night.toml) | Dark terminals | Cyan and magenta with blue syntax |
 
 The first two prioritise contrast and colour-blind accessibility. The other
-five borrow the colour relationships of popular editor themes and are intended
-to render well in these themes (though bear in mind not all terminals implement
-their themes in the same way). Jiff's config uses ANSI colour names, so your
-terminal theme will choose the exact shades. This generally makes the palettes
-sit naturally alongside a matching terminal theme, but they are not exact RGB
-reproductions.
+five borrow the colour relationships of popular editor themes. Every theme has
+an indexed palette for closer shades and a named ANSI16 fallback. Terminals can
+customise their first 16 colours, so the fallback's exact appearance still
+depends on the terminal theme.
 
 Copy any theme to the standard XDG location to use it:
 
@@ -279,9 +297,16 @@ functionality. To preview a pair of your own files:
 uv run jiff-configure OLD NEW
 ```
 
-Pick one of the packaged themes as a starting point, then adjust the settings
-for each style. The Side-by-side, Inline, and Three-way tabs use Jiff's real
-Python renderer, so they update as the palette changes.
+Pick one of the packaged themes as a starting point. `Preferred output` chooses
+the depth used by Jiff and the previews; `Palette to edit` switches between the
+indexed palette and its named fallback. ANSI16 fields use named selectors.
+ANSI256 fields open a 16 by 16 colour grid which works with the mouse or arrow
+keys, plus a separate terminal-default choice.
+
+The Side-by-side, Inline, and Three-way tabs use Jiff's real Python renderer, so
+they update as either palette changes. If the current terminal cannot display
+ANSI256, the previews use ANSI16 and say so above the tabs. The saved TOML still
+contains both complete palettes, including separate bold settings.
 
 Press `Ctrl+S` or use the Save button to save your theme.
 
