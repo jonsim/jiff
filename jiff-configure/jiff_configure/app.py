@@ -26,8 +26,11 @@ from rich.text import Text
 from textual import events, on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
+from textual.color import Color
 from textual.containers import Container, Grid, Horizontal, Vertical, VerticalScroll
+from textual.message import Message
 from textual.screen import ModalScreen
+from textual.widget import Widget
 from textual.widgets import (
     Button,
     Footer,
@@ -65,6 +68,32 @@ COLOR_OPTIONS = tuple(
     ("Terminal default" if name == "default" else name.replace("_", " ").title(), name)
     for name in CANONICAL_COLORS
 )
+
+
+def _ansi256_grid() -> tuple[int | None, ...]:
+    """Arranges the xterm colour cube, greys and ANSI colours by similarity."""
+    cells: list[int | None] = []
+    for row in range(18):
+        red_pair = row // 6
+        blue = row % 6 if red_pair % 2 == 0 else 5 - row % 6
+
+        for column in range(12):
+            red = red_pair * 2 + column // 6
+            green = column % 6 if column < 6 else 5 - column % 6
+            cells.append(16 + 36 * red + 6 * green + blue)
+
+        cells.append(232 + row if row < 12 else None)
+        cells.append(255 - row if row < 12 else None)
+        cells.append(row if row < 8 else None)
+        cells.append(8 + row if row < 8 else None)
+
+    return tuple(cells)
+
+
+ANSI256_GRID = _ansi256_grid()
+ANSI256_POSITIONS = {
+    value: position for position, value in enumerate(ANSI256_GRID) if value is not None
+}
 
 BUILTIN_LEFT = r'''"""Plan tonight's Muppet Theatre show."""
 
@@ -306,6 +335,48 @@ class StyleControl(Vertical):
             )
 
 
+class ColorSwatch(Widget, can_focus=True):
+    """One focusable ANSI256 colour in the picker grid."""
+
+    BINDINGS: ClassVar[list[Binding]] = [
+        Binding("enter", "select", "Select", show=False),
+    ]
+
+    class Selected(Message):
+        """The swatch was selected with the keyboard or mouse."""
+
+        def __init__(self, value: int) -> None:
+            super().__init__()
+            self.value = value
+
+    class Focused(Message):
+        """The swatch gained keyboard focus."""
+
+        def __init__(self, value: int) -> None:
+            super().__init__()
+            self.value = value
+
+    def __init__(self, value: int) -> None:
+        super().__init__(id=f"indexed-{value}", classes="indexed-swatch")
+        self.value = value
+        self.styles.background = Color(0, 0, 0, ansi=value)
+        self.tooltip = f"ANSI256 colour {value}"
+
+    def render(self) -> Text:
+        return Text("  ")
+
+    def on_focus(self) -> None:
+        self.post_message(self.Focused(self.value))
+
+    def action_select(self) -> None:
+        self.post_message(self.Selected(self.value))
+
+    async def _on_click(self, event: events.Click) -> None:
+        event.stop()
+        self.focus()
+        self.action_select()
+
+
 class IndexedColorPicker(ModalScreen[int | None]):
     """Selects terminal default or one ANSI256 colour index."""
 
@@ -324,47 +395,58 @@ class IndexedColorPicker(ModalScreen[int | None]):
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog indexed-dialog"):
             yield Label("Choose an ANSI256 colour", classes="dialog-title")
+            yield Label(id="indexed-readout")
+            yield Button("Terminal default", id="indexed-default")
             with Grid(id="indexed-grid"):
-                yield Button(
-                    "Terminal default",
-                    id="indexed-default",
-                    classes="indexed-option",
-                )
-                for index in range(256):
-                    foreground = 15 if index < 7 or 16 <= index < 100 else 0
-                    yield Button(
-                        Text(
-                            f"{index:3}",
-                            style=f"color({foreground}) on color({index})",
-                        ),
-                        id=f"indexed-{index}",
-                        classes="indexed-option indexed-swatch",
-                    )
+                for index in ANSI256_GRID:
+                    if index is None:
+                        yield Static("", classes="indexed-empty")
+                    else:
+                        yield ColorSwatch(index)
 
     def on_mount(self) -> None:
-        selected = "default" if self.value is None else str(self.value)
-        self.query_one(f"#indexed-{selected}", Button).focus()
+        if self.value is None:
+            self.query_one("#indexed-default", Button).focus()
+            self._update_readout(None)
+        else:
+            self.query_one(f"#indexed-{self.value}", ColorSwatch).focus()
+
+    def _update_readout(self, value: int | None) -> None:
+        label = "Terminal default" if value is None else f"ANSI256 colour {value}"
+        if value == self.value:
+            label += " (current)"
+        self.query_one("#indexed-readout", Label).update(label)
 
     def action_move(self, offset: int) -> None:
         focused = self.focused
-        if not isinstance(focused, Button) or focused.id is None:
-            return
-        if focused.id == "indexed-default":
-            index = self.value or 0
+        if isinstance(focused, Button) and focused.id == "indexed-default":
+            index = self.value if self.value is not None else ANSI256_GRID[0]
+        elif isinstance(focused, ColorSwatch):
+            position = ANSI256_POSITIONS[focused.value]
+            while True:
+                position = (position + offset) % len(ANSI256_GRID)
+                index = ANSI256_GRID[position]
+                if index is not None:
+                    break
         else:
-            index = int(focused.id.removeprefix("indexed-"))
-            index = (index + offset) % 256
-        self.query_one(f"#indexed-{index}", Button).focus()
+            return
+        assert index is not None
+        self.query_one(f"#indexed-{index}", ColorSwatch).focus()
 
     def action_cancel(self) -> None:
         self.dismiss(self.value)
 
-    @on(Button.Pressed, ".indexed-option")
-    def choose(self, event: Button.Pressed) -> None:
-        if event.button.id == "indexed-default":
-            self.dismiss(None)
-        else:
-            self.dismiss(int(event.button.id.removeprefix("indexed-")))
+    @on(Button.Pressed, "#indexed-default")
+    def choose_default(self) -> None:
+        self.dismiss(None)
+
+    @on(ColorSwatch.Selected)
+    def choose_swatch(self, event: ColorSwatch.Selected) -> None:
+        self.dismiss(event.value)
+
+    @on(ColorSwatch.Focused)
+    def swatch_focused(self, event: ColorSwatch.Focused) -> None:
+        self._update_readout(event.value)
 
 
 class ConfirmDialog(ModalScreen[bool]):

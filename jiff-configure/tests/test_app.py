@@ -14,10 +14,12 @@ from jiff_config import (
     parse_color_config,
 )
 from jiff_configure.app import (
+    ANSI256_GRID,
     COLOR_OPTIONS,
     THREE_WAY_BASE,
     THREE_WAY_LOCAL,
     THREE_WAY_REMOTE,
+    ColorSwatch,
     ConfirmDialog,
     IndexedColorPicker,
     JiffConfigureApp,
@@ -26,7 +28,7 @@ from jiff_configure.app import (
     load_preview_source,
     load_themes,
 )
-from textual.widgets import Button, Input, Label, Select, Switch, TabbedContent
+from textual.widgets import Button, Input, Label, Select, Static, Switch, TabbedContent
 
 import diff
 
@@ -255,15 +257,48 @@ class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
             await pilot.pause()
 
             self.assertIsInstance(app.screen, IndexedColorPicker)
-            self.assertEqual(257, len(app.screen.query(Button)))
+            self.assertEqual(256, len(app.screen.query(ColorSwatch)))
+            self.assertEqual(32, len(app.screen.query(".indexed-empty")))
+            self.assertEqual(1, len(app.screen.query(Button)))
             self.assertEqual("indexed-2", app.screen.focused.id)
             await pilot.press("right")
-            self.assertEqual("indexed-3", app.screen.focused.id)
+            self.assertEqual("indexed-10", app.screen.focused.id)
+            self.assertIn(
+                "ANSI256 colour 10",
+                str(app.screen.query_one("#indexed-readout", Label).content),
+            )
             await pilot.click("#indexed-114")
             await pilot.pause()
 
             self.assertEqual(114, app.config.ansi256.add.color)
             self.assertEqual("114", str(app.query_one("#add-color", Button).label))
+
+    async def test_indexed_picker_renders_coloured_swatches_in_a_narrow_terminal(self):
+        app = self.make_app()
+        async with app.run_test(size=(40, 24)) as pilot:
+            app.push_screen(IndexedColorPicker(app.config.ansi256.add.color))
+            await pilot.pause()
+
+            swatch = app.screen.query_one("#indexed-130", ColorSwatch)
+            segments = list(swatch.render_line(0))
+            empty = app.screen.query_one(".indexed-empty", Static)
+            grid = app.screen.query_one("#indexed-grid")
+
+            self.assertEqual(130, segments[0].style.bgcolor.number)
+            self.assertTrue(
+                all(not segment.text.strip() for segment in empty.render_line(0))
+            )
+            self.assertGreaterEqual(grid.region.x, 0)
+            self.assertLessEqual(grid.region.right, app.size.width)
+            self.assertLessEqual(grid.region.bottom, app.size.height)
+
+    def test_indexed_picker_groups_related_colours(self):
+        self.assertEqual(
+            set(range(256)), {value for value in ANSI256_GRID if value is not None}
+        )
+        self.assertEqual((16, 22, 28, 34, 40, 46), ANSI256_GRID[:6])
+        self.assertEqual((82, 76, 70, 64, 58, 52), ANSI256_GRID[6:12])
+        self.assertEqual((232, 255, 0, 8), ANSI256_GRID[12:16])
 
     async def test_ansi256_edit_updates_the_live_preview(self):
         app = self.make_app()
