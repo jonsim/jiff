@@ -549,12 +549,40 @@ fn terminal_width() -> usize {
         .unwrap_or(DEFAULT_TERMINAL_WIDTH)
 }
 
+fn side_by_side_header(labels: [&str; 2], pane_width: usize, colors: &ColorScheme) -> String {
+    let pane_labels = [
+        labels[0].strip_prefix("a/").unwrap_or(labels[0]),
+        labels[1].strip_prefix("b/").unwrap_or(labels[1]),
+    ];
+    if pane_labels
+        .iter()
+        .any(|label| label.width() + 1 > pane_width)
+    {
+        return format!(
+            "{}\n{}\n",
+            colors.remove.paint(format!("--- {}", labels[0])),
+            colors.add.paint(format!("+++ {}", labels[1])),
+        );
+    }
+
+    let rule = "─".repeat(pane_width);
+    let left_padding = " ".repeat(pane_width - pane_labels[0].width() - 1);
+    colors
+        .same
+        .paint(format!(
+            "{rule}┬{rule}\n {}{left_padding}│ {}\n{rule}┼{rule}\n",
+            pane_labels[0], pane_labels[1],
+        ))
+        .to_string()
+}
+
 /// Renders a two-column diff sized to the current terminal.
 pub(super) fn render_diffs_side_by_side(
     diffs: &[Diff],
     max_line_count: usize,
     colors: &ColorScheme,
     highlighting: &HighlightedFiles,
+    labels: Option<[&str; 2]>,
 ) -> String {
     let lineno_styling = indicator_styling(colors);
     let line_styling = colors;
@@ -565,6 +593,14 @@ pub(super) fn render_diffs_side_by_side(
     let term_width = terminal_width();
     let line_width = side_by_side_line_width(term_width, lineno_width, sep);
     let line_width = (line_width, line_width);
+
+    if let Some(labels) = labels {
+        output.push_str(&side_by_side_header(
+            labels,
+            lineno_width + 2 + line_width.0,
+            colors,
+        ));
+    }
 
     let mut lineno_l = 1;
     let mut lineno_r = 1;
@@ -963,6 +999,7 @@ mod tests {
             10,
             &ColorScheme::plain(),
             &HighlightedFiles::default(),
+            None,
         );
 
         assert!(output.contains("10: Kermit"));
@@ -978,6 +1015,7 @@ mod tests {
             1,
             &ColorScheme::plain(),
             &HighlightedFiles::default(),
+            None,
         );
 
         assert!(output.lines().all(|line| !line.ends_with(' ')));
@@ -993,5 +1031,39 @@ mod tests {
     fn side_by_side_width_survives_a_tiny_terminal() {
         // Terminal resizing can report less width than the margins require.
         assert_eq!(1, side_by_side_line_width(4, 3, "│"));
+    }
+
+    #[test]
+    fn side_by_side_header_labels_each_pane() {
+        let output = side_by_side_header(["a/left.py", "b/right.py"], 19, &ColorScheme::plain());
+
+        assert_eq!(
+            concat!(
+                "───────────────────┬───────────────────\n",
+                " left.py           │ right.py\n",
+                "───────────────────┼───────────────────\n",
+            ),
+            output,
+        );
+    }
+
+    #[test]
+    fn long_side_by_side_labels_use_git_style_headings() {
+        let output = side_by_side_header(
+            [
+                "a/filename-that-does-not-fit.py",
+                "b/filename-that-does-not-fit.py",
+            ],
+            19,
+            &ColorScheme::plain(),
+        );
+
+        assert_eq!(
+            concat!(
+                "--- a/filename-that-does-not-fit.py\n",
+                "+++ b/filename-that-does-not-fit.py\n",
+            ),
+            output,
+        );
     }
 }

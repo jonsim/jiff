@@ -671,10 +671,23 @@ def render_diffs_side_by_side(
     colors: ColorScheme | None = None,
     highlighting: HighlightedFiles | None = None,
     terminal_width: int | None = None,
+    labels: tuple[str, str] | None = None,
 ) -> str:
     """Renders calculated changes in two terminal-width panes."""
+    colors = _colors(color, colors)
+    if terminal_width is None:
+        terminal_width = _terminal_width()
+
     output_console = _console(color)
     with output_console.capture() as capture:
+        if labels is not None:
+            _print_side_by_side_header(
+                output_console,
+                labels,
+                max_line_count,
+                terminal_width,
+                colors,
+            )
         print_diffs_side_by_side(
             diffs,
             max_line_count,
@@ -685,6 +698,46 @@ def render_diffs_side_by_side(
             output_console=output_console,
         )
     return capture.get()
+
+
+def _print_side_by_side_header(
+    output_console: Console,
+    labels: tuple[str, str],
+    max_line_count: int,
+    terminal_width: int,
+    colors: ColorScheme,
+) -> None:
+    lineno_width = len(str(max(max_line_count, 1)))
+    line_width = max(((terminal_width - 1) // 2) - (lineno_width + 2), 1)
+    pane_width = lineno_width + 2 + line_width
+    pane_labels = (
+        labels[0].removeprefix("a/"),
+        labels[1].removeprefix("b/"),
+    )
+
+    if any(cell_len(label) + 1 > pane_width for label in pane_labels):
+        output_console.print(
+            Text(f"--- {labels[0]}", style=colors.remove.rich_style()),
+            soft_wrap=True,
+        )
+        output_console.print(
+            Text(f"+++ {labels[1]}", style=colors.add.rich_style()),
+            soft_wrap=True,
+        )
+        return
+
+    left = f" {pane_labels[0]}" + " " * (pane_width - cell_len(pane_labels[0]) - 1)
+    right = f" {pane_labels[1]}"
+    style = colors.same.rich_style()
+    output_console.print(
+        Text("─" * pane_width + "┬" + "─" * pane_width, style=style),
+        soft_wrap=True,
+    )
+    output_console.print(Text(left + "│" + right, style=style), soft_wrap=True)
+    output_console.print(
+        Text("─" * pane_width + "┼" + "─" * pane_width, style=style),
+        soft_wrap=True,
+    )
 
 
 def _print_side_by_side_line(

@@ -223,6 +223,7 @@ def render_output(
     syntax: str | None = None,
     syntax_enabled: bool = True,
     terminal_width: int | None = None,
+    side_by_side_labels: tuple[str, str] | None = None,
 ) -> str:
     """Renders one file comparison.
 
@@ -243,6 +244,7 @@ def render_output(
         syntax: Explicit lexer name, or ``None`` for detection.
         syntax_enabled: Whether to apply syntax highlighting.
         terminal_width: Explicit width for an embedded side-by-side preview.
+        side_by_side_labels: Optional labels for directory-diff panes.
     """
     left_label, right_label = file_labels(repository_path, left_path, right_path)
 
@@ -255,7 +257,7 @@ def render_output(
         return f"Binary files {left_label} and {right_label} {relationship}\n"
 
     output = ""
-    if repository_path is not None:
+    if repository_path is not None and (inline or side_by_side_labels is None):
         output += diff.render_file_header(repository_path, color, colors)
 
     highlighting = syntax_highlighting.HighlightedFiles()
@@ -278,7 +280,13 @@ def render_output(
     else:
         max_line_count = max(line_count(left), line_count(right))
         output += diff.render_diffs_side_by_side(
-            diffs, max_line_count, color, colors, highlighting, terminal_width
+            diffs,
+            max_line_count,
+            color,
+            colors,
+            highlighting,
+            terminal_width,
+            side_by_side_labels,
         )
     return output
 
@@ -426,6 +434,7 @@ def render_directory_output(
                 context_lines=context_lines,
                 syntax=syntax,
                 syntax_enabled=syntax_enabled,
+                side_by_side_labels=(f"a/{relative_path}", f"b/{relative_path}"),
             )
         )
     return "".join(output)

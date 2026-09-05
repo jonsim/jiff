@@ -333,8 +333,10 @@ git difftool --no-prompt --extcmd='jiff --no-pager --path "$BASE"'
 
 The `--no-pager` in this example avoids opening a pager for each changed file.
 For a multi-file comparison with automatic paging, use the `--dir-diff` form
-instead. Jiff returns zero after displaying a text or binary comparison and
-non-zero when it cannot read, configure or display the diff.
+instead. Side-by-side directory diffs put each path above its pane when both
+fit. Wider paths and inline output keep the Git-style `---` and `+++` headings.
+Jiff returns zero after displaying a text or binary comparison and non-zero
+when it cannot read, configure or display the diff.
 `difftool.trustExitCode` makes Git report those failures rather than silently
 continuing.
 
