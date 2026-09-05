@@ -425,17 +425,21 @@ fn render_side_by_side_line(
     let line_r_iter = wrap_ansistrings(line_r, line_width.1, false);
     let mut first_iteration = true;
     for zipped in line_l_iter.zip_longest(line_r_iter) {
-        let (wrapped_l, wrapped_r) = match zipped {
-            EitherOrBoth::Both(l, r) => (l, r),
-            EitherOrBoth::Left(l) => (l, " ".repeat(line_width.1)),
-            EitherOrBoth::Right(r) => (" ".repeat(line_width.0), r),
+        let (wrapped_l, wrapped_r, right_missing) = match zipped {
+            EitherOrBoth::Both(l, r) => (l, r, false),
+            EitherOrBoth::Left(l) => (l, " ".repeat(line_width.1), true),
+            EitherOrBoth::Right(r) => (" ".repeat(line_width.0), r, false),
         };
 
         // There's nothing useful after the separator for a missing line. Stop
         // there so redirected output doesn't end in a trail of spaces.
-        if margin_r.as_str().trim().is_empty() && wrapped_r.trim().is_empty() {
-            writeln!(output, "{} {}{}", margin_l, wrapped_l, separator)
-                .expect("writing to a String cannot fail");
+        if right_missing || wrapped_r.is_empty() {
+            writeln!(
+                output,
+                "{} {}{}{}",
+                margin_l, wrapped_l, separator, margin_r
+            )
+            .expect("writing to a String cannot fail");
         } else {
             writeln!(
                 output,
@@ -549,7 +553,12 @@ fn terminal_width() -> usize {
         .unwrap_or(DEFAULT_TERMINAL_WIDTH)
 }
 
-fn side_by_side_header(labels: [&str; 2], pane_width: usize, colors: &ColorScheme) -> String {
+fn side_by_side_header(
+    labels: [&str; 2],
+    pane_width: usize,
+    lineno_width: usize,
+    colors: &ColorScheme,
+) -> String {
     let pane_labels = [
         labels[0].strip_prefix("a/").unwrap_or(labels[0]),
         labels[1].strip_prefix("b/").unwrap_or(labels[1]),
@@ -566,11 +575,16 @@ fn side_by_side_header(labels: [&str; 2], pane_width: usize, colors: &ColorSchem
     }
 
     let rule = "─".repeat(pane_width);
+    let pane_divider = format!(
+        "{}┬{}",
+        "─".repeat(lineno_width),
+        "─".repeat(pane_width - lineno_width - 1),
+    );
     let left_padding = " ".repeat(pane_width - pane_labels[0].width() - 1);
     colors
         .same
         .paint(format!(
-            "{rule}┬{rule}\n {}{left_padding}│ {}\n{rule}┼{rule}\n",
+            "{rule}┬{rule}\n {}{left_padding}│ {}\n{pane_divider}┼{pane_divider}\n",
             pane_labels[0], pane_labels[1],
         ))
         .to_string()
@@ -598,13 +612,14 @@ pub(super) fn render_diffs_side_by_side(
         output.push_str(&side_by_side_header(
             labels,
             lineno_width + 2 + line_width.0,
+            lineno_width,
             colors,
         ));
     }
 
     let mut lineno_l = 1;
     let mut lineno_r = 1;
-    let empty_lineno = " ".repeat(lineno_width + 1);
+    let empty_lineno = format!("{}│", " ".repeat(lineno_width));
     for change in diffs {
         if *DEBUG {
             eprintln!("Diff: {:?}", change)
@@ -612,8 +627,8 @@ pub(super) fn render_diffs_side_by_side(
         match change {
             Diff::Same(same) => {
                 for line in same.split('\n') {
-                    let lineno_l_fmt = format!("{:w$}:", lineno_l, w = lineno_width);
-                    let lineno_r_fmt = format!("{:w$}:", lineno_r, w = lineno_width);
+                    let lineno_l_fmt = format!("{:w$}│", lineno_l, w = lineno_width);
+                    let lineno_r_fmt = format!("{:w$}│", lineno_r, w = lineno_width);
                     render_side_by_side_line(
                         &mut output,
                         lineno_styling.same.paint(&lineno_l_fmt),
@@ -635,7 +650,7 @@ pub(super) fn render_diffs_side_by_side(
             }
             Diff::Add(add) => {
                 for line_r in add.split('\n') {
-                    let lineno_r_fmt = format!("{:w$}:", lineno_r, w = lineno_width);
+                    let lineno_r_fmt = format!("{:w$}│", lineno_r, w = lineno_width);
                     render_side_by_side_line(
                         &mut output,
                         lineno_styling.same.paint(&empty_lineno),
@@ -657,7 +672,7 @@ pub(super) fn render_diffs_side_by_side(
             }
             Diff::Remove(rem) => {
                 for line_l in rem.split('\n') {
-                    let lineno_l_fmt = format!("{:w$}:", lineno_l, w = lineno_width);
+                    let lineno_l_fmt = format!("{:w$}│", lineno_l, w = lineno_width);
                     render_side_by_side_line(
                         &mut output,
                         lineno_styling.remove_highlight.paint(&lineno_l_fmt),
@@ -703,7 +718,7 @@ pub(super) fn render_diffs_side_by_side(
                     };
                     match aligned {
                         (Some(line_l), None) => {
-                            let lineno_l_fmt = format!("{:w$}:", lineno_l, w = lineno_width);
+                            let lineno_l_fmt = format!("{:w$}│", lineno_l, w = lineno_width);
                             render_side_by_side_line(
                                 &mut output,
                                 lineno_styling.remove_highlight.paint(&lineno_l_fmt),
@@ -723,7 +738,7 @@ pub(super) fn render_diffs_side_by_side(
                             lineno_l += 1;
                         }
                         (None, Some(line_r)) => {
-                            let lineno_r_fmt = format!("{:w$}:", lineno_r, w = lineno_width);
+                            let lineno_r_fmt = format!("{:w$}│", lineno_r, w = lineno_width);
                             render_side_by_side_line(
                                 &mut output,
                                 lineno_styling.same.paint(&empty_lineno),
@@ -743,8 +758,8 @@ pub(super) fn render_diffs_side_by_side(
                             lineno_r += 1;
                         }
                         (Some(line_l), Some(line_r)) => {
-                            let lineno_l_fmt = format!("{:w$}:", lineno_l, w = lineno_width);
-                            let lineno_r_fmt = format!("{:w$}:", lineno_r, w = lineno_width);
+                            let lineno_l_fmt = format!("{:w$}│", lineno_l, w = lineno_width);
+                            let lineno_r_fmt = format!("{:w$}│", lineno_r, w = lineno_width);
                             let mut fmt_l = Vec::new();
                             let mut fmt_r = Vec::new();
                             style_diff_line(
@@ -1002,7 +1017,7 @@ mod tests {
             None,
         );
 
-        assert!(output.contains("10: Kermit"));
+        assert!(output.contains("10│ Kermit"));
     }
 
     #[test]
@@ -1018,7 +1033,23 @@ mod tests {
             None,
         );
 
-        assert!(output.lines().all(|line| !line.ends_with(' ')));
+        let lines = output.lines().collect::<Vec<_>>();
+        assert!(lines[0].starts_with("1│ "));
+        assert!(lines[1].starts_with(" │ "));
+        assert!(lines.iter().all(|line| !line.ends_with(' ')));
+    }
+
+    #[test]
+    fn missing_right_line_keeps_its_gutter() {
+        let output = render_diffs_side_by_side(
+            &[Diff::Remove("Kermit".to_string())],
+            1,
+            &ColorScheme::plain(),
+            &HighlightedFiles::default(),
+            None,
+        );
+
+        assert!(output.trim_end_matches('\n').ends_with('│'));
     }
 
     #[test]
@@ -1035,13 +1066,13 @@ mod tests {
 
     #[test]
     fn side_by_side_header_labels_each_pane() {
-        let output = side_by_side_header(["a/left.py", "b/right.py"], 19, &ColorScheme::plain());
+        let output = side_by_side_header(["a/left.py", "b/right.py"], 19, 1, &ColorScheme::plain());
 
         assert_eq!(
             concat!(
                 "───────────────────┬───────────────────\n",
                 " left.py           │ right.py\n",
-                "───────────────────┼───────────────────\n",
+                "─┬─────────────────┼─┬─────────────────\n",
             ),
             output,
         );
@@ -1055,6 +1086,7 @@ mod tests {
                 "b/filename-that-does-not-fit.py",
             ],
             19,
+            1,
             &ColorScheme::plain(),
         );
 

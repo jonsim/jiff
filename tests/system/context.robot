@@ -41,9 +41,9 @@ Renderer Limits Unchanged Context
     ...    ${left}
     ...    ${right}
     Should Contain    ${side_by_side.stdout}    ... 4 unchanged lines ...
-    Should Contain    ${side_by_side.stdout}    5: Kermit
-    Should Contain    ${side_by_side.stdout}    5: Fozzie
-    Should Not Contain    ${side_by_side.stdout}    4: four
+    Should Contain    ${side_by_side.stdout}    5│ Kermit
+    Should Contain    ${side_by_side.stdout}    5│ Fozzie
+    Should Not Contain    ${side_by_side.stdout}    4│ four
 
     ${coloured_inline} =    Run Keyword
     ...    ${colour_runner}    --no-syntax    --inline    -U0    ${left}    ${right}

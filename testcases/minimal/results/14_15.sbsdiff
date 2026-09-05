@@ -1,2 +1,2 @@
-1: version is more portable. Tests assert that the two vers│1: version is more portable. The core diff behaviour is ide
-   ions are                                                │   ntical
+1│ version is more portable. Tests assert that the two vers│1│ version is more portable. The core diff behaviour is ide
+ │ ions are                                                │ │ ntical

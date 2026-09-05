@@ -520,14 +520,14 @@ def print_diffs_side_by_side(
 
     lineno_l = 1
     lineno_r = 1
-    empty_lineno = " " * (lineno_width + 1)
+    empty_lineno = " " * lineno_width + sep
     for change in diffs:
         if debug:
             print(f"Diff: {change}", file=sys.stderr)
         if change.kind == DiffType.SAME:
             for line in change.left.split("\n"):
-                lineno_l_fmt = f"{lineno_l:>{lineno_width}}:"
-                lineno_r_fmt = f"{lineno_r:>{lineno_width}}:"
+                lineno_l_fmt = f"{lineno_l:>{lineno_width}}{sep}"
+                lineno_r_fmt = f"{lineno_r:>{lineno_width}}{sep}"
                 _print_side_by_side_line(
                     output_console,
                     Text(lineno_l_fmt, style=lineno_styling.same),
@@ -544,7 +544,7 @@ def print_diffs_side_by_side(
 
         elif change.kind == DiffType.ADD:
             for line in change.left.split("\n"):
-                lineno_r_fmt = f"{lineno_r:>{lineno_width}}:"
+                lineno_r_fmt = f"{lineno_r:>{lineno_width}}{sep}"
                 _print_side_by_side_line(
                     output_console,
                     Text(empty_lineno, style=lineno_styling.same),
@@ -562,7 +562,7 @@ def print_diffs_side_by_side(
 
         elif change.kind == DiffType.REMOVE:
             for line in change.left.split("\n"):
-                lineno_l_fmt = f"{lineno_l:>{lineno_width}}:"
+                lineno_l_fmt = f"{lineno_l:>{lineno_width}}{sep}"
                 _print_side_by_side_line(
                     output_console,
                     Text(lineno_l_fmt, style=lineno_styling.remove_highlight),
@@ -602,7 +602,7 @@ def print_diffs_side_by_side(
                 if debug:
                     print(f"  Aligned: {line_l!r}, {line_r!r}", file=sys.stderr)
                 if line_l is None and line_r is not None:
-                    lineno_r_fmt = f"{lineno_r:>{lineno_width}}:"
+                    lineno_r_fmt = f"{lineno_r:>{lineno_width}}{sep}"
                     _print_side_by_side_line(
                         output_console,
                         Text(empty_lineno, style=lineno_styling.same),
@@ -618,7 +618,7 @@ def print_diffs_side_by_side(
                     )
                     lineno_r += 1
                 elif line_l is not None and line_r is None:
-                    lineno_l_fmt = f"{lineno_l:>{lineno_width}}:"
+                    lineno_l_fmt = f"{lineno_l:>{lineno_width}}{sep}"
                     _print_side_by_side_line(
                         output_console,
                         Text(lineno_l_fmt, style=lineno_styling.remove_highlight),
@@ -634,8 +634,8 @@ def print_diffs_side_by_side(
                     )
                     lineno_l += 1
                 elif line_l is not None and line_r is not None:
-                    lineno_l_fmt = f"{lineno_l:>{lineno_width}}:"
-                    lineno_r_fmt = f"{lineno_r:>{lineno_width}}:"
+                    lineno_l_fmt = f"{lineno_l:>{lineno_width}}{sep}"
+                    lineno_r_fmt = f"{lineno_r:>{lineno_width}}{sep}"
                     line_l_text = Text()
                     line_r_text = Text()
                     _style_diff_line(
@@ -734,10 +734,8 @@ def _print_side_by_side_header(
         soft_wrap=True,
     )
     output_console.print(Text(left + "│" + right, style=style), soft_wrap=True)
-    output_console.print(
-        Text("─" * pane_width + "┼" + "─" * pane_width, style=style),
-        soft_wrap=True,
-    )
+    pane_rule = "─" * lineno_width + "┬" + "─" * (pane_width - lineno_width - 1)
+    output_console.print(Text(pane_rule + "┼" + pane_rule, style=style), soft_wrap=True)
 
 
 def _print_side_by_side_line(
@@ -757,19 +755,21 @@ def _print_side_by_side_line(
     lines_r = _hard_wrap(line_r, line_width)
     first_iteration = True
     for wrapped_l, wrapped_r in itertools.zip_longest(lines_l, lines_r):
+        right_missing = wrapped_r is None
         if wrapped_l is None:
             wrapped_l = Text()
         if wrapped_r is None:
             wrapped_r = Text()
         left_padding = " " * (line_width - cell_len(wrapped_l.plain))
-        if not margin_r.plain.strip() and not wrapped_r.plain:
-            # There's nothing useful after the separator for a missing line.
+        if right_missing or not wrapped_r.plain:
+            # Keep the right gutter but don't leave whitespace after it.
             output_console.print(
                 margin_l,
                 " ",
                 wrapped_l,
                 left_padding,
                 separator,
+                margin_r,
                 sep="",
                 soft_wrap=True,
             )

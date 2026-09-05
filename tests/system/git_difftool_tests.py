@@ -283,17 +283,17 @@ class GitDifftoolTests(unittest.TestCase):
         # the base and local edit stay visible.
         self.assertTrue(
             any(
-                "Local rewrite" in row[0] and not row[2].strip()
+                "Local rewrite" in row[1] and not row[5].strip()
                 for row in panes
-                if len(row) == 3
+                if len(row) == 6
             ),
             result.stdout,
         )
         self.assertTrue(
             any(
-                "Original song" in row[1] and not row[2].strip()
+                "Original song" in row[3] and not row[5].strip()
                 for row in panes
-                if len(row) == 3
+                if len(row) == 6
             ),
             result.stdout,
         )
@@ -328,17 +328,17 @@ class GitDifftoolTests(unittest.TestCase):
         # should show up as an empty first pane.
         self.assertTrue(
             any(
-                not row[0].strip() and "Remote rewrite" in row[2]
+                not row[1].strip() and "Remote rewrite" in row[5]
                 for row in panes
-                if len(row) == 3
+                if len(row) == 6
             ),
             result.stdout,
         )
         self.assertTrue(
             any(
-                not row[0].strip() and "Original song" in row[1]
+                not row[1].strip() and "Original song" in row[3]
                 for row in panes
-                if len(row) == 3
+                if len(row) == 6
             ),
             result.stdout,
         )

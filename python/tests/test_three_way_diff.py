@@ -113,7 +113,9 @@ class ThreeWayRenderingTests(unittest.TestCase):
         self.assertIn("1: local.txt", output)
         self.assertIn("2: base.txt", output)
         self.assertIn("3: remote.txt", output)
-        self.assertTrue(all(line.count("│") == 2 for line in output.splitlines()))
+        self.assertEqual(2, output.splitlines()[0].count("│"))
+        self.assertTrue(all(line.count("│") == 5 for line in output.splitlines()[1:]))
+        self.assertIn("1│ same", output)
         self.assertTrue(all(not line.endswith(" ") for line in output.splitlines()))
         self.assertNotIn("\x1b[", output)
 

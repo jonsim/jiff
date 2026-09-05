@@ -31,6 +31,24 @@ class SideBySideRenderingTests(unittest.TestCase):
 
         self.assertIn("Kermit", output)
 
+    def test_line_number_gutters_continue_through_wrapped_lines(self):
+        diffs = diff.calculate_line_diff("Kermit the Frog", "Kermit the Frog")
+
+        output = diff.render_diffs_side_by_side(diffs, 1, False, terminal_width=20)
+        lines = output.splitlines()
+
+        self.assertTrue(lines[0].startswith("1│ "))
+        self.assertTrue(lines[1].startswith(" │ "))
+        self.assertIn("│1│ ", lines[0])
+        self.assertIn("│ │ ", lines[1])
+
+    def test_missing_right_line_keeps_its_gutter(self):
+        output = diff.render_diffs_side_by_side(
+            [Diff(DiffType.REMOVE, "Kermit")], 1, False, terminal_width=40
+        )
+
+        self.assertTrue(output.rstrip("\n").endswith("│"))
+
     def test_terminal_width_falls_back_to_an_attached_standard_stream(self):
         # Git sends stdout to its pager, leaving another stream attached to the
         # terminal which launched it.
@@ -241,7 +259,7 @@ class ContextTests(unittest.TestCase):
 
         output = diff.render_diffs_side_by_side(diffs, 10, False)
 
-        self.assertIn("10: Kermit", output)
+        self.assertIn("10│ Kermit", output)
 
 
 if __name__ == "__main__":

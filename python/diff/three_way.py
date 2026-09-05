@@ -398,10 +398,10 @@ def _render_line(
             row.append(separator)
 
         right = panes[2]
+        margin = right.lineno if row_index == 0 else right.wrapno
+        row.append_text(margin)
         if right.present and row_index < len(wrapped[2]):
-            margin = right.lineno if row_index == 0 else right.wrapno
             content = wrapped[2][row_index]
-            row.append_text(margin)
             if content.plain:
                 row.append(" ")
                 row.append_text(content)
@@ -442,7 +442,7 @@ def render_three_way_side_by_side(
         default=0,
     )
     lineno_width = max(len(str(max_line_count)), 1)
-    empty_lineno = " " * (lineno_width + 1)
+    empty_lineno = " " * lineno_width + "│"
     if terminal_width is None:
         terminal_width = diff_mod._terminal_width()
     line_width = _line_width(terminal_width, lineno_width)
@@ -455,7 +455,7 @@ def render_three_way_side_by_side(
             Text(f"{index}: {label}", style=line_styling.same)
             for index, label in enumerate(labels, start=1)
         )
-        heading_margin = Text(empty_lineno, style=margin_styling.same)
+        heading_margin = Text(" " * (lineno_width + 1), style=margin_styling.same)
         _render_line(
             output_console,
             tuple(
@@ -495,7 +495,7 @@ def render_three_way_side_by_side(
                 source_lines, rendered, styles, strict=True
             ):
                 number = (
-                    f"{source_line.index + 1:>{lineno_width}}:"
+                    f"{source_line.index + 1:>{lineno_width}}│"
                     if source_line is not None
                     else empty_lineno
                 )

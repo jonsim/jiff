@@ -289,11 +289,9 @@ fn render_three_way_line(
             margins[0], left, separator, margins[1], middle, separator
         )
         .expect("writing to a String cannot fail");
-        if panes[2].present && index < wrapped[2].len() {
-            write!(output, "{}", margins[2]).expect("writing to a String cannot fail");
-            if !right.is_empty() {
-                write!(output, " {right}").expect("writing to a String cannot fail");
-            }
+        write!(output, "{}", margins[2]).expect("writing to a String cannot fail");
+        if panes[2].present && index < wrapped[2].len() && !right.is_empty() {
+            write!(output, " {right}").expect("writing to a String cannot fail");
         }
         output.push('\n');
     }
@@ -511,7 +509,7 @@ pub(crate) fn render_three_way_side_by_side(
         .max()
         .unwrap_or(0);
     let lineno_width = max_line_count.max(1).to_string().len();
-    let empty_lineno = " ".repeat(lineno_width + 1);
+    let empty_lineno = format!("{}│", " ".repeat(lineno_width));
     let separator = "\u{2502}";
     let term_width = terminal_width();
     let line_width = three_way_line_width(term_width, lineno_width, separator);
@@ -528,10 +526,11 @@ pub(crate) fn render_three_way_side_by_side(
         colors.same.paint(format!("2: {}", labels[1])),
         colors.same.paint(format!("3: {}", labels[2])),
     ];
+    let heading_margin = colors.same.paint(" ".repeat(lineno_width + 1));
     let heading_margins = [
-        colors.same.paint(&empty_lineno),
-        colors.same.paint(&empty_lineno),
-        colors.same.paint(&empty_lineno),
+        heading_margin.clone(),
+        heading_margin.clone(),
+        heading_margin,
     ];
     render_three_way_line(
         &mut output,
@@ -602,7 +601,7 @@ pub(crate) fn render_three_way_side_by_side(
                 let number_text: Vec<_> = numbers
                     .iter()
                     .map(|number| match number {
-                        Some(number) => format!("{number:>lineno_width$}:"),
+                        Some(number) => format!("{number:>lineno_width$}│"),
                         None => empty_lineno.clone(),
                     })
                     .collect();
@@ -715,7 +714,12 @@ mod tests {
         assert!(output.contains("1: local.txt"));
         assert!(output.contains("2: base.txt"));
         assert!(output.contains("3: remote.txt"));
-        assert!(output.lines().all(|line| line.matches('│').count() == 2));
+        assert_eq!(2, output.lines().next().unwrap().matches('│').count());
+        assert!(output
+            .lines()
+            .skip(1)
+            .all(|line| line.matches('│').count() == 5));
+        assert!(output.contains("1│ same"));
         assert!(output.lines().all(|line| !line.ends_with(' ')));
         assert!(!output.contains("\x1b["));
     }

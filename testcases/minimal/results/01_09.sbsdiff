@@ -1,2 +1,2 @@
-1: first                                                   │
-                                                           │1: foo bar
+1│ first                                                   │ │
+ │                                                         │1│ foo bar
