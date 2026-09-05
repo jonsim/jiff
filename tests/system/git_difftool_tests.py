@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import shlex
 import subprocess
 import sys
@@ -77,6 +78,11 @@ class GitDifftoolTests(unittest.TestCase):
             "difftool", "--no-prompt", "--tool=jiff", *arguments, check=False
         )
 
+    def assert_side_by_side_header(self, output: str, path: str) -> None:
+        """Checks that Git's path labels both side-by-side panes."""
+        self.assertRegex(output, rf"(?m)^ {re.escape(path)} +│ {re.escape(path)}$")
+        self.assertNotIn(f"--- a/{path}", output)
+
     def test_worktree_diff_handles_multiple_files_and_spaces(self) -> None:
         # Git calls the tool once per file and should pass each repository path
         # through untouched.
@@ -89,8 +95,8 @@ class GitDifftoolTests(unittest.TestCase):
         result = self.difftool()
 
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertIn("--- a/kermit.txt\n+++ b/kermit.txt\n", result.stdout)
-        self.assertIn("--- a/muppet cast.txt\n+++ b/muppet cast.txt\n", result.stdout)
+        self.assert_side_by_side_header(result.stdout, "kermit.txt")
+        self.assert_side_by_side_header(result.stdout, "muppet cast.txt")
         self.assertIn("still green", result.stdout)
         self.assertIn("Fozzie", result.stdout)
 
@@ -107,9 +113,9 @@ class GitDifftoolTests(unittest.TestCase):
         result = self.difftool("--cached")
 
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertIn("--- a/statler.txt\n+++ b/statler.txt\n", result.stdout)
-        self.assertIn("--- a/gonzo.txt\n+++ b/gonzo.txt\n", result.stdout)
-        self.assertIn("--- a/empty.txt\n+++ b/empty.txt\n", result.stdout)
+        self.assert_side_by_side_header(result.stdout, "statler.txt")
+        self.assert_side_by_side_header(result.stdout, "gonzo.txt")
+        self.assert_side_by_side_header(result.stdout, "empty.txt")
         self.assertIn("Boo!", result.stdout)
         self.assertIn("The Great Gonzo", result.stdout)
         self.assertIn("Fozzie was here", result.stdout)
@@ -125,7 +131,7 @@ class GitDifftoolTests(unittest.TestCase):
         result = self.difftool("--find-renames", "HEAD^", "HEAD")
 
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertIn("--- a/old name.txt\n+++ b/old name.txt\n", result.stdout)
+        self.assert_side_by_side_header(result.stdout, "old name.txt")
 
     def test_binary_diff_reports_the_repository_path(self) -> None:
         # Binary input is useful information, not a UTF-8 decoding failure.
@@ -156,7 +162,7 @@ class GitDifftoolTests(unittest.TestCase):
         )
 
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertIn("--- a/rowlf.txt\n+++ b/rowlf.txt\n", result.stdout)
+        self.assert_side_by_side_header(result.stdout, "rowlf.txt")
 
     def test_external_diff_mode_supports_git_diff(self) -> None:
         self.write("kermit.txt", "Green\n")
@@ -167,7 +173,7 @@ class GitDifftoolTests(unittest.TestCase):
         result = self.git("diff", "HEAD", check=False)
 
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertIn("--- a/kermit.txt\n+++ b/kermit.txt\n", result.stdout)
+        self.assert_side_by_side_header(result.stdout, "kermit.txt")
         self.assertIn("Still green", result.stdout)
 
     def test_external_diff_mode_supports_git_show(self) -> None:
@@ -180,7 +186,7 @@ class GitDifftoolTests(unittest.TestCase):
         result = self.git("show", "--format=", "--ext-diff", "HEAD", check=False)
 
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertIn("--- a/fozzie.txt\n+++ b/fozzie.txt\n", result.stdout)
+        self.assert_side_by_side_header(result.stdout, "fozzie.txt")
         self.assertIn("Funny bear", result.stdout)
 
     def test_unmerged_protocol_renders_a_three_way_diff(self) -> None:
@@ -419,9 +425,7 @@ class GitDifftoolTests(unittest.TestCase):
             "nested/muppet cast.txt",
             "statler.txt",
         ):
-            self.assertNotIn(f" a/{path}", result.stdout)
-            self.assertNotIn(f" b/{path}", result.stdout)
-            self.assertGreaterEqual(result.stdout.count(path), 2)
+            self.assert_side_by_side_header(result.stdout, path)
         self.assertIn("┬", result.stdout)
         self.assertIn("┼", result.stdout)
         self.assertIn("Still green", result.stdout)

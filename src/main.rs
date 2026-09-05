@@ -37,7 +37,6 @@ enum InputPaths<'a> {
 
 struct OutputOptions<'a> {
     repository_path: Option<&'a str>,
-    side_by_side_labels: Option<[&'a str; 2]>,
     inline: bool,
     context_lines: Option<usize>,
 }
@@ -159,9 +158,7 @@ fn render_output(
     match (left, right) {
         (FileContents::Text(left), FileContents::Text(right)) => {
             let mut output = String::new();
-            if options.repository_path.is_some()
-                && (options.inline || options.side_by_side_labels.is_none())
-            {
+            if options.repository_path.is_some() && options.inline {
                 output.push_str(&format!(
                     "{}\n{}\n",
                     colors.remove.paint(format!("--- {left_label}")),
@@ -182,7 +179,9 @@ fn render_output(
                     max_line_count,
                     colors,
                     highlighting,
-                    options.side_by_side_labels,
+                    options
+                        .repository_path
+                        .map(|_| [left_label.as_str(), right_label.as_str()]),
                 ));
             }
             output
@@ -329,11 +328,8 @@ fn render_directory_output(
         let right_path = right_root.join(&directory_diff.relative_path);
         let left = FileContents::from_bytes(directory_diff.left.unwrap_or_default());
         let right = FileContents::from_bytes(directory_diff.right.unwrap_or_default());
-        let left_label = format!("a/{relative_path}");
-        let right_label = format!("b/{relative_path}");
         let file_options = OutputOptions {
             repository_path: Some(&relative_path),
-            side_by_side_labels: Some([&left_label, &right_label]),
             inline: output_options.inline,
             context_lines: output_options.context_lines,
         };
@@ -756,7 +752,6 @@ fn main() {
             right,
             &OutputOptions {
                 repository_path,
-                side_by_side_labels: None,
                 inline,
                 context_lines,
             },
@@ -773,7 +768,6 @@ fn main() {
             right,
             &OutputOptions {
                 repository_path: None,
-                side_by_side_labels: None,
                 inline,
                 context_lines,
             },
@@ -784,7 +778,6 @@ fn main() {
             repository_path,
             &OutputOptions {
                 repository_path: None,
-                side_by_side_labels: None,
                 inline,
                 context_lines,
             },
@@ -1040,7 +1033,6 @@ mod tests {
             ["local.txt", "base.txt", "remote.txt"],
             &OutputOptions {
                 repository_path: None,
-                side_by_side_labels: None,
                 inline: true,
                 context_lines: None,
             },
@@ -1100,7 +1092,7 @@ mod tests {
     }
 
     #[test]
-    fn directory_inline_keeps_git_style_headings() {
+    fn git_inline_keeps_git_style_headings() {
         let left = FileContents::Text("Kermit".to_string());
         let right = FileContents::Text("Fozzie".to_string());
 
@@ -1111,7 +1103,6 @@ mod tests {
             "/tmp/remote",
             &OutputOptions {
                 repository_path: Some("muppet cast.txt"),
-                side_by_side_labels: Some(["a/muppet cast.txt", "b/muppet cast.txt"]),
                 inline: true,
                 context_lines: None,
             },
@@ -1123,7 +1114,7 @@ mod tests {
     }
 
     #[test]
-    fn directory_side_by_side_labels_replace_git_style_headings() {
+    fn git_side_by_side_uses_pane_headings() {
         let left = FileContents::Text("Kermit".to_string());
         let right = FileContents::Text("Fozzie".to_string());
 
@@ -1134,7 +1125,6 @@ mod tests {
             "/tmp/right.py",
             &OutputOptions {
                 repository_path: Some("muppet.py"),
-                side_by_side_labels: Some(["a/l", "b/r"]),
                 inline: false,
                 context_lines: None,
             },
@@ -1144,8 +1134,8 @@ mod tests {
 
         let lines = output.lines().take(3).collect::<Vec<_>>();
         assert!(lines[0].contains('┬'));
-        assert!(lines[1].starts_with(" l"));
-        assert!(lines[1].contains("│ r"));
+        assert!(lines[1].starts_with(" muppet.py"));
+        assert!(lines[1].contains("│ muppet.py"));
         assert!(lines[2].contains('┼'));
         assert!(!output.contains("--- a/muppet.py"));
     }
@@ -1162,7 +1152,6 @@ mod tests {
             "/tmp/remote",
             &OutputOptions {
                 repository_path: Some("animal.dat"),
-                side_by_side_labels: None,
                 inline: false,
                 context_lines: None,
             },
@@ -1188,7 +1177,6 @@ mod tests {
             "/tmp/kermit-copy.dat",
             &OutputOptions {
                 repository_path: None,
-                side_by_side_labels: None,
                 inline: false,
                 context_lines: None,
             },

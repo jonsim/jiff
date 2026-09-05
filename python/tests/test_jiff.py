@@ -196,7 +196,7 @@ class GitIndexTests(unittest.TestCase):
 
 
 class OutputTests(unittest.TestCase):
-    def test_directory_side_by_side_labels_each_pane(self):
+    def test_git_side_by_side_labels_each_pane(self):
         output = jiff.render_output(
             "Kermit",
             "Fozzie",
@@ -207,31 +207,29 @@ class OutputTests(unittest.TestCase):
             color=False,
             colors=ColorScheme.plain(),
             terminal_width=40,
-            side_by_side_labels=("a/left.py", "b/right.py"),
         )
 
         self.assertTrue(
             output.startswith(
                 "───────────────────┬───────────────────\n"
-                " left.py           │ right.py\n"
+                " muppet.py         │ muppet.py\n"
                 "───────────────────┼───────────────────\n"
             )
         )
         self.assertNotIn("--- a/muppet.py", output)
 
-    def test_long_directory_labels_keep_git_style_headings(self):
-        path = "a/filename-that-does-not-fit.py"
+    def test_long_git_labels_keep_git_style_headings(self):
+        path = "filename-that-does-not-fit.py"
         output = jiff.render_output(
             "Kermit",
             "Fozzie",
             "/tmp/left.py",
             "/tmp/right.py",
-            repository_path="muppet.py",
+            repository_path=path,
             inline=False,
             color=False,
             colors=ColorScheme.plain(),
             terminal_width=40,
-            side_by_side_labels=(path, path.replace("a/", "b/", 1)),
         )
 
         self.assertTrue(
@@ -241,7 +239,7 @@ class OutputTests(unittest.TestCase):
             )
         )
 
-    def test_directory_inline_keeps_git_style_headings(self):
+    def test_git_inline_keeps_git_style_headings(self):
         output = jiff.render_output(
             "Kermit",
             "Fozzie",
@@ -251,7 +249,6 @@ class OutputTests(unittest.TestCase):
             inline=True,
             color=False,
             colors=ColorScheme.plain(),
-            side_by_side_labels=("a/muppet cast.txt", "b/muppet cast.txt"),
         )
 
         self.assertTrue(
