@@ -146,6 +146,7 @@ class ThemeTests(unittest.TestCase):
                 "High Contrast Light",
                 "Nord",
                 "Tokyo Night",
+                "Twilight Dark",
             },
             set(themes),
         )
@@ -164,6 +165,19 @@ class ThemeTests(unittest.TestCase):
         self.assertEqual("bright_cyan", high_contrast.add.color)
         self.assertEqual("cyan", high_contrast.add_highlight.bgcolor)
         self.assertEqual("bright_yellow", high_contrast.remove.color)
+
+    def test_twilight_dark_uses_the_tilix_palette(self):
+        twilight = load_themes()["Twilight Dark"]
+
+        self.assertEqual(256, twilight.depth)
+        self.assertEqual("green", twilight.ansi16.add.color)
+        self.assertEqual("red", twilight.ansi16.remove.color)
+        self.assertEqual(248, twilight.ansi256.same.color)
+        self.assertEqual(59, twilight.ansi256.omitted.color)
+        self.assertEqual(107, twilight.ansi256.add.color)
+        self.assertEqual(167, twilight.ansi256.remove.color)
+        self.assertEqual(228, twilight.ansi256.overlap_highlight.bgcolor)
+        self.assertEqual(139, twilight.ansi256.syntax_keyword.color)
 
     def test_every_packaged_theme_contains_both_complete_palettes(self):
         resources = files("jiff_configure.themes")
