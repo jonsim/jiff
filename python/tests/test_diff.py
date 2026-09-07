@@ -68,9 +68,15 @@ class SideBySideRenderingTests(unittest.TestCase):
         gutter = next(span for span in rendered.spans if span.start == 0)
 
         self.assertEqual(" 1│", rendered.plain[:3])
-        self.assertEqual((0, 3), (gutter.start, gutter.end))
+        self.assertEqual((0, 2), (gutter.start, gutter.end))
         self.assertEqual(4, gutter.style.bgcolor.number)
         self.assertTrue(gutter.style.bold)
+        self.assertFalse(
+            any(
+                span.start <= 2 < span.end and span.style.bgcolor is not None
+                for span in rendered.spans
+            )
+        )
 
     def test_terminal_width_falls_back_to_an_attached_standard_stream(self):
         # Git sends stdout to its pager, leaving another stream attached to the

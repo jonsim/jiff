@@ -575,22 +575,32 @@ fn side_by_side_header(
     }
 
     let rule = "─".repeat(pane_width);
-    let gutter_rule = format!("{}┬", "─".repeat(lineno_width));
+    let gutter_rule = "─".repeat(lineno_width);
     let content_rule = "─".repeat(pane_width - lineno_width - 1);
     let left_padding = " ".repeat(pane_width - pane_labels[0].width() - 1);
     format!(
-        "{}\n{}\n{}{}{}{}{}\n",
+        "{}\n{}\n{}{}{}{}{}{}{}\n",
         colors.same.paint(format!("{rule}┬{rule}")),
         colors.same.paint(format!(
             " {}{left_padding}│ {}",
             pane_labels[0], pane_labels[1]
         )),
         colors.line_number.paint(&gutter_rule),
+        colors.same.paint("┬"),
         colors.same.paint(&content_rule),
         colors.same.paint("┼"),
         colors.line_number.paint(&gutter_rule),
+        colors.same.paint("┬"),
         colors.same.paint(&content_rule),
     )
+}
+
+pub(super) fn line_number_margin(number: &str, colors: &ColorScheme) -> ANSIString<'static> {
+    Style::default().paint(format!(
+        "{}{}",
+        colors.line_number.paint(number),
+        colors.same.paint("│")
+    ))
 }
 
 /// Renders a two-column diff sized to the current terminal.
@@ -601,7 +611,6 @@ pub(super) fn render_diffs_side_by_side(
     highlighting: &HighlightedFiles,
     labels: Option<[&str; 2]>,
 ) -> String {
-    let gutter_style = colors.line_number;
     let line_styling = colors;
     let mut output = String::new();
 
@@ -622,7 +631,7 @@ pub(super) fn render_diffs_side_by_side(
 
     let mut lineno_l = 1;
     let mut lineno_r = 1;
-    let empty_lineno = format!("{}│", " ".repeat(lineno_width));
+    let empty_lineno = " ".repeat(lineno_width);
     for change in diffs {
         if *DEBUG {
             eprintln!("Diff: {:?}", change)
@@ -630,14 +639,14 @@ pub(super) fn render_diffs_side_by_side(
         match change {
             Diff::Same(same) => {
                 for line in same.split('\n') {
-                    let lineno_l_fmt = format!("{:w$}│", lineno_l, w = lineno_width);
-                    let lineno_r_fmt = format!("{:w$}│", lineno_r, w = lineno_width);
+                    let lineno_l_fmt = format!("{:w$}", lineno_l, w = lineno_width);
+                    let lineno_r_fmt = format!("{:w$}", lineno_r, w = lineno_width);
                     render_side_by_side_line(
                         &mut output,
-                        gutter_style.paint(&lineno_l_fmt),
-                        gutter_style.paint(&lineno_r_fmt),
-                        gutter_style.paint(&empty_lineno),
-                        gutter_style.paint(&empty_lineno),
+                        line_number_margin(&lineno_l_fmt, colors),
+                        line_number_margin(&lineno_r_fmt, colors),
+                        line_number_margin(&empty_lineno, colors),
+                        line_number_margin(&empty_lineno, colors),
                         &highlighting
                             .left
                             .render_line(lineno_l - 1, line, line_styling.same, &[]),
@@ -653,13 +662,13 @@ pub(super) fn render_diffs_side_by_side(
             }
             Diff::Add(add) => {
                 for line_r in add.split('\n') {
-                    let lineno_r_fmt = format!("{:w$}│", lineno_r, w = lineno_width);
+                    let lineno_r_fmt = format!("{:w$}", lineno_r, w = lineno_width);
                     render_side_by_side_line(
                         &mut output,
-                        gutter_style.paint(&empty_lineno),
-                        gutter_style.paint(&lineno_r_fmt),
-                        gutter_style.paint(&empty_lineno),
-                        gutter_style.paint(&empty_lineno),
+                        line_number_margin(&empty_lineno, colors),
+                        line_number_margin(&lineno_r_fmt, colors),
+                        line_number_margin(&empty_lineno, colors),
+                        line_number_margin(&empty_lineno, colors),
                         &[line_styling.same.paint("")],
                         &highlighting.right.render_line(
                             lineno_r - 1,
@@ -675,13 +684,13 @@ pub(super) fn render_diffs_side_by_side(
             }
             Diff::Remove(rem) => {
                 for line_l in rem.split('\n') {
-                    let lineno_l_fmt = format!("{:w$}│", lineno_l, w = lineno_width);
+                    let lineno_l_fmt = format!("{:w$}", lineno_l, w = lineno_width);
                     render_side_by_side_line(
                         &mut output,
-                        gutter_style.paint(&lineno_l_fmt),
-                        gutter_style.paint(&empty_lineno),
-                        gutter_style.paint(&empty_lineno),
-                        gutter_style.paint(&empty_lineno),
+                        line_number_margin(&lineno_l_fmt, colors),
+                        line_number_margin(&empty_lineno, colors),
+                        line_number_margin(&empty_lineno, colors),
+                        line_number_margin(&empty_lineno, colors),
                         &highlighting.left.render_line(
                             lineno_l - 1,
                             line_l,
@@ -699,10 +708,10 @@ pub(super) fn render_diffs_side_by_side(
                 let message = omission_text(*line_count);
                 render_side_by_side_line(
                     &mut output,
-                    gutter_style.paint(&empty_lineno),
-                    gutter_style.paint(&empty_lineno),
-                    gutter_style.paint(&empty_lineno),
-                    gutter_style.paint(&empty_lineno),
+                    line_number_margin(&empty_lineno, colors),
+                    line_number_margin(&empty_lineno, colors),
+                    line_number_margin(&empty_lineno, colors),
+                    line_number_margin(&empty_lineno, colors),
                     &[line_styling.omitted.paint(&message)],
                     &[line_styling.omitted.paint(&message)],
                     line_width,
@@ -721,13 +730,13 @@ pub(super) fn render_diffs_side_by_side(
                     };
                     match aligned {
                         (Some(line_l), None) => {
-                            let lineno_l_fmt = format!("{:w$}│", lineno_l, w = lineno_width);
+                            let lineno_l_fmt = format!("{:w$}", lineno_l, w = lineno_width);
                             render_side_by_side_line(
                                 &mut output,
-                                gutter_style.paint(&lineno_l_fmt),
-                                gutter_style.paint(&empty_lineno),
-                                gutter_style.paint(&empty_lineno),
-                                gutter_style.paint(&empty_lineno),
+                                line_number_margin(&lineno_l_fmt, colors),
+                                line_number_margin(&empty_lineno, colors),
+                                line_number_margin(&empty_lineno, colors),
+                                line_number_margin(&empty_lineno, colors),
                                 &highlighting.left.render_line(
                                     lineno_l - 1,
                                     line_l,
@@ -741,13 +750,13 @@ pub(super) fn render_diffs_side_by_side(
                             lineno_l += 1;
                         }
                         (None, Some(line_r)) => {
-                            let lineno_r_fmt = format!("{:w$}│", lineno_r, w = lineno_width);
+                            let lineno_r_fmt = format!("{:w$}", lineno_r, w = lineno_width);
                             render_side_by_side_line(
                                 &mut output,
-                                gutter_style.paint(&empty_lineno),
-                                gutter_style.paint(&lineno_r_fmt),
-                                gutter_style.paint(&empty_lineno),
-                                gutter_style.paint(&empty_lineno),
+                                line_number_margin(&empty_lineno, colors),
+                                line_number_margin(&lineno_r_fmt, colors),
+                                line_number_margin(&empty_lineno, colors),
+                                line_number_margin(&empty_lineno, colors),
                                 &[line_styling.same.paint("")],
                                 &highlighting.right.render_line(
                                     lineno_r - 1,
@@ -761,8 +770,8 @@ pub(super) fn render_diffs_side_by_side(
                             lineno_r += 1;
                         }
                         (Some(line_l), Some(line_r)) => {
-                            let lineno_l_fmt = format!("{:w$}│", lineno_l, w = lineno_width);
-                            let lineno_r_fmt = format!("{:w$}│", lineno_r, w = lineno_width);
+                            let lineno_l_fmt = format!("{:w$}", lineno_l, w = lineno_width);
+                            let lineno_r_fmt = format!("{:w$}", lineno_r, w = lineno_width);
                             let mut fmt_l = Vec::new();
                             let mut fmt_r = Vec::new();
                             style_diff_line(
@@ -776,10 +785,10 @@ pub(super) fn render_diffs_side_by_side(
                             );
                             render_side_by_side_line(
                                 &mut output,
-                                gutter_style.paint(&lineno_l_fmt),
-                                gutter_style.paint(&lineno_r_fmt),
-                                gutter_style.paint(&empty_lineno),
-                                gutter_style.paint(&empty_lineno),
+                                line_number_margin(&lineno_l_fmt, colors),
+                                line_number_margin(&lineno_r_fmt, colors),
+                                line_number_margin(&empty_lineno, colors),
+                                line_number_margin(&empty_lineno, colors),
                                 &fmt_l,
                                 &fmt_r,
                                 line_width,
@@ -1069,9 +1078,10 @@ mod tests {
             &HighlightedFiles::default(),
             None,
         );
-        let gutter = colors.line_number.paint(" 1│").to_string();
+        let gutter = colors.line_number.paint(" 1");
+        let divider = colors.same.paint("│");
 
-        assert!(output.starts_with(&format!("{gutter} Kermit")));
+        assert!(output.starts_with(&format!("{gutter}{divider} Kermit")));
     }
 
     #[test]

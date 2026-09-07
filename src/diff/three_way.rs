@@ -1,8 +1,8 @@
 use super::align::align;
 use super::wrap::wrap_ansistrings;
 use super::{
-    calculate_line_diff, line_diff_overrides, omission_text, terminal_width, three_way_line_width,
-    Diff, StyleOverride,
+    calculate_line_diff, line_diff_overrides, line_number_margin, omission_text, terminal_width,
+    three_way_line_width, Diff, StyleOverride,
 };
 use crate::config::ColorScheme;
 use crate::syntax::HighlightedFile;
@@ -485,11 +485,10 @@ pub(crate) fn render_three_way_side_by_side(
         .max()
         .unwrap_or(0);
     let lineno_width = max_line_count.max(1).to_string().len();
-    let empty_lineno = format!("{}│", " ".repeat(lineno_width));
+    let empty_lineno = " ".repeat(lineno_width);
     let separator = "\u{2502}";
     let term_width = terminal_width();
     let line_width = three_way_line_width(term_width, lineno_width, separator);
-    let gutter_style = colors.line_number;
     let highlighting = ThreeWayHighlighting {
         left: highlighting[0],
         middle: highlighting[1],
@@ -539,7 +538,7 @@ pub(crate) fn render_three_way_side_by_side(
             ThreeWayRow::Omitted(line_count) => {
                 let message = omission_text(line_count);
                 let rendered = colors.omitted.paint(&message);
-                let margins = gutter_style.paint(&empty_lineno);
+                let margins = line_number_margin(&empty_lineno, colors);
                 render_three_way_line(
                     &mut output,
                     &[
@@ -576,19 +575,19 @@ pub(crate) fn render_three_way_side_by_side(
                 let number_text: Vec<_> = numbers
                     .iter()
                     .map(|number| match number {
-                        Some(number) => format!("{number:>lineno_width$}│"),
+                        Some(number) => format!("{number:>lineno_width$}"),
                         None => empty_lineno.clone(),
                     })
                     .collect();
                 let margins = [
-                    gutter_style.paint(&number_text[0]),
-                    gutter_style.paint(&number_text[1]),
-                    gutter_style.paint(&number_text[2]),
+                    line_number_margin(&number_text[0], colors),
+                    line_number_margin(&number_text[1], colors),
+                    line_number_margin(&number_text[2], colors),
                 ];
                 let wrap_margins = [
-                    gutter_style.paint(&empty_lineno),
-                    gutter_style.paint(&empty_lineno),
-                    gutter_style.paint(&empty_lineno),
+                    line_number_margin(&empty_lineno, colors),
+                    line_number_margin(&empty_lineno, colors),
+                    line_number_margin(&empty_lineno, colors),
                 ];
                 render_three_way_line(
                     &mut output,

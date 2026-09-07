@@ -254,7 +254,7 @@ class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
                 str(app.query_one("#toml-preview").content),
             )
 
-    async def test_gutter_background_updates_the_complete_live_gutter(self):
+    async def test_gutter_background_excludes_the_live_divider(self):
         app = self.make_app()
         async with app.run_test(size=(140, 42)) as pilot:
             app.query_one("#line_number-bgcolor", Select).value = "blue"
@@ -264,8 +264,14 @@ class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
             gutter = next(span for span in preview.spans if span.start == 0)
 
             self.assertTrue(preview.plain.startswith(" 1│"))
-            self.assertGreaterEqual(gutter.end, 3)
+            self.assertEqual(2, gutter.end)
             self.assertEqual(4, gutter.style.bgcolor.number)
+            self.assertFalse(
+                any(
+                    span.start <= 2 < span.end and span.style.bgcolor is not None
+                    for span in preview.spans
+                )
+            )
             self.assertIn(
                 'line_number = { color = "default", bgcolor = "blue"',
                 str(app.query_one("#toml-preview").content),

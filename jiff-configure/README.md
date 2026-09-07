@@ -32,8 +32,8 @@ default.
 The previews use the preferred palette when the terminal can display it. On an
 ANSI16 terminal they show the fallback and a short notice instead. Bold and
 colour settings remain independent between the two palettes. The Line-number
-gutters control styles the complete gutter, including its leading padding and
-vertical rule.
+gutters control styles the complete padded number cell, leaving its vertical
+divider alone.
 
 Press `Ctrl+S` to save both complete palette sections. The save dialog suggests
 the standard XDG configuration path and asks before overwriting a file. Jiff

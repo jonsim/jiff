@@ -423,13 +423,11 @@ def render_three_way_side_by_side(
         default=0,
     )
     lineno_width = max(len(str(max_line_count)), 1)
-    empty_lineno = " " * lineno_width + "│"
+    empty_lineno = " " * lineno_width
     if terminal_width is None:
         terminal_width = diff_mod._terminal_width()
     line_width = _line_width(terminal_width, lineno_width)
     line_styling = diff_mod._line_styling(colors)
-    gutter_style = colors.line_number.rich_style()
-
     output_console = diff_mod._console(color)
     with output_console.capture() as capture:
         headings = tuple(
@@ -457,7 +455,7 @@ def render_three_way_side_by_side(
                     diff_mod._omission_text(row.line_count),
                     style=line_styling.omitted,
                 )
-                margin = Text(empty_lineno, style=gutter_style)
+                margin = diff_mod._line_number_margin(empty_lineno, colors)
                 _render_line(
                     output_console,
                     tuple(
@@ -473,14 +471,14 @@ def render_three_way_side_by_side(
             panes = []
             for source_line, text in zip(source_lines, rendered, strict=True):
                 number = (
-                    f"{source_line.index + 1:>{lineno_width}}│"
+                    f"{source_line.index + 1:>{lineno_width}}"
                     if source_line is not None
                     else empty_lineno
                 )
                 panes.append(
                     PaneLine(
-                        Text(number, style=gutter_style),
-                        Text(empty_lineno, style=gutter_style),
+                        diff_mod._line_number_margin(number, colors),
+                        diff_mod._line_number_margin(empty_lineno, colors),
                         text,
                         source_line is not None,
                     )

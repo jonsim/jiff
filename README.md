@@ -195,11 +195,11 @@ These styles control the diff itself:
 | `overlap_highlight` | Middle-pane characters changed by both outer files in a three-way | `black` | `yellow` |
 
 All eight accept `color`, `bgcolor` and `bold`. Their built-in `bold` value is
-`false`. `line_number` applies to the complete gutter cell, including its
-leading padding and vertical rule, so a background colour fills the whole
-gutter. The `+`/`-` markers inherit the corresponding diff colour and are
-deliberately bold. `overlap_highlight` is only used in three-way side-by-side
-output.
+`false`. `line_number` applies to the complete padded line-number cell, but not
+the vertical rule beside it, so a background colour fills the number cleanly
+without catching the divider. The `+`/`-` markers inherit the corresponding
+diff colour and are deliberately bold. `overlap_highlight` is only used in
+three-way side-by-side output.
 
 #### Syntax highlighting styles
 
