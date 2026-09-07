@@ -506,7 +506,7 @@ def print_diffs_side_by_side(
     output_console: Console,
 ) -> None:
     colors = _colors(color, colors)
-    lineno_styling = _indicator_styling(colors)
+    gutter_style = colors.line_number.rich_style()
     lines = _line_styling(colors)
     highlighting = highlighting or HighlightedFiles()
 
@@ -530,10 +530,10 @@ def print_diffs_side_by_side(
                 lineno_r_fmt = f"{lineno_r:>{lineno_width}}{sep}"
                 _print_side_by_side_line(
                     output_console,
-                    Text(lineno_l_fmt, style=lineno_styling.same),
-                    Text(lineno_r_fmt, style=lineno_styling.same),
-                    Text(empty_lineno, style=lineno_styling.same),
-                    Text(empty_lineno, style=lineno_styling.same),
+                    Text(lineno_l_fmt, style=gutter_style),
+                    Text(lineno_r_fmt, style=gutter_style),
+                    Text(empty_lineno, style=gutter_style),
+                    Text(empty_lineno, style=gutter_style),
                     highlighting.left.render_line(lineno_l - 1, line, lines.same),
                     highlighting.right.render_line(lineno_r - 1, line, lines.same),
                     line_width,
@@ -547,10 +547,10 @@ def print_diffs_side_by_side(
                 lineno_r_fmt = f"{lineno_r:>{lineno_width}}{sep}"
                 _print_side_by_side_line(
                     output_console,
-                    Text(empty_lineno, style=lineno_styling.same),
-                    Text(lineno_r_fmt, style=lineno_styling.add_highlight),
-                    Text(empty_lineno, style=lineno_styling.same),
-                    Text(empty_lineno, style=lineno_styling.add_highlight),
+                    Text(empty_lineno, style=gutter_style),
+                    Text(lineno_r_fmt, style=gutter_style),
+                    Text(empty_lineno, style=gutter_style),
+                    Text(empty_lineno, style=gutter_style),
                     Text("", style=lines.same),
                     highlighting.right.render_line(
                         lineno_r - 1, line, lines.add_highlight
@@ -565,10 +565,10 @@ def print_diffs_side_by_side(
                 lineno_l_fmt = f"{lineno_l:>{lineno_width}}{sep}"
                 _print_side_by_side_line(
                     output_console,
-                    Text(lineno_l_fmt, style=lineno_styling.remove_highlight),
-                    Text(empty_lineno, style=lineno_styling.same),
-                    Text(empty_lineno, style=lineno_styling.remove_highlight),
-                    Text(empty_lineno, style=lineno_styling.same),
+                    Text(lineno_l_fmt, style=gutter_style),
+                    Text(empty_lineno, style=gutter_style),
+                    Text(empty_lineno, style=gutter_style),
+                    Text(empty_lineno, style=gutter_style),
                     highlighting.left.render_line(
                         lineno_l - 1, line, lines.remove_highlight
                     ),
@@ -582,10 +582,10 @@ def print_diffs_side_by_side(
             message = Text(_omission_text(change.omitted_lines), style=lines.omitted)
             _print_side_by_side_line(
                 output_console,
-                Text(empty_lineno, style=lineno_styling.same),
-                Text(empty_lineno, style=lineno_styling.same),
-                Text(empty_lineno, style=lineno_styling.same),
-                Text(empty_lineno, style=lineno_styling.same),
+                Text(empty_lineno, style=gutter_style),
+                Text(empty_lineno, style=gutter_style),
+                Text(empty_lineno, style=gutter_style),
+                Text(empty_lineno, style=gutter_style),
                 message,
                 message.copy(),
                 line_width,
@@ -605,10 +605,10 @@ def print_diffs_side_by_side(
                     lineno_r_fmt = f"{lineno_r:>{lineno_width}}{sep}"
                     _print_side_by_side_line(
                         output_console,
-                        Text(empty_lineno, style=lineno_styling.same),
-                        Text(lineno_r_fmt, style=lineno_styling.add_highlight),
-                        Text(empty_lineno, style=lineno_styling.same),
-                        Text(empty_lineno, style=lineno_styling.add_highlight),
+                        Text(empty_lineno, style=gutter_style),
+                        Text(lineno_r_fmt, style=gutter_style),
+                        Text(empty_lineno, style=gutter_style),
+                        Text(empty_lineno, style=gutter_style),
                         Text("", style=lines.same),
                         highlighting.right.render_line(
                             lineno_r - 1, line_r, lines.add_highlight
@@ -621,10 +621,10 @@ def print_diffs_side_by_side(
                     lineno_l_fmt = f"{lineno_l:>{lineno_width}}{sep}"
                     _print_side_by_side_line(
                         output_console,
-                        Text(lineno_l_fmt, style=lineno_styling.remove_highlight),
-                        Text(empty_lineno, style=lineno_styling.same),
-                        Text(empty_lineno, style=lineno_styling.remove_highlight),
-                        Text(empty_lineno, style=lineno_styling.same),
+                        Text(lineno_l_fmt, style=gutter_style),
+                        Text(empty_lineno, style=gutter_style),
+                        Text(empty_lineno, style=gutter_style),
+                        Text(empty_lineno, style=gutter_style),
                         highlighting.left.render_line(
                             lineno_l - 1, line_l, lines.remove_highlight
                         ),
@@ -651,10 +651,10 @@ def print_diffs_side_by_side(
                     )
                     _print_side_by_side_line(
                         output_console,
-                        Text(lineno_l_fmt, style=lineno_styling.remove),
-                        Text(lineno_r_fmt, style=lineno_styling.add),
-                        Text(empty_lineno, style=lineno_styling.remove),
-                        Text(empty_lineno, style=lineno_styling.add),
+                        Text(lineno_l_fmt, style=gutter_style),
+                        Text(lineno_r_fmt, style=gutter_style),
+                        Text(empty_lineno, style=gutter_style),
+                        Text(empty_lineno, style=gutter_style),
                         line_l_text,
                         line_r_text,
                         line_width,
@@ -734,8 +734,13 @@ def _print_side_by_side_header(
         soft_wrap=True,
     )
     output_console.print(Text(left + "│" + right, style=style), soft_wrap=True)
-    pane_rule = "─" * lineno_width + "┬" + "─" * (pane_width - lineno_width - 1)
-    output_console.print(Text(pane_rule + "┼" + pane_rule, style=style), soft_wrap=True)
+    gutter_rule = "─" * lineno_width + "┬"
+    content_rule = "─" * (pane_width - lineno_width - 1)
+    divider = Text()
+    for separator in ("┼", ""):
+        divider.append(gutter_rule, style=colors.line_number.rich_style())
+        divider.append(content_rule + separator, style=style)
+    output_console.print(divider, soft_wrap=True)
 
 
 def _print_side_by_side_line(

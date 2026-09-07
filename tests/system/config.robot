@@ -14,6 +14,7 @@ Renderer Loads Custom Colours
     VAR    ${config}    ${work_dir}/jiff-colour-test.toml
     VAR    ${config_contents}
     ...    [color.ansi16]
+    ...    \nline_number = { color = "white", bgcolor = "blue", bold = true }
     ...    \nadd = { color = "blue", bold = true }
     ...    \nadd_highlight = { color = "yellow", bgcolor = "blue" }
     ...    \noverlap_highlight = { color = "white", bgcolor = "blue" }
@@ -28,6 +29,7 @@ Renderer Loads Custom Colours
     ...    ${runner}    ${config}    ${first}    ${first_hello}
     Output Uses Custom Colours    ${inline.stdout}
     Output Uses Custom Colours    ${side_by_side.stdout}
+    Output Uses Custom Gutter    ${side_by_side.stdout}
 
     VAR    ${local}     ${base_dir}/testcases/threeway/overlapping/local.py
     VAR    ${base}      ${base_dir}/testcases/threeway/overlapping/base.py
@@ -52,3 +54,12 @@ Output Uses Custom Overlap Colour
     ...    ${output}
     ...    foreground=white
     ...    background=blue
+
+Output Uses Custom Gutter
+    [Documentation]    Checks the complete line-number gutter has its own style.
+    [Arguments]    ${output}
+    Output Should Contain ANSI Style
+    ...    ${output}
+    ...    foreground=white
+    ...    background=blue
+    ...    bold=${True}

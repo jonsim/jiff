@@ -171,8 +171,11 @@ class ThemeTests(unittest.TestCase):
 
         self.assertEqual(256, twilight.depth)
         self.assertEqual("green", twilight.ansi16.add.color)
+        self.assertEqual("white", twilight.ansi16.line_number.color)
+        self.assertTrue(twilight.ansi16.line_number.bold)
         self.assertEqual("red", twilight.ansi16.remove.color)
         self.assertEqual(248, twilight.ansi256.same.color)
+        self.assertEqual(248, twilight.ansi256.line_number.color)
         self.assertEqual(59, twilight.ansi256.omitted.color)
         self.assertEqual(107, twilight.ansi256.add.color)
         self.assertEqual(167, twilight.ansi256.remove.color)
@@ -251,6 +254,23 @@ class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
                 str(app.query_one("#toml-preview").content),
             )
 
+    async def test_gutter_background_updates_the_complete_live_gutter(self):
+        app = self.make_app()
+        async with app.run_test(size=(140, 42)) as pilot:
+            app.query_one("#line_number-bgcolor", Select).value = "blue"
+            await pilot.pause()
+
+            preview = app.query_one("#side-preview", Static).content
+            gutter = next(span for span in preview.spans if span.start == 0)
+
+            self.assertTrue(preview.plain.startswith(" 1│"))
+            self.assertGreaterEqual(gutter.end, 3)
+            self.assertEqual(4, gutter.style.bgcolor.number)
+            self.assertIn(
+                'line_number = { color = "default", bgcolor = "blue"',
+                str(app.query_one("#toml-preview").content),
+            )
+
     async def test_depth_and_palette_selectors_are_independent(self):
         app = self.make_app()
         async with app.run_test(size=(140, 42)) as pilot:
@@ -267,7 +287,10 @@ class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
         async with app.run_test(size=(140, 42)) as pilot:
             app.query_one("#palette", Select).value = "ansi256"
             await pilot.pause()
-            await pilot.click("#add-color")
+            add_colour = app.query_one("#add-color", Button)
+            add_colour.scroll_visible()
+            await pilot.pause()
+            await pilot.click(add_colour)
             await pilot.pause()
 
             self.assertIsInstance(app.screen, IndexedColorPicker)

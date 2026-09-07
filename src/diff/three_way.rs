@@ -1,8 +1,8 @@
 use super::align::align;
 use super::wrap::wrap_ansistrings;
 use super::{
-    calculate_line_diff, indicator_styling, line_diff_overrides, omission_text, terminal_width,
-    three_way_line_width, Diff, DiffStyling, StyleOverride,
+    calculate_line_diff, line_diff_overrides, omission_text, terminal_width, three_way_line_width,
+    Diff, StyleOverride,
 };
 use crate::config::ColorScheme;
 use crate::syntax::HighlightedFile;
@@ -297,30 +297,6 @@ fn render_three_way_line(
     }
 }
 
-fn three_way_margin_style(
-    line: &ThreeWayLine,
-    source_lines: [&[&str]; 3],
-    styling: &DiffStyling,
-) -> (Style, Style, Style) {
-    let left = match (line.left, line.middle) {
-        (Some(left), Some(middle)) if source_lines[0][left] == source_lines[1][middle] => {
-            styling.same
-        }
-        (Some(_), Some(_)) => styling.remove,
-        (Some(_), None) => styling.remove_highlight,
-        (None, _) => styling.same,
-    };
-    let right = match (line.middle, line.right) {
-        (Some(middle), Some(right)) if source_lines[1][middle] == source_lines[2][right] => {
-            styling.same
-        }
-        (Some(_), Some(_)) => styling.add,
-        (None, Some(_)) => styling.add_highlight,
-        (_, None) => styling.same,
-    };
-    (left, styling.same, right)
-}
-
 fn merge_middle_overrides(
     from_left: &[StyleOverride],
     from_right: &[StyleOverride],
@@ -513,7 +489,7 @@ pub(crate) fn render_three_way_side_by_side(
     let separator = "\u{2502}";
     let term_width = terminal_width();
     let line_width = three_way_line_width(term_width, lineno_width, separator);
-    let margin_styling = indicator_styling(colors);
+    let gutter_style = colors.line_number;
     let highlighting = ThreeWayHighlighting {
         left: highlighting[0],
         middle: highlighting[1],
@@ -563,7 +539,7 @@ pub(crate) fn render_three_way_side_by_side(
             ThreeWayRow::Omitted(line_count) => {
                 let message = omission_text(line_count);
                 let rendered = colors.omitted.paint(&message);
-                let margins = colors.same.paint(&empty_lineno);
+                let margins = gutter_style.paint(&empty_lineno);
                 render_three_way_line(
                     &mut output,
                     &[
@@ -592,7 +568,6 @@ pub(crate) fn render_three_way_side_by_side(
             }
             ThreeWayRow::Line(line) => {
                 let rendered = style_three_way_line(&line, source_lines, colors, &highlighting);
-                let margin_styles = three_way_margin_style(&line, source_lines, &margin_styling);
                 let numbers = [
                     line.left.map(|line| line + 1),
                     line.middle.map(|line| line + 1),
@@ -606,14 +581,14 @@ pub(crate) fn render_three_way_side_by_side(
                     })
                     .collect();
                 let margins = [
-                    margin_styles.0.paint(&number_text[0]),
-                    margin_styles.1.paint(&number_text[1]),
-                    margin_styles.2.paint(&number_text[2]),
+                    gutter_style.paint(&number_text[0]),
+                    gutter_style.paint(&number_text[1]),
+                    gutter_style.paint(&number_text[2]),
                 ];
                 let wrap_margins = [
-                    margin_styles.0.paint(&empty_lineno),
-                    margin_styles.1.paint(&empty_lineno),
-                    margin_styles.2.paint(&empty_lineno),
+                    gutter_style.paint(&empty_lineno),
+                    gutter_style.paint(&empty_lineno),
+                    gutter_style.paint(&empty_lineno),
                 ];
                 render_three_way_line(
                     &mut output,

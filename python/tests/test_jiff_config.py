@@ -49,6 +49,27 @@ class ColorConfigTests(unittest.TestCase):
         self.assertTrue(config.ansi16.add.bold)
         self.assertEqual("red", config.ansi16.remove.color)
 
+    def test_line_number_style_accepts_a_background(self):
+        config = jiff_config._parse_color_config(
+            {
+                "color": {
+                    "ansi16": {
+                        "line_number": {
+                            "color": "white",
+                            "bgcolor": "blue",
+                            "bold": True,
+                        }
+                    }
+                }
+            }
+        )
+
+        self.assertEqual("white", config.ansi16.line_number.color)
+        self.assertEqual("blue", config.ansi16.line_number.bgcolor)
+        self.assertTrue(config.ansi16.line_number.bold)
+        self.assertEqual(7, config.ansi256.line_number.color)
+        self.assertEqual(4, config.ansi256.line_number.bgcolor)
+
     def test_ansi256_inherits_the_resolved_ansi16_palette(self):
         config = jiff_config._parse_color_config(
             {

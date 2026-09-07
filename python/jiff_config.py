@@ -54,6 +54,7 @@ ANSI16_INDEXES = {
 }
 DIFF_STYLE_NAMES = (
     "same",
+    "line_number",
     "omitted",
     "add",
     "add_highlight",
@@ -100,6 +101,7 @@ class ColorStyle:
 @dataclass(frozen=True)
 class ColorScheme:
     same: ColorStyle
+    line_number: ColorStyle
     omitted: ColorStyle
     add: ColorStyle
     add_highlight: ColorStyle
@@ -121,6 +123,7 @@ class ColorScheme:
     def default(cls) -> ColorScheme:
         return cls(
             same=ColorStyle(),
+            line_number=ColorStyle(),
             omitted=ColorStyle(color="bright_black"),
             add=ColorStyle(color="green"),
             add_highlight=ColorStyle(color="black", bgcolor="green"),

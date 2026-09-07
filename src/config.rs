@@ -13,6 +13,7 @@ const SUPPORTED_COLORS: &str = concat!(
 
 const STYLE_NAMES: &[&str] = &[
     "same",
+    "line_number",
     "omitted",
     "add",
     "add_highlight",
@@ -68,6 +69,7 @@ impl ColorConfig {
 #[derive(Clone, Copy)]
 pub(crate) struct ColorScheme {
     pub(crate) same: Style,
+    pub(crate) line_number: Style,
     pub(crate) omitted: Style,
     pub(crate) add: Style,
     pub(crate) add_highlight: Style,
@@ -90,6 +92,7 @@ impl ColorScheme {
     pub(crate) fn plain() -> Self {
         Self {
             same: Style::default(),
+            line_number: Style::default(),
             omitted: Style::default(),
             add: Style::default(),
             add_highlight: Style::default(),
@@ -126,6 +129,7 @@ impl Default for ColorScheme {
     fn default() -> Self {
         Self {
             same: Style::default(),
+            line_number: Style::default(),
             omitted: Color::DarkGray.normal(),
             add: Color::Green.normal(),
             add_highlight: Color::Black.on(Color::Green),
@@ -155,6 +159,7 @@ fn ansi256_scheme(scheme: ColorScheme) -> ColorScheme {
 
     ColorScheme {
         same: indexed_style(scheme.same),
+        line_number: indexed_style(scheme.line_number),
         omitted: indexed_style(scheme.omitted),
         add: indexed_style(scheme.add),
         add_highlight: indexed_style(scheme.add_highlight),
@@ -349,6 +354,7 @@ fn parse_scheme(
         };
     }
     parse!(same, true);
+    parse!(line_number, true);
     parse!(omitted, true);
     parse!(add, true);
     parse!(add_highlight, true);
@@ -539,6 +545,26 @@ mod tests {
 
         assert_eq!(None, scheme.add_highlight.background);
         assert_eq!(Some(Color::Black), scheme.add_highlight.foreground);
+    }
+
+    #[test]
+    fn line_number_style_accepts_a_background() {
+        let config = parse_config(
+            r#"
+            [color.ansi16.line_number]
+            color = "white"
+            bgcolor = "blue"
+            bold = true
+            "#,
+            Path::new("/tmp/.jiffconfig"),
+        )
+        .unwrap();
+
+        assert_eq!(Some(Color::White), config.ansi16.line_number.foreground);
+        assert_eq!(Some(Color::Blue), config.ansi16.line_number.background);
+        assert!(config.ansi16.line_number.is_bold);
+        assert_eq!(Some(Color::Fixed(7)), config.ansi256.line_number.foreground);
+        assert_eq!(Some(Color::Fixed(4)), config.ansi256.line_number.background);
     }
 
     #[test]

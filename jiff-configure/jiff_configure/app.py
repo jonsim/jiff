@@ -47,6 +47,7 @@ from textual.widgets import (
 STYLE_NAMES = DIFF_STYLE_NAMES + SYNTAX_STYLE_NAMES
 STYLE_LABELS = {
     "same": "Unchanged text",
+    "line_number": "Line-number gutters",
     "omitted": "Omitted lines",
     "add": "Added text",
     "add_highlight": "Added highlights",

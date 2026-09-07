@@ -4,6 +4,7 @@ depth = 256
 
 [color.ansi16]
 same = { color = "black", bgcolor = "default", bold = false }
+line_number = { color = "black", bgcolor = "default", bold = true }
 omitted = { color = "bright_black", bgcolor = "default", bold = false }
 add = { color = "blue", bgcolor = "default", bold = true }
 add_highlight = { color = "white", bgcolor = "blue", bold = true }
@@ -23,6 +24,7 @@ syntax_definition_highlight = { color = "green", bold = false }
 
 [color.ansi256]
 same = { color = 16, bgcolor = "default", bold = false }
+line_number = { color = 16, bgcolor = "default", bold = true }
 omitted = { color = 240, bgcolor = "default", bold = false }
 add = { color = 27, bgcolor = "default", bold = true }
 add_highlight = { color = 255, bgcolor = 27, bold = true }

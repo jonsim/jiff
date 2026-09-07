@@ -186,6 +186,7 @@ These styles control the diff itself:
 | Style | Used for | Default foreground | Default background |
 |---|---|---|---|
 | `same` | Unchanged text | Terminal default | Terminal default |
+| `line_number` | Side-by-side line-number gutters | Terminal default | Terminal default |
 | `omitted` | `... N unchanged lines ...` markers | `bright_black` | Terminal default |
 | `add` | Normal added text and unchanged characters in paired lines | `green` | Terminal default |
 | `add_highlight` | Changed characters and unpaired side-by-side additions | `black` | `green` |
@@ -193,10 +194,12 @@ These styles control the diff itself:
 | `remove_highlight` | Changed characters and unpaired side-by-side removals | `black` | `red` |
 | `overlap_highlight` | Middle-pane characters changed by both outer files in a three-way | `black` | `yellow` |
 
-All seven accept `color`, `bgcolor` and `bold`. Their built-in `bold` value is
-`false`. Line numbers and the `+`/`-` markers inherit the corresponding diff
-colour and are deliberately bold so they remain visible beside highlighted
-text. `overlap_highlight` is only used in three-way side-by-side output.
+All eight accept `color`, `bgcolor` and `bold`. Their built-in `bold` value is
+`false`. `line_number` applies to the complete gutter cell, including its
+leading padding and vertical rule, so a background colour fills the whole
+gutter. The `+`/`-` markers inherit the corresponding diff colour and are
+deliberately bold. `overlap_highlight` is only used in three-way side-by-side
+output.
 
 #### Syntax highlighting styles
 

@@ -13,7 +13,7 @@ from syntax_highlighting import HighlightedFile
 
 from . import mod as diff_mod
 from .align import align
-from .mod import DiffStyling, DiffType
+from .mod import DiffType
 
 
 @dataclass(frozen=True)
@@ -353,25 +353,6 @@ def _style_three_way_line(
     return left, middle, right
 
 
-def _margin_styles(
-    line: ThreeWayLine, styling: DiffStyling
-) -> tuple[Style, Style, Style]:
-    if line.left is not None and line.middle is not None:
-        left = styling.same if line.left.text == line.middle.text else styling.remove
-    elif line.left is not None:
-        left = styling.remove_highlight
-    else:
-        left = styling.same
-
-    if line.middle is not None and line.right is not None:
-        right = styling.same if line.middle.text == line.right.text else styling.add
-    elif line.right is not None:
-        right = styling.add_highlight
-    else:
-        right = styling.same
-    return left, styling.same, right
-
-
 def _render_line(
     output_console: Console,
     panes: tuple[PaneLine, PaneLine, PaneLine],
@@ -447,7 +428,7 @@ def render_three_way_side_by_side(
         terminal_width = diff_mod._terminal_width()
     line_width = _line_width(terminal_width, lineno_width)
     line_styling = diff_mod._line_styling(colors)
-    margin_styling = diff_mod._indicator_styling(colors)
+    gutter_style = colors.line_number.rich_style()
 
     output_console = diff_mod._console(color)
     with output_console.capture() as capture:
@@ -455,7 +436,7 @@ def render_three_way_side_by_side(
             Text(f"{index}: {label}", style=line_styling.same)
             for index, label in enumerate(labels, start=1)
         )
-        heading_margin = Text(" " * (lineno_width + 1), style=margin_styling.same)
+        heading_margin = Text(" " * (lineno_width + 1), style=line_styling.same)
         _render_line(
             output_console,
             tuple(
@@ -476,7 +457,7 @@ def render_three_way_side_by_side(
                     diff_mod._omission_text(row.line_count),
                     style=line_styling.omitted,
                 )
-                margin = Text(empty_lineno, style=margin_styling.same)
+                margin = Text(empty_lineno, style=gutter_style)
                 _render_line(
                     output_console,
                     tuple(
@@ -488,12 +469,9 @@ def render_three_way_side_by_side(
                 continue
 
             rendered = _style_three_way_line(row, colors, highlighting)
-            styles = _margin_styles(row, margin_styling)
             source_lines = (row.left, row.middle, row.right)
             panes = []
-            for source_line, text, style in zip(
-                source_lines, rendered, styles, strict=True
-            ):
+            for source_line, text in zip(source_lines, rendered, strict=True):
                 number = (
                     f"{source_line.index + 1:>{lineno_width}}│"
                     if source_line is not None
@@ -501,8 +479,8 @@ def render_three_way_side_by_side(
                 )
                 panes.append(
                     PaneLine(
-                        Text(number, style=style),
-                        Text(empty_lineno, style=style),
+                        Text(number, style=gutter_style),
+                        Text(empty_lineno, style=gutter_style),
                         text,
                         source_line is not None,
                     )

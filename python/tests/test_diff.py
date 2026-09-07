@@ -1,10 +1,12 @@
 import os
 import unittest
+from dataclasses import replace
 from unittest import mock
 
 from diff.align import _edit_distance, align
 from diff.mod import Diff, DiffType
-from jiff_config import ColorScheme
+from jiff_config import ColorScheme, ColorStyle
+from rich.text import Text
 
 import diff
 
@@ -48,6 +50,27 @@ class SideBySideRenderingTests(unittest.TestCase):
         )
 
         self.assertTrue(output.rstrip("\n").endswith("│"))
+
+    def test_gutter_background_covers_the_line_number_padding(self):
+        colors = replace(
+            ColorScheme.default(),
+            line_number=ColorStyle(color="bright_white", bgcolor="blue", bold=True),
+        )
+
+        output = diff.render_diffs_side_by_side(
+            [Diff(DiffType.SAME, "Kermit")],
+            10,
+            True,
+            colors,
+            terminal_width=40,
+        )
+        rendered = Text.from_ansi(output)
+        gutter = next(span for span in rendered.spans if span.start == 0)
+
+        self.assertEqual(" 1│", rendered.plain[:3])
+        self.assertEqual((0, 3), (gutter.start, gutter.end))
+        self.assertEqual(4, gutter.style.bgcolor.number)
+        self.assertTrue(gutter.style.bold)
 
     def test_terminal_width_falls_back_to_an_attached_standard_stream(self):
         # Git sends stdout to its pager, leaving another stream attached to the
