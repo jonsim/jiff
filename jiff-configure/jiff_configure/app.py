@@ -290,7 +290,7 @@ def _configured_colour(colour: str) -> str | None:
 
 
 class StyleControl(Vertical):
-    """Foreground, optional background and bold controls for one Jiff style."""
+    """Colour and text-attribute controls for one Jiff style."""
 
     def __init__(self, style_name: str, style: ColorStyle, palette: str) -> None:
         super().__init__(classes="style-control")
@@ -325,14 +325,22 @@ class StyleControl(Vertical):
             if self.style_name in DIFF_STYLE_NAMES:
                 yield Label("Background", classes="field-label background-label")
                 yield self.color_control("bgcolor", self.style.bgcolor)
-        with Horizontal(classes="bold-field"):
+        with Horizontal(classes="attribute-fields"):
             yield Label("Bold", classes="field-label")
             yield Switch(
                 self.style.bold,
                 animate=False,
                 id=f"{self.style_name}-bold",
                 name=f"{self.style_name}.bold",
-                classes="bold-switch",
+                classes="style-switch",
+            )
+            yield Label("Italic", classes="field-label")
+            yield Switch(
+                self.style.italic,
+                animate=False,
+                id=f"{self.style_name}-italic",
+                name=f"{self.style_name}.italic",
+                classes="style-switch",
             )
 
 
@@ -771,11 +779,11 @@ class JiffConfigureApp(App[None]):
         self._set_dirty()
         self.refresh_previews()
 
-    @on(Switch.Changed, ".bold-switch")
-    def bold_changed(self, event: Switch.Changed) -> None:
-        style_name, _field = event.switch.name.split(".", maxsplit=1)
+    @on(Switch.Changed, ".style-switch")
+    def style_attribute_changed(self, event: Switch.Changed) -> None:
+        style_name, field = event.switch.name.split(".", maxsplit=1)
         style = getattr(self.scheme, style_name)
-        updated = replace(style, bold=event.value)
+        updated = replace(style, **{field: event.value})
         if updated == style:
             return
         self.scheme = replace(self.scheme, **{style_name: updated})

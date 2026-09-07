@@ -88,6 +88,28 @@ class SyntaxRenderingTests(unittest.TestCase):
         self.assertEqual("magenta", style.color.name)
         self.assertEqual("red", style.bgcolor.name)
 
+    def test_syntax_and_diff_italics_are_combined(self):
+        from dataclasses import replace
+
+        from jiff_config import ColorStyle
+
+        colors = replace(
+            ColorScheme.default(),
+            syntax_keyword=ColorStyle(color="magenta", italic=True),
+        )
+        highlighted = syntax_highlighting.highlight_file(
+            "def kermit():", "muppets.py", None, colors
+        )
+        console = Console(color_system="standard")
+
+        syntax_italic = highlighted.render_line(0, "def kermit():", Style())
+        diff_italic = syntax_highlighting.highlight_file(
+            "def kermit():", "muppets.py", None, ColorScheme.default()
+        ).render_line(0, "def kermit():", Style(italic=True))
+
+        self.assertTrue(syntax_italic.get_style_at_offset(console, 0).italic)
+        self.assertTrue(diff_italic.get_style_at_offset(console, 0).italic)
+
     def test_syntax_foreground_renders_on_top_of_intraline_diff(self):
         highlighted = syntax_highlighting.highlight_file(
             "def kermit():", "muppets.py", None, ColorScheme.default()

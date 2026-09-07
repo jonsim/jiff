@@ -12,13 +12,15 @@ def output_should_contain_ansi_style(
     foreground: str | None = None,
     background: str | None = None,
     bold: bool | None = None,
+    italic: bool | None = None,
 ) -> None:
     """Checks at least one character has the requested ANSI style."""
-    if _contains_style(output, foreground, background, bold):
+    if _contains_style(output, foreground, background, bold, italic):
         return
 
     raise AssertionError(
-        f"Output does not contain text with {_describe_style(foreground, background, bold)}"
+        "Output does not contain text with "
+        f"{_describe_style(foreground, background, bold, italic)}"
     )
 
 
@@ -27,13 +29,15 @@ def output_should_not_contain_ansi_style(
     foreground: str | None = None,
     background: str | None = None,
     bold: bool | None = None,
+    italic: bool | None = None,
 ) -> None:
     """Checks no character has the requested ANSI style."""
-    if not _contains_style(output, foreground, background, bold):
+    if not _contains_style(output, foreground, background, bold, italic):
         return
 
     raise AssertionError(
-        f"Output contains text with {_describe_style(foreground, background, bold)}"
+        "Output contains text with "
+        f"{_describe_style(foreground, background, bold, italic)}"
     )
 
 
@@ -42,6 +46,7 @@ def _contains_style(
     foreground: str | None,
     background: str | None,
     bold: bool | None,
+    italic: bool | None,
 ) -> bool:
     text = Text.from_ansi(output)
     foreground_number = _colour_number(foreground)
@@ -59,6 +64,8 @@ def _contains_style(
             continue
         if bold is not None and bool(style.bold) != bold:
             continue
+        if italic is not None and bool(style.italic) != italic:
+            continue
         return True
 
     return False
@@ -74,6 +81,7 @@ def _describe_style(
     foreground: str | None,
     background: str | None,
     bold: bool | None,
+    italic: bool | None,
 ) -> str:
     parts = []
     if foreground is not None:
@@ -82,4 +90,6 @@ def _describe_style(
         parts.append(f"a {background} background")
     if bold is not None:
         parts.append("bold text" if bold else "non-bold text")
+    if italic is not None:
+        parts.append("italic text" if italic else "non-italic text")
     return ", ".join(parts)

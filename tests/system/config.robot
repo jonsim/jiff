@@ -15,7 +15,7 @@ Renderer Loads Custom Colours
     VAR    ${config_contents}
     ...    [color.ansi16]
     ...    \nline_number = { color = "white", bgcolor = "blue", bold = true }
-    ...    \nadd = { color = "blue", bold = true }
+    ...    \nadd = { color = "blue", bold = true, italic = true }
     ...    \nadd_highlight = { color = "yellow", bgcolor = "blue" }
     ...    \noverlap_highlight = { color = "white", bgcolor = "blue" }
     VAR    ${base_dir}    ${CURDIR}/../..
@@ -41,7 +41,11 @@ Renderer Loads Custom Colours
 Output Uses Custom Colours
     [Documentation]    Checks the configured normal and highlighted styles.
     [Arguments]    ${output}
-    Output Should Contain ANSI Style    ${output}    foreground=blue    bold=${True}
+    Output Should Contain ANSI Style
+    ...    ${output}
+    ...    foreground=blue
+    ...    bold=${True}
+    ...    italic=${True}
     Output Should Contain ANSI Style
     ...    ${output}
     ...    foreground=yellow

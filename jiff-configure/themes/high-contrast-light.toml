@@ -3,41 +3,41 @@
 depth = 256
 
 [color.ansi16]
-same = { color = "black", bgcolor = "default", bold = false }
-line_number = { color = "black", bgcolor = "default", bold = true }
-omitted = { color = "bright_black", bgcolor = "default", bold = false }
-add = { color = "blue", bgcolor = "default", bold = true }
-add_highlight = { color = "white", bgcolor = "blue", bold = true }
-remove = { color = "magenta", bgcolor = "default", bold = true }
-remove_highlight = { color = "white", bgcolor = "magenta", bold = true }
-overlap_highlight = { color = "black", bgcolor = "yellow", bold = true }
-syntax_comment = { color = "bright_black", bold = false }
-syntax_comment_highlight = { color = "bright_black", bold = false }
-syntax_keyword = { color = "magenta", bold = false }
-syntax_keyword_highlight = { color = "magenta", bold = false }
-syntax_string = { color = "blue", bold = false }
-syntax_string_highlight = { color = "blue", bold = false }
-syntax_number = { color = "cyan", bold = false }
-syntax_number_highlight = { color = "cyan", bold = false }
-syntax_definition = { color = "green", bold = false }
-syntax_definition_highlight = { color = "green", bold = false }
+same = { color = "black", bgcolor = "default", bold = false, italic = false }
+line_number = { color = "black", bgcolor = "default", bold = true, italic = false }
+omitted = { color = "bright_black", bgcolor = "default", bold = false, italic = false }
+add = { color = "blue", bgcolor = "default", bold = true, italic = false }
+add_highlight = { color = "white", bgcolor = "blue", bold = true, italic = false }
+remove = { color = "magenta", bgcolor = "default", bold = true, italic = false }
+remove_highlight = { color = "white", bgcolor = "magenta", bold = true, italic = false }
+overlap_highlight = { color = "black", bgcolor = "yellow", bold = true, italic = false }
+syntax_comment = { color = "bright_black", bold = false, italic = false }
+syntax_comment_highlight = { color = "bright_black", bold = false, italic = false }
+syntax_keyword = { color = "magenta", bold = false, italic = false }
+syntax_keyword_highlight = { color = "magenta", bold = false, italic = false }
+syntax_string = { color = "blue", bold = false, italic = false }
+syntax_string_highlight = { color = "blue", bold = false, italic = false }
+syntax_number = { color = "cyan", bold = false, italic = false }
+syntax_number_highlight = { color = "cyan", bold = false, italic = false }
+syntax_definition = { color = "green", bold = false, italic = false }
+syntax_definition_highlight = { color = "green", bold = false, italic = false }
 
 [color.ansi256]
-same = { color = 16, bgcolor = "default", bold = false }
-line_number = { color = 16, bgcolor = "default", bold = true }
-omitted = { color = 240, bgcolor = "default", bold = false }
-add = { color = 27, bgcolor = "default", bold = true }
-add_highlight = { color = 255, bgcolor = 27, bold = true }
-remove = { color = 127, bgcolor = "default", bold = true }
-remove_highlight = { color = 255, bgcolor = 127, bold = true }
-overlap_highlight = { color = 16, bgcolor = 220, bold = true }
-syntax_comment = { color = 240, bold = false }
-syntax_comment_highlight = { color = 240, bold = false }
-syntax_keyword = { color = 127, bold = false }
-syntax_keyword_highlight = { color = 127, bold = false }
-syntax_string = { color = 27, bold = false }
-syntax_string_highlight = { color = 27, bold = false }
-syntax_number = { color = 30, bold = false }
-syntax_number_highlight = { color = 30, bold = false }
-syntax_definition = { color = 28, bold = false }
-syntax_definition_highlight = { color = 28, bold = false }
+same = { color = 16, bgcolor = "default", bold = false, italic = false }
+line_number = { color = 16, bgcolor = "default", bold = true, italic = false }
+omitted = { color = 240, bgcolor = "default", bold = false, italic = false }
+add = { color = 27, bgcolor = "default", bold = true, italic = false }
+add_highlight = { color = 255, bgcolor = 27, bold = true, italic = false }
+remove = { color = 127, bgcolor = "default", bold = true, italic = false }
+remove_highlight = { color = 255, bgcolor = 127, bold = true, italic = false }
+overlap_highlight = { color = 16, bgcolor = 220, bold = true, italic = false }
+syntax_comment = { color = 240, bold = false, italic = false }
+syntax_comment_highlight = { color = 240, bold = false, italic = false }
+syntax_keyword = { color = 127, bold = false, italic = false }
+syntax_keyword_highlight = { color = 127, bold = false, italic = false }
+syntax_string = { color = 27, bold = false, italic = false }
+syntax_string_highlight = { color = 27, bold = false, italic = false }
+syntax_number = { color = 30, bold = false, italic = false }
+syntax_number_highlight = { color = 30, bold = false, italic = false }
+syntax_definition = { color = 28, bold = false, italic = false }
+syntax_definition_highlight = { color = 28, bold = false, italic = false }

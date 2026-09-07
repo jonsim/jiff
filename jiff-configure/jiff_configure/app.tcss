@@ -67,19 +67,19 @@ JiffConfigureApp {
     min-width: 8;
 }
 
-.bold-field {
+.attribute-fields {
     height: 1;
     align-vertical: middle;
 }
 
-Switch.bold-switch {
+Switch.style-switch {
     width: 8;
     height: 1;
     padding: 0 2;
     border: none;
 }
 
-Switch.bold-switch:focus {
+Switch.style-switch:focus {
     border: none;
 }
 

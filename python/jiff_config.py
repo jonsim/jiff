@@ -86,6 +86,7 @@ class ColorStyle:
     color: str | int | None = None
     bgcolor: str | int | None = None
     bold: bool = False
+    italic: bool = False
 
     def rich_style(self) -> Style:
         def rich_color(value: str | int | None) -> str | None:
@@ -95,6 +96,7 @@ class ColorStyle:
             color=rich_color(self.color),
             bgcolor=rich_color(self.bgcolor),
             bold=self.bold,
+            italic=self.italic,
         )
 
 
@@ -228,6 +230,7 @@ def color_config_to_toml(config: ColorConfig) -> str:
             if name in DIFF_STYLE_NAMES:
                 fields.append(f"bgcolor = {_toml_color(style.bgcolor, palette_name)}")
             fields.append(f"bold = {str(style.bold).lower()}")
+            fields.append(f"italic = {str(style.italic).lower()}")
             lines.append(f"{name} = {{ {', '.join(fields)} }}")
     return "\n".join(lines) + "\n"
 
@@ -324,7 +327,7 @@ def _parse_style(
     if value is None:
         return default
     table = _table(value, field)
-    expected = {"color", "bold"}
+    expected = {"color", "bold", "italic"}
     if allow_background:
         expected.add("bgcolor")
     _reject_unknown_fields(table, expected, field)
@@ -337,7 +340,10 @@ def _parse_style(
     bold = table.get("bold", default.bold)
     if not isinstance(bold, bool):
         raise ConfigError(f"{field}.bold must be true or false")
-    return ColorStyle(color, bgcolor, bold)
+    italic = table.get("italic", default.italic)
+    if not isinstance(italic, bool):
+        raise ConfigError(f"{field}.italic must be true or false")
+    return ColorStyle(color, bgcolor, bold, italic)
 
 
 def _color_field(

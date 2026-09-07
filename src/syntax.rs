@@ -147,6 +147,7 @@ impl HighlightedFile {
                     };
                     style.foreground = syntax.foreground;
                     style.is_bold |= syntax.is_bold;
+                    style.is_italic |= syntax.is_italic;
                 }
                 Some(style.paint(expand_tabs(&content[start..end], &mut column)))
             })
@@ -476,6 +477,32 @@ mod tests {
         assert_eq!(
             Color::Purple.on(Color::Red).paint("def").to_string(),
             rendered[0].to_string()
+        );
+    }
+
+    #[test]
+    fn syntax_and_diff_italics_are_combined() {
+        let colors = ColorScheme {
+            syntax_keyword: Color::Purple.italic(),
+            ..ColorScheme::default()
+        };
+        let highlighted = highlight_file("def kermit():", "muppets.py", None, &colors)
+            .expect("Python source should highlight");
+        let syntax_italic = highlighted.render_line(0, "def kermit():", Style::default(), &[]);
+
+        let default_highlighting =
+            highlight_file("def kermit():", "muppets.py", None, &ColorScheme::default())
+                .expect("Python source should highlight");
+        let diff_italic =
+            default_highlighting.render_line(0, "def kermit():", Style::default().italic(), &[]);
+
+        assert_eq!(
+            Color::Purple.italic().paint("def").to_string(),
+            syntax_italic[0].to_string()
+        );
+        assert_eq!(
+            Color::Purple.italic().paint("def").to_string(),
+            diff_italic[0].to_string()
         );
     }
 

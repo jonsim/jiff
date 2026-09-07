@@ -389,9 +389,9 @@ fn parse_style(
         .as_table()
         .ok_or_else(|| ConfigError::new(path, format!("{field} must be a table")))?;
     let expected = if allow_background {
-        &["color", "bgcolor", "bold"][..]
+        &["color", "bgcolor", "bold", "italic"][..]
     } else {
-        &["color", "bold"][..]
+        &["color", "bold", "italic"][..]
     };
     reject_unknown_fields(table, expected, field, path)?;
 
@@ -405,6 +405,9 @@ fn parse_style(
     }
     if let Some(bold) = boolean_field(table, "bold", field, path)? {
         style.is_bold = bold;
+    }
+    if let Some(italic) = boolean_field(table, "italic", field, path)? {
+        style.is_italic = italic;
     }
     Ok(style)
 }
@@ -521,7 +524,7 @@ mod tests {
         let scheme = parse(
             r#"
             [color.ansi16]
-            add = { color = "blue", bold = true }
+            add = { color = "blue", bold = true, italic = true }
             omitted = { color = "cyan" }
             "#,
         )
@@ -529,6 +532,7 @@ mod tests {
 
         assert_eq!(Some(Color::Blue), scheme.add.foreground);
         assert!(scheme.add.is_bold);
+        assert!(scheme.add.is_italic);
         assert_eq!(Some(Color::Cyan), scheme.omitted.foreground);
         assert_eq!(Some(Color::Red), scheme.remove.foreground);
     }
@@ -545,6 +549,22 @@ mod tests {
 
         assert_eq!(None, scheme.add_highlight.background);
         assert_eq!(Some(Color::Black), scheme.add_highlight.foreground);
+    }
+
+    #[test]
+    fn invalid_italic_value_is_rejected() {
+        let error = parse(
+            r#"
+            [color.ansi16.add]
+            italic = "yes"
+            "#,
+        )
+        .err()
+        .expect("non-boolean italics should be rejected");
+
+        assert!(error
+            .to_string()
+            .contains("color.ansi16.add.italic must be true or false"));
     }
 
     #[test]
@@ -703,7 +723,7 @@ mod tests {
         let config = parse_config(
             r#"
             [color.ansi16]
-            add = { color = "bright_green", bold = true }
+            add = { color = "bright_green", bold = true, italic = true }
 
             [color.ansi256]
             add = { color = 114 }
@@ -714,6 +734,7 @@ mod tests {
 
         assert_eq!(Some(Color::Fixed(114)), config.ansi256.add.foreground);
         assert!(config.ansi256.add.is_bold);
+        assert!(config.ansi256.add.is_italic);
         assert_eq!(Some(Color::Fixed(1)), config.ansi256.remove.foreground);
     }
 

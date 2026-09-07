@@ -103,7 +103,12 @@ def _indicator_style(style: ColorStyle) -> Style:
     if style == ColorStyle():
         return Style()
     rich_style = style.rich_style()
-    return Style(color=rich_style.color, bgcolor=rich_style.bgcolor, bold=True)
+    return Style(
+        color=rich_style.color,
+        bgcolor=rich_style.bgcolor,
+        bold=True,
+        italic=rich_style.italic,
+    )
 
 
 def _indicator_styling(colors: ColorScheme) -> DiffStyling:

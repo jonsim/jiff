@@ -17,10 +17,23 @@ class ColorConfigTests(unittest.TestCase):
         self.assertIn("[color.ansi16]", contents)
         self.assertIn("[color.ansi256]", contents)
         self.assertEqual(2 * len(jiff_config.STYLE_NAMES), contents.count(" = {"))
+        self.assertEqual(
+            2 * len(jiff_config.STYLE_NAMES), contents.count("italic = false")
+        )
 
     def test_invalid_toml_is_reported_by_the_public_parser(self):
         with self.assertRaisesRegex(jiff_config.ConfigError, "invalid TOML"):
             jiff_config.parse_color_config("[color")
+
+    def test_italic_config_round_trips(self):
+        config = jiff_config.parse_color_config(
+            "[color.ansi16.syntax_comment]\nitalic = true\n"
+        )
+
+        contents = jiff_config.color_config_to_toml(config)
+
+        self.assertEqual(2, contents.count("italic = true"))
+        self.assertEqual(config, jiff_config.parse_color_config(contents))
 
     def test_depth_defaults_to_16(self):
         config = jiff_config.parse_color_config("[color]\n")
@@ -42,11 +55,16 @@ class ColorConfigTests(unittest.TestCase):
 
     def test_partial_ansi16_styles_merge_with_the_defaults(self):
         config = jiff_config._parse_color_config(
-            {"color": {"ansi16": {"add": {"color": "blue", "bold": True}}}}
+            {
+                "color": {
+                    "ansi16": {"add": {"color": "blue", "bold": True, "italic": True}}
+                }
+            }
         )
 
         self.assertEqual("blue", config.ansi16.add.color)
         self.assertTrue(config.ansi16.add.bold)
+        self.assertTrue(config.ansi16.add.italic)
         self.assertEqual("red", config.ansi16.remove.color)
 
     def test_line_number_style_accepts_a_background(self):
@@ -74,7 +92,13 @@ class ColorConfigTests(unittest.TestCase):
         config = jiff_config._parse_color_config(
             {
                 "color": {
-                    "ansi16": {"add": {"color": "bright_green", "bold": True}},
+                    "ansi16": {
+                        "add": {
+                            "color": "bright_green",
+                            "bold": True,
+                            "italic": True,
+                        }
+                    },
                     "ansi256": {"add": {"color": 114}},
                 }
             }
@@ -82,7 +106,16 @@ class ColorConfigTests(unittest.TestCase):
 
         self.assertEqual(114, config.ansi256.add.color)
         self.assertTrue(config.ansi256.add.bold)
+        self.assertTrue(config.ansi256.add.italic)
         self.assertEqual(1, config.ansi256.remove.color)
+
+    def test_invalid_italic_value_is_rejected(self):
+        with self.assertRaisesRegex(
+            jiff_config.ConfigError, "color.ansi16.add.italic must be true or false"
+        ):
+            jiff_config._parse_color_config(
+                {"color": {"ansi16": {"add": {"italic": "yes"}}}}
+            )
 
     def test_default_clears_an_inherited_colour(self):
         config = jiff_config._parse_color_config(
@@ -119,10 +152,11 @@ class ColorConfigTests(unittest.TestCase):
                 )
 
     def test_indexed_colour_builds_a_rich_style(self):
-        style = jiff_config.ColorStyle(color=114, bgcolor=52).rich_style()
+        style = jiff_config.ColorStyle(color=114, bgcolor=52, italic=True).rich_style()
 
         self.assertEqual(114, style.color.number)
         self.assertEqual(52, style.bgcolor.number)
+        self.assertTrue(style.italic)
 
     def test_old_palette_layout_is_rejected(self):
         with self.assertRaisesRegex(

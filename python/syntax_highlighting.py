@@ -90,10 +90,16 @@ class HighlightedLine:
                 bold = (
                     style.bold if syntax.bold is None else (style.bold or syntax.bold)
                 )
+                italic = (
+                    style.italic
+                    if syntax.italic is None
+                    else (style.italic or syntax.italic)
+                )
                 style = Style(
                     color=syntax.color,
                     bgcolor=style.bgcolor,
                     bold=bold,
+                    italic=italic,
                 )
 
             rendered.append(content[start:end], style)
@@ -257,7 +263,11 @@ def _style_for_token(token_type, colors: ColorScheme) -> tuple[Style, Style] | N
 
 
 def _syntax_style(style: ColorStyle) -> Style:
-    # A missing bold flag should leave the diff style alone. Rich treats that
-    # differently from explicitly turning bold off for every token.
+    # Missing attributes should leave the diff style alone. Rich treats that
+    # differently from explicitly turning them off for every token.
     color = style.rich_style().color or "default"
-    return Style(color=color, bold=True if style.bold else None)
+    return Style(
+        color=color,
+        bold=True if style.bold else None,
+        italic=True if style.italic else None,
+    )

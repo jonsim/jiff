@@ -194,8 +194,11 @@ class ThemeTests(unittest.TestCase):
                 self.assertEqual(256, config.depth)
                 self.assertIn("[color.ansi16]", contents)
                 self.assertIn("[color.ansi256]", contents)
+                self.assertEqual(2 * len(STYLE_NAMES), contents.count("italic = false"))
                 for name in STYLE_NAMES:
                     self.assertEqual(2, contents.count(f"{name} ="), name)
+                    self.assertFalse(getattr(config.ansi16, name).italic)
+                    self.assertFalse(getattr(config.ansi256, name).italic)
 
 
 class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
@@ -372,31 +375,38 @@ class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(notice.display)
             self.assertIn("ANSI16 fallback", str(notice.content))
 
-    async def test_palette_bold_settings_are_independent(self):
+    async def test_palette_text_attributes_are_independent(self):
         app = self.make_app()
         async with app.run_test(size=(140, 42)) as pilot:
             app.query_one("#palette", Select).value = "ansi256"
             await pilot.pause()
             app.query_one("#add-bold", Switch).value = False
+            app.query_one("#add-italic", Switch).value = True
             await pilot.pause()
 
             self.assertFalse(app.config.ansi256.add.bold)
+            self.assertTrue(app.config.ansi256.add.italic)
             self.assertFalse(app.config.ansi16.add.bold)
+            self.assertFalse(app.config.ansi16.add.italic)
 
             app.query_one("#palette", Select).value = "ansi16"
             await pilot.pause()
             app.query_one("#add-bold", Switch).value = True
             await pilot.pause()
             self.assertTrue(app.config.ansi16.add.bold)
+            self.assertFalse(app.config.ansi16.add.italic)
             self.assertFalse(app.config.ansi256.add.bold)
+            self.assertTrue(app.config.ansi256.add.italic)
 
-    async def test_bold_switch_is_one_row_tall(self):
+    async def test_attribute_switches_share_one_row(self):
         app = self.make_app()
         async with app.run_test(size=(140, 42)):
             bold = app.query_one("#add-bold", Switch)
+            italic = app.query_one("#add-italic", Switch)
 
             self.assertEqual(1, bold.size.height)
             self.assertEqual(1, bold.parent.size.height)
+            self.assertEqual(bold.parent, italic.parent)
 
     async def test_save_dialog_defaults_to_xdg_and_writes_valid_toml(self):
         app = self.make_app()

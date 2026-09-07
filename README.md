@@ -92,8 +92,8 @@ Pass `--no-syntax` to retain Jiff's diff colours without token highlighting.
 - numbers are blue;
 - function and type names are yellow.
 
-Syntax highlighting only changes foreground colour and optional bold text - diff
-highlights control the background colour.
+Syntax highlighting only changes foreground colour and optional bold or italic
+text - diff highlights control the background colour.
 
 ### Configuration
 
@@ -135,6 +135,7 @@ The two palette tables use the same style names and fields:
 | `color` | Colour name or index | Foreground colour |
 | `bgcolor` | Colour name or index | Background colour; diff styles only |
 | `bold` | `true` or `false` | Enable or disable bold text |
+| `italic` | `true` or `false` | Enable or disable italic text |
 
 Inline tables keep short styles compact:
 
@@ -157,6 +158,7 @@ Alternatively you may use the longer, equivalent, TOML table form:
 color = 231
 bgcolor = 22
 bold = true
+italic = true
 ```
 
 All styles and fields are optional. Missing ANSI16 values use Jiff's built-in
@@ -194,12 +196,12 @@ These styles control the diff itself:
 | `remove_highlight` | Changed characters and unpaired side-by-side removals | `black` | `red` |
 | `overlap_highlight` | Middle-pane characters changed by both outer files in a three-way | `black` | `yellow` |
 
-All eight accept `color`, `bgcolor` and `bold`. Their built-in `bold` value is
-`false`. `line_number` applies to the complete padded line-number cell, but not
-the vertical rule beside it, so a background colour fills the number cleanly
-without catching the divider. The `+`/`-` markers inherit the corresponding
-diff colour and are deliberately bold. `overlap_highlight` is only used in
-three-way side-by-side output.
+All eight accept `color`, `bgcolor`, `bold` and `italic`. Their built-in text
+attributes are both `false`. `line_number` applies to the complete padded
+line-number cell, but not the vertical rule beside it, so a background colour
+fills the number cleanly without catching the divider. The `+`/`-` markers
+inherit the corresponding diff colour and italics, and are deliberately bold.
+`overlap_highlight` is only used in three-way side-by-side output.
 
 #### Syntax highlighting styles
 
@@ -218,9 +220,9 @@ Syntax configuration only changes how token categories are drawn.
 | `syntax_definition` | Function, type and other definition names | `yellow` |
 | `syntax_definition_highlight` | Function, type and other definition names within highlighted text | `yellow` |
 
-These ten styles accept `color` and `bold`; their built-in `bold` value is
-`false`. They do not accept `bgcolor`. Diff backgrounds must remain in control,
-and syntax highlighting renders on top of diff highlights.
+These ten styles accept `color`, `bold` and `italic`; both text attributes
+default to `false`. They do not accept `bgcolor`. Diff backgrounds must remain
+in control, and syntax highlighting renders on top of diff highlights.
 
 Use `--no-syntax` to ignore the syntax styles while retaining the diff colours.
 Use `--no-color` to disable both diff and syntax styling.
@@ -309,7 +311,7 @@ keys, plus a separate terminal-default choice.
 The Side-by-side, Inline, and Three-way tabs use Jiff's real Python renderer, so
 they update as either palette changes. If the current terminal cannot display
 ANSI256, the previews use ANSI16 and say so above the tabs. The saved TOML still
-contains both complete palettes, including separate bold settings.
+contains both complete palettes, including separate bold and italic settings.
 
 Press `Ctrl+S` or use the Save button to save your theme.
 
