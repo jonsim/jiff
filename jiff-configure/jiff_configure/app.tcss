@@ -44,7 +44,7 @@ JiffConfigureApp {
 }
 
 .colour-fields {
-    height: 3;
+    height: 1;
     align-vertical: middle;
 }
 
@@ -84,7 +84,7 @@ Switch.style-switch:focus {
 }
 
 #main-actions {
-    height: 3;
+    height: 1;
     margin: 1 0;
     align-horizontal: right;
 }

@@ -291,6 +291,20 @@ class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual("ansi256", app.edit_palette)
             self.assertIsInstance(app.query_one("#add-color"), Button)
 
+    async def test_control_buttons_are_one_line_high(self):
+        # Repeating a three-line colour button for every style wastes most of the panel.
+        app = self.make_app()
+        async with app.run_test(size=(140, 42)) as pilot:
+            app.query_one("#palette", Select).value = "ansi256"
+            await pilot.pause()
+
+            colour = app.query_one("#add-color", Button)
+            save = app.query_one("#save-config", Button)
+            self.assertEqual(1, colour.size.height)
+            self.assertEqual(1, colour.parent.size.height)
+            self.assertEqual(1, save.size.height)
+            self.assertEqual(1, save.parent.size.height)
+
     async def test_indexed_picker_supports_keyboard_and_mouse_selection(self):
         app = self.make_app()
         async with app.run_test(size=(140, 42)) as pilot:
@@ -318,6 +332,31 @@ class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(114, app.config.ansi256.add.color)
             self.assertEqual("114", str(app.query_one("#add-color", Button).label))
+
+    async def test_editing_from_another_tab_keeps_the_preview_width(self):
+        # Hidden tabs have no width, but edits still refresh every preview.
+        app = self.make_app()
+        async with app.run_test(size=(140, 42)) as pilot:
+            await pilot.pause()
+            previews = (
+                app.query_one("#side-preview", Static),
+                app.query_one("#three-way-preview", Static),
+            )
+            original_widths = [
+                max(map(len, preview.content.plain.splitlines()))
+                for preview in previews
+            ]
+
+            app.query_one("#preview-tabs", TabbedContent).active = "three-way"
+            await pilot.pause()
+            app.query_one("#overlap_highlight-bgcolor", Select).value = "blue"
+            await pilot.pause()
+
+            updated_widths = [
+                max(map(len, preview.content.plain.splitlines()))
+                for preview in previews
+            ]
+            self.assertEqual(original_widths, updated_widths)
 
     async def test_indexed_picker_renders_coloured_swatches_in_a_narrow_terminal(self):
         app = self.make_app()

@@ -318,6 +318,7 @@ class StyleControl(Vertical):
             id=f"{self.style_name}-{field}",
             name=name,
             classes="indexed-colour",
+            compact=True,
         )
 
     def compose(self) -> ComposeResult:
@@ -596,8 +597,10 @@ class JiffConfigureApp(App[None]):
                 with Container(id="style-controls"):
                     yield from self.compose_style_controls()
                 with Horizontal(id="main-actions"):
-                    yield Button("Save", id="save-config", variant="primary")
-                    yield Button("Quit", id="quit")
+                    yield Button(
+                        "Save", id="save-config", variant="primary", compact=True
+                    )
+                    yield Button("Quit", id="quit", compact=True)
             with Vertical(id="previews"):
                 yield Label(id="fallback-notice", classes="fallback-notice")
                 with TabbedContent(initial="side-by-side", id="preview-tabs"):
@@ -641,8 +644,12 @@ class JiffConfigureApp(App[None]):
 
     def refresh_previews(self) -> None:
         """Renders all views from the current controls and preview source."""
+        tabs = self.query_one("#preview-tabs", TabbedContent)
+        active_pane = tabs.query_one(f"#{tabs.active}", TabPane)
+        preview_scroll = active_pane.query_one(VerticalScroll)
+        terminal_width = max(preview_scroll.scrollable_size.width, 20)
+
         side_preview = self.query_one("#side-preview", Static)
-        terminal_width = max(side_preview.size.width, 20)
         source = self.preview_source
         preview_scheme = self.config.scheme(self.ansi256_supported)
         fallback = self.config.depth == 256 and not self.ansi256_supported
