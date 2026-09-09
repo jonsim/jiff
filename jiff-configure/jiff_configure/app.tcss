@@ -129,11 +129,7 @@ Switch.style-switch:focus {
 }
 
 ConfirmDialog,
-SavePathDialog {
-    align: center middle;
-    background: $background 60%;
-}
-
+SavePathDialog,
 IndexedColorPicker {
     align: center middle;
     background: $background 60%;

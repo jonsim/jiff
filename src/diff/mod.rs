@@ -410,47 +410,46 @@ pub(super) fn render_diffs(
 #[allow(clippy::too_many_arguments)]
 fn render_side_by_side_line(
     output: &mut String,
-    lineno_l: ANSIString,
-    lineno_r: ANSIString,
-    wrapno_l: ANSIString,
-    wrapno_r: ANSIString,
-    line_l: &[ANSIString],
-    line_r: &[ANSIString],
-    line_width: (usize, usize),
+    left_margin: ANSIString,
+    right_margin: ANSIString,
+    left_wrap_margin: ANSIString,
+    right_wrap_margin: ANSIString,
+    left_line: &[ANSIString],
+    right_line: &[ANSIString],
+    pane_widths: (usize, usize),
     separator: &str,
 ) {
-    let mut margin_l = &lineno_l;
-    let mut margin_r = &lineno_r;
-    let line_l_iter = wrap_ansistrings(line_l, line_width.0, true);
-    let line_r_iter = wrap_ansistrings(line_r, line_width.1, false);
+    let mut current_left_margin = &left_margin;
+    let mut current_right_margin = &right_margin;
+    let left_lines = wrap_ansistrings(left_line, pane_widths.0, true);
+    let right_lines = wrap_ansistrings(right_line, pane_widths.1, false);
     let mut first_iteration = true;
-    for zipped in line_l_iter.zip_longest(line_r_iter) {
-        let (wrapped_l, wrapped_r, right_missing) = match zipped {
-            EitherOrBoth::Both(l, r) => (l, r, false),
-            EitherOrBoth::Left(l) => (l, " ".repeat(line_width.1), true),
-            EitherOrBoth::Right(r) => (" ".repeat(line_width.0), r, false),
+    for wrapped in left_lines.zip_longest(right_lines) {
+        let (wrapped_left, wrapped_right, right_missing) = match wrapped {
+            EitherOrBoth::Both(left, right) => (left, right, false),
+            EitherOrBoth::Left(left) => (left, " ".repeat(pane_widths.1), true),
+            EitherOrBoth::Right(right) => (" ".repeat(pane_widths.0), right, false),
         };
 
-        // There's nothing useful after the separator for a missing line. Stop
-        // there so redirected output doesn't end in a trail of spaces.
-        if right_missing || wrapped_r.is_empty() {
+        // Keep the right gutter but don't leave whitespace after it.
+        if right_missing || wrapped_right.is_empty() {
             writeln!(
                 output,
                 "{} {}{}{}",
-                margin_l, wrapped_l, separator, margin_r
+                current_left_margin, wrapped_left, separator, current_right_margin
             )
             .expect("writing to a String cannot fail");
         } else {
             writeln!(
                 output,
                 "{} {}{}{} {}",
-                margin_l, wrapped_l, separator, margin_r, wrapped_r
+                current_left_margin, wrapped_left, separator, current_right_margin, wrapped_right
             )
             .expect("writing to a String cannot fail");
         }
         if first_iteration {
-            margin_l = &wrapno_l;
-            margin_r = &wrapno_r;
+            current_left_margin = &left_wrap_margin;
+            current_right_margin = &right_wrap_margin;
             first_iteration = false;
         }
     }

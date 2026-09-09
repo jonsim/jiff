@@ -517,8 +517,9 @@ def print_diffs_side_by_side(
     *,
     output_console: Console,
 ) -> None:
+    """Writes calculated changes in two fixed-width panes."""
     colors = _colors(color, colors)
-    lines = _line_styling(colors)
+    line_styling = _line_styling(colors)
     highlighting = highlighting or HighlightedFiles()
 
     sep = "\u2502"
@@ -545,8 +546,12 @@ def print_diffs_side_by_side(
                     _line_number_margin(lineno_r_fmt, colors),
                     _line_number_margin(empty_lineno, colors),
                     _line_number_margin(empty_lineno, colors),
-                    highlighting.left.render_line(lineno_l - 1, line, lines.same),
-                    highlighting.right.render_line(lineno_r - 1, line, lines.same),
+                    highlighting.left.render_line(
+                        lineno_l - 1, line, line_styling.same
+                    ),
+                    highlighting.right.render_line(
+                        lineno_r - 1, line, line_styling.same
+                    ),
                     line_width,
                     sep,
                 )
@@ -562,9 +567,9 @@ def print_diffs_side_by_side(
                     _line_number_margin(lineno_r_fmt, colors),
                     _line_number_margin(empty_lineno, colors),
                     _line_number_margin(empty_lineno, colors),
-                    Text("", style=lines.same),
+                    Text("", style=line_styling.same),
                     highlighting.right.render_line(
-                        lineno_r - 1, line, lines.add_highlight
+                        lineno_r - 1, line, line_styling.add_highlight
                     ),
                     line_width,
                     sep,
@@ -581,16 +586,19 @@ def print_diffs_side_by_side(
                     _line_number_margin(empty_lineno, colors),
                     _line_number_margin(empty_lineno, colors),
                     highlighting.left.render_line(
-                        lineno_l - 1, line, lines.remove_highlight
+                        lineno_l - 1, line, line_styling.remove_highlight
                     ),
-                    Text("", style=lines.same),
+                    Text("", style=line_styling.same),
                     line_width,
                     sep,
                 )
                 lineno_l += 1
 
         elif change.kind == DiffType.OMITTED:
-            message = Text(_omission_text(change.omitted_lines), style=lines.omitted)
+            message = Text(
+                _omission_text(change.omitted_lines),
+                style=line_styling.omitted,
+            )
             _print_side_by_side_line(
                 output_console,
                 _line_number_margin(empty_lineno, colors),
@@ -620,9 +628,9 @@ def print_diffs_side_by_side(
                         _line_number_margin(lineno_r_fmt, colors),
                         _line_number_margin(empty_lineno, colors),
                         _line_number_margin(empty_lineno, colors),
-                        Text("", style=lines.same),
+                        Text("", style=line_styling.same),
                         highlighting.right.render_line(
-                            lineno_r - 1, line_r, lines.add_highlight
+                            lineno_r - 1, line_r, line_styling.add_highlight
                         ),
                         line_width,
                         sep,
@@ -637,9 +645,9 @@ def print_diffs_side_by_side(
                         _line_number_margin(empty_lineno, colors),
                         _line_number_margin(empty_lineno, colors),
                         highlighting.left.render_line(
-                            lineno_l - 1, line_l, lines.remove_highlight
+                            lineno_l - 1, line_l, line_styling.remove_highlight
                         ),
-                        Text("", style=lines.same),
+                        Text("", style=line_styling.same),
                         line_width,
                         sep,
                     )
@@ -652,7 +660,7 @@ def print_diffs_side_by_side(
                     _style_diff_line(
                         line_l,
                         line_r,
-                        lines,
+                        line_styling,
                         line_l_text,
                         line_r_text,
                         highlighting.left,
@@ -747,64 +755,66 @@ def _print_side_by_side_header(
     output_console.print(Text(left + "│" + right, style=style), soft_wrap=True)
     gutter_rule = "─" * lineno_width
     content_rule = "─" * (pane_width - lineno_width - 1)
+    line_number_style = colors.line_number.rich_style()
     divider = Text()
-    for separator in ("┼", ""):
-        divider.append(gutter_rule, style=colors.line_number.rich_style())
-        divider.append("┬" + content_rule + separator, style=style)
+    divider.append(gutter_rule, style=line_number_style)
+    divider.append("┬" + content_rule + "┼", style=style)
+    divider.append(gutter_rule, style=line_number_style)
+    divider.append("┬" + content_rule, style=style)
     output_console.print(divider, soft_wrap=True)
 
 
 def _print_side_by_side_line(
     output_console: Console,
-    lineno_l: Text,
-    lineno_r: Text,
-    wrapno_l: Text,
-    wrapno_r: Text,
-    line_l: Text,
-    line_r: Text,
+    left_margin: Text,
+    right_margin: Text,
+    left_wrap_margin: Text,
+    right_wrap_margin: Text,
+    left_line: Text,
+    right_line: Text,
     line_width: int,
     separator: str,
-):
-    margin_l = lineno_l
-    margin_r = lineno_r
-    lines_l = _hard_wrap(line_l, line_width)
-    lines_r = _hard_wrap(line_r, line_width)
+) -> None:
+    current_left_margin = left_margin
+    current_right_margin = right_margin
+    left_lines = _hard_wrap(left_line, line_width)
+    right_lines = _hard_wrap(right_line, line_width)
     first_iteration = True
-    for wrapped_l, wrapped_r in itertools.zip_longest(lines_l, lines_r):
-        right_missing = wrapped_r is None
-        if wrapped_l is None:
-            wrapped_l = Text()
-        if wrapped_r is None:
-            wrapped_r = Text()
-        left_padding = " " * (line_width - cell_len(wrapped_l.plain))
-        if right_missing or not wrapped_r.plain:
+    for wrapped_left, wrapped_right in itertools.zip_longest(left_lines, right_lines):
+        right_missing = wrapped_right is None
+        if wrapped_left is None:
+            wrapped_left = Text()
+        if wrapped_right is None:
+            wrapped_right = Text()
+        left_padding = " " * (line_width - cell_len(wrapped_left.plain))
+        if right_missing or not wrapped_right.plain:
             # Keep the right gutter but don't leave whitespace after it.
             output_console.print(
-                margin_l,
+                current_left_margin,
                 " ",
-                wrapped_l,
+                wrapped_left,
                 left_padding,
                 separator,
-                margin_r,
+                current_right_margin,
                 sep="",
                 soft_wrap=True,
             )
         else:
             output_console.print(
-                margin_l,
+                current_left_margin,
                 " ",
-                wrapped_l,
+                wrapped_left,
                 left_padding,
                 separator,
-                margin_r,
+                current_right_margin,
                 " ",
-                wrapped_r,
+                wrapped_right,
                 sep="",
                 soft_wrap=True,
             )
         if first_iteration:
-            margin_l = wrapno_l
-            margin_r = wrapno_r
+            current_left_margin = left_wrap_margin
+            current_right_margin = right_wrap_margin
             first_iteration = False
 
 

@@ -44,7 +44,6 @@ from textual.widgets import (
     TabPane,
 )
 
-STYLE_NAMES = DIFF_STYLE_NAMES + SYNTAX_STYLE_NAMES
 STYLE_LABELS = {
     "same": "Unchanged text",
     "line_number": "Line-number gutters",
@@ -75,14 +74,18 @@ def _ansi256_grid() -> tuple[int | None, ...]:
     """Arranges the xterm colour cube, greys and ANSI colours by similarity."""
     cells: list[int | None] = []
     for row in range(18):
-        red_pair = row // 6
-        blue = row % 6 if red_pair % 2 == 0 else 5 - row % 6
+        # Each six-row band contains two red levels. Snake blue between bands
+        # and green between the two halves so neighbouring cells stay similar.
+        red_band = row // 6
+        blue = row % 6 if red_band % 2 == 0 else 5 - row % 6
 
         for column in range(12):
-            red = red_pair * 2 + column // 6
+            red = red_band * 2 + column // 6
             green = column % 6 if column < 6 else 5 - column % 6
             cells.append(16 + 36 * red + 6 * green + blue)
 
+        # Put the useful one-dimensional palettes beside the cube. Empty
+        # cells keep every row the same width.
         cells.append(232 + row if row < 12 else None)
         cells.append(255 - row if row < 12 else None)
         cells.append(row if row < 8 else None)
@@ -298,7 +301,7 @@ class StyleControl(Vertical):
         self.style = style
         self.palette = palette
 
-    def color_control(self, field: str, value: str | int | None):
+    def color_control(self, field: str, value: str | int | None) -> Select | Button:
         name = f"{self.style_name}.{field}"
         if self.palette == "ansi16":
             return Select(
@@ -711,8 +714,8 @@ class JiffConfigureApp(App[None]):
         if name == self.selected_theme:
             return
 
-        selected_config_changed = self.config != self.themes[self.selected_theme]
-        if self.dirty and selected_config_changed:
+        theme_has_edits = self.config != self.themes[self.selected_theme]
+        if self.dirty and theme_has_edits:
             # Put the old theme back while the dialog is open. If the user
             # cancels, the editor then stays exactly as it was.
             event.select.value = self.selected_theme

@@ -130,10 +130,14 @@ fn parse_input_paths<'a>(
     }
 }
 
-fn file_labels(repository_path: Option<&str>, lpath: &str, rpath: &str) -> (String, String) {
+fn file_labels(
+    repository_path: Option<&str>,
+    left_path: &str,
+    right_path: &str,
+) -> (String, String) {
     match repository_path {
         Some(path) => (format!("a/{path}"), format!("b/{path}")),
-        None => (lpath.to_string(), rpath.to_string()),
+        None => (left_path.to_string(), right_path.to_string()),
     }
 }
 
@@ -147,13 +151,13 @@ fn display_name(path: &str) -> &str {
 fn render_output(
     left: &FileContents,
     right: &FileContents,
-    lpath: &str,
-    rpath: &str,
+    left_path: &str,
+    right_path: &str,
     options: &OutputOptions,
     colors: &config::ColorScheme,
     highlighting: &syntax::HighlightedFiles,
 ) -> String {
-    let (left_label, right_label) = file_labels(options.repository_path, lpath, rpath);
+    let (left_label, right_label) = file_labels(options.repository_path, left_path, right_path);
 
     match (left, right) {
         (FileContents::Text(left), FileContents::Text(right)) => {

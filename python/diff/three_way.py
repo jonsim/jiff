@@ -60,8 +60,8 @@ class OmittedLines:
 class PaneLine:
     """Styled content and margins for one pane of a display row."""
 
-    lineno: Text
-    wrapno: Text
+    margin: Text
+    wrap_margin: Text
     text: Text
     present: bool
 
@@ -366,7 +366,7 @@ def _render_line(
         row = Text()
         for pane_index in range(2):
             pane = panes[pane_index]
-            margin = pane.lineno if row_index == 0 else pane.wrapno
+            margin = pane.margin if row_index == 0 else pane.wrap_margin
             content = (
                 wrapped[pane_index][row_index]
                 if row_index < len(wrapped[pane_index])
@@ -379,7 +379,7 @@ def _render_line(
             row.append(separator)
 
         right = panes[2]
-        margin = right.lineno if row_index == 0 else right.wrapno
+        margin = right.margin if row_index == 0 else right.wrap_margin
         row.append_text(margin)
         if right.present and row_index < len(wrapped[2]):
             content = wrapped[2][row_index]

@@ -242,8 +242,8 @@ struct ThreeWayHighlighting<'a> {
 }
 
 struct PaneLine<'a> {
-    lineno: ANSIString<'a>,
-    wrapno: ANSIString<'a>,
+    margin: ANSIString<'a>,
+    wrap_margin: ANSIString<'a>,
     text: &'a [ANSIString<'a>],
     present: bool,
 }
@@ -267,9 +267,9 @@ fn render_three_way_line(
             .iter()
             .map(|pane| {
                 if index == 0 {
-                    &pane.lineno
+                    &pane.margin
                 } else {
-                    &pane.wrapno
+                    &pane.wrap_margin
                 }
             })
             .collect();
@@ -511,20 +511,20 @@ pub(crate) fn render_three_way_side_by_side(
         &mut output,
         &[
             PaneLine {
-                lineno: heading_margins[0].clone(),
-                wrapno: heading_margins[0].clone(),
+                margin: heading_margins[0].clone(),
+                wrap_margin: heading_margins[0].clone(),
                 text: std::slice::from_ref(&headings[0]),
                 present: true,
             },
             PaneLine {
-                lineno: heading_margins[1].clone(),
-                wrapno: heading_margins[1].clone(),
+                margin: heading_margins[1].clone(),
+                wrap_margin: heading_margins[1].clone(),
                 text: std::slice::from_ref(&headings[1]),
                 present: true,
             },
             PaneLine {
-                lineno: heading_margins[2].clone(),
-                wrapno: heading_margins[2].clone(),
+                margin: heading_margins[2].clone(),
+                wrap_margin: heading_margins[2].clone(),
                 text: std::slice::from_ref(&headings[2]),
                 present: true,
             },
@@ -543,20 +543,20 @@ pub(crate) fn render_three_way_side_by_side(
                     &mut output,
                     &[
                         PaneLine {
-                            lineno: margins.clone(),
-                            wrapno: margins.clone(),
+                            margin: margins.clone(),
+                            wrap_margin: margins.clone(),
                             text: std::slice::from_ref(&rendered),
                             present: true,
                         },
                         PaneLine {
-                            lineno: margins.clone(),
-                            wrapno: margins.clone(),
+                            margin: margins.clone(),
+                            wrap_margin: margins.clone(),
                             text: std::slice::from_ref(&rendered),
                             present: true,
                         },
                         PaneLine {
-                            lineno: margins.clone(),
-                            wrapno: margins.clone(),
+                            margin: margins.clone(),
+                            wrap_margin: margins.clone(),
                             text: std::slice::from_ref(&rendered),
                             present: true,
                         },
@@ -593,20 +593,20 @@ pub(crate) fn render_three_way_side_by_side(
                     &mut output,
                     &[
                         PaneLine {
-                            lineno: margins[0].clone(),
-                            wrapno: wrap_margins[0].clone(),
+                            margin: margins[0].clone(),
+                            wrap_margin: wrap_margins[0].clone(),
                             text: &rendered[0],
                             present: line.left.is_some(),
                         },
                         PaneLine {
-                            lineno: margins[1].clone(),
-                            wrapno: wrap_margins[1].clone(),
+                            margin: margins[1].clone(),
+                            wrap_margin: wrap_margins[1].clone(),
                             text: &rendered[1],
                             present: line.middle.is_some(),
                         },
                         PaneLine {
-                            lineno: margins[2].clone(),
-                            wrapno: wrap_margins[2].clone(),
+                            margin: margins[2].clone(),
+                            wrap_margin: wrap_margins[2].clone(),
                             text: &rendered[2],
                             present: line.right.is_some(),
                         },

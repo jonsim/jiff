@@ -78,11 +78,13 @@ STYLE_NAMES = DIFF_STYLE_NAMES + SYNTAX_STYLE_NAMES
 
 
 class ConfigError(Exception):
-    pass
+    """A Jiff colour configuration could not be loaded or parsed."""
 
 
 @dataclass(frozen=True)
 class ColorStyle:
+    """The foreground, background and attributes for one part of a diff."""
+
     color: str | int | None = None
     bgcolor: str | int | None = None
     bold: bool = False
@@ -102,6 +104,8 @@ class ColorStyle:
 
 @dataclass(frozen=True)
 class ColorScheme:
+    """The complete set of diff and syntax styles for one colour depth."""
+
     same: ColorStyle
     line_number: ColorStyle
     omitted: ColorStyle
@@ -381,15 +385,15 @@ def _ansi256_scheme(scheme: ColorScheme) -> ColorScheme:
     def indexed(value: str | int | None) -> int | None:
         return ANSI16_INDEXES[value] if isinstance(value, str) else value
 
+    def indexed_style(style: ColorStyle) -> ColorStyle:
+        return replace(
+            style,
+            color=indexed(style.color),
+            bgcolor=indexed(style.bgcolor),
+        )
+
     return ColorScheme(
-        **{
-            name: replace(
-                getattr(scheme, name),
-                color=indexed(getattr(scheme, name).color),
-                bgcolor=indexed(getattr(scheme, name).bgcolor),
-            )
-            for name in STYLE_NAMES
-        }
+        **{name: indexed_style(getattr(scheme, name)) for name in STYLE_NAMES}
     )
 
 
