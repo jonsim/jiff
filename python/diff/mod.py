@@ -500,9 +500,14 @@ def _line_diff_spans(
 # =========================
 
 
-def _line_number_margin(number: str, colors: ColorScheme) -> Text:
+def _line_number_margin(
+    number: str,
+    colors: ColorScheme,
+    style: ColorStyle | None = None,
+) -> Text:
     margin = Text()
-    margin.append(number, style=colors.line_number.rich_style())
+    style = colors.line_number if style is None else style
+    margin.append(number, style=style.rich_style())
     margin.append("│", style=colors.same.rich_style())
     return margin
 
@@ -564,7 +569,7 @@ def print_diffs_side_by_side(
                 _print_side_by_side_line(
                     output_console,
                     _line_number_margin(empty_lineno, colors),
-                    _line_number_margin(lineno_r_fmt, colors),
+                    _line_number_margin(lineno_r_fmt, colors, colors.line_number_add),
                     _line_number_margin(empty_lineno, colors),
                     _line_number_margin(empty_lineno, colors),
                     Text("", style=line_styling.same),
@@ -581,7 +586,9 @@ def print_diffs_side_by_side(
                 lineno_l_fmt = f"{lineno_l:>{lineno_width}}"
                 _print_side_by_side_line(
                     output_console,
-                    _line_number_margin(lineno_l_fmt, colors),
+                    _line_number_margin(
+                        lineno_l_fmt, colors, colors.line_number_remove
+                    ),
                     _line_number_margin(empty_lineno, colors),
                     _line_number_margin(empty_lineno, colors),
                     _line_number_margin(empty_lineno, colors),
@@ -625,7 +632,9 @@ def print_diffs_side_by_side(
                     _print_side_by_side_line(
                         output_console,
                         _line_number_margin(empty_lineno, colors),
-                        _line_number_margin(lineno_r_fmt, colors),
+                        _line_number_margin(
+                            lineno_r_fmt, colors, colors.line_number_add
+                        ),
                         _line_number_margin(empty_lineno, colors),
                         _line_number_margin(empty_lineno, colors),
                         Text("", style=line_styling.same),
@@ -640,7 +649,9 @@ def print_diffs_side_by_side(
                     lineno_l_fmt = f"{lineno_l:>{lineno_width}}"
                     _print_side_by_side_line(
                         output_console,
-                        _line_number_margin(lineno_l_fmt, colors),
+                        _line_number_margin(
+                            lineno_l_fmt, colors, colors.line_number_remove
+                        ),
                         _line_number_margin(empty_lineno, colors),
                         _line_number_margin(empty_lineno, colors),
                         _line_number_margin(empty_lineno, colors),
@@ -670,8 +681,12 @@ def print_diffs_side_by_side(
                     )
                     _print_side_by_side_line(
                         output_console,
-                        _line_number_margin(lineno_l_fmt, colors),
-                        _line_number_margin(lineno_r_fmt, colors),
+                        _line_number_margin(
+                            lineno_l_fmt, colors, colors.line_number_remove
+                        ),
+                        _line_number_margin(
+                            lineno_r_fmt, colors, colors.line_number_add
+                        ),
                         _line_number_margin(empty_lineno, colors),
                         _line_number_margin(empty_lineno, colors),
                         line_l_text,

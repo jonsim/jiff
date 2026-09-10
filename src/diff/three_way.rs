@@ -1,8 +1,8 @@
 use super::align::align;
 use super::wrap::wrap_ansistrings;
 use super::{
-    calculate_line_diff, line_diff_overrides, line_number_margin, omission_text, terminal_width,
-    three_way_line_width, Diff, StyleOverride,
+    calculate_line_diff, line_diff_overrides, line_number_margin, omission_text,
+    styled_line_number_margin, terminal_width, three_way_line_width, Diff, StyleOverride,
 };
 use crate::config::ColorScheme;
 use crate::syntax::HighlightedFile;
@@ -572,6 +572,29 @@ pub(crate) fn render_three_way_side_by_side(
                     line.middle.map(|line| line + 1),
                     line.right.map(|line| line + 1),
                 ];
+                // The outer panes have clear before/after roles. The middle can
+                // contain changes in both directions, so its gutter stays neutral.
+                let number_styles = [
+                    match (line.left, line.middle) {
+                        (Some(left), Some(middle))
+                            if source_lines[0][left] != source_lines[1][middle] =>
+                        {
+                            colors.line_number_remove
+                        }
+                        (Some(_), None) => colors.line_number_remove,
+                        _ => colors.line_number,
+                    },
+                    colors.line_number,
+                    match (line.middle, line.right) {
+                        (Some(middle), Some(right))
+                            if source_lines[1][middle] != source_lines[2][right] =>
+                        {
+                            colors.line_number_add
+                        }
+                        (None, Some(_)) => colors.line_number_add,
+                        _ => colors.line_number,
+                    },
+                ];
                 let number_text: Vec<_> = numbers
                     .iter()
                     .map(|number| match number {
@@ -580,9 +603,9 @@ pub(crate) fn render_three_way_side_by_side(
                     })
                     .collect();
                 let margins = [
-                    line_number_margin(&number_text[0], colors),
-                    line_number_margin(&number_text[1], colors),
-                    line_number_margin(&number_text[2], colors),
+                    styled_line_number_margin(&number_text[0], number_styles[0], colors),
+                    styled_line_number_margin(&number_text[1], number_styles[1], colors),
+                    styled_line_number_margin(&number_text[2], number_styles[2], colors),
                 ];
                 let wrap_margins = [
                     line_number_margin(&empty_lineno, colors),
@@ -718,6 +741,31 @@ mod tests {
         assert!(output.contains(&colors.remove_highlight.paint("AAAAA").to_string()));
         assert!(output.contains(&colors.add_highlight.paint("ZZZZZ").to_string()));
         assert!(output.contains(&colors.overlap_highlight.paint("MMMMM").to_string()));
+    }
+
+    #[test]
+    fn outer_changes_use_added_and_removed_line_number_styles() {
+        let colors = ColorScheme {
+            line_number_add: Color::White.on(Color::Green),
+            line_number_remove: Color::White.on(Color::Red),
+            ..ColorScheme::default()
+        };
+        let highlighting = [
+            HighlightedFile::default(),
+            HighlightedFile::default(),
+            HighlightedFile::default(),
+        ];
+
+        let output = render_three_way_side_by_side(
+            ["local", "base", "remote"],
+            ["local.txt", "base.txt", "remote.txt"],
+            &colors,
+            [&highlighting[0], &highlighting[1], &highlighting[2]],
+            None,
+        );
+
+        assert!(output.contains(&colors.line_number_remove.paint("1").to_string()));
+        assert!(output.contains(&colors.line_number_add.paint("1").to_string()));
     }
 
     #[test]

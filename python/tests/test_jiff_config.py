@@ -88,6 +88,30 @@ class ColorConfigTests(unittest.TestCase):
         self.assertEqual(7, config.ansi256.line_number.color)
         self.assertEqual(4, config.ansi256.line_number.bgcolor)
 
+    def test_changed_line_numbers_inherit_the_general_gutter_style(self):
+        # Existing configs should keep styling every gutter as they did before.
+        config = jiff_config.parse_color_config(
+            "[color.ansi16]\n"
+            'line_number = { color = "white", bgcolor = "blue", bold = true }\n'
+        )
+
+        self.assertEqual(config.ansi16.line_number, config.ansi16.line_number_add)
+        self.assertEqual(config.ansi16.line_number, config.ansi16.line_number_remove)
+        self.assertEqual(config.ansi256.line_number, config.ansi256.line_number_add)
+        self.assertEqual(config.ansi256.line_number, config.ansi256.line_number_remove)
+
+    def test_changed_line_number_styles_are_configurable(self):
+        config = jiff_config.parse_color_config(
+            "[color.ansi16]\n"
+            'line_number_add = { color = "green", bgcolor = "blue" }\n'
+            'line_number_remove = { color = "red", bgcolor = "yellow" }\n'
+        )
+
+        self.assertEqual("green", config.ansi16.line_number_add.color)
+        self.assertEqual("blue", config.ansi16.line_number_add.bgcolor)
+        self.assertEqual("red", config.ansi16.line_number_remove.color)
+        self.assertEqual("yellow", config.ansi16.line_number_remove.bgcolor)
+
     def test_ansi256_inherits_the_resolved_ansi16_palette(self):
         config = jiff_config._parse_color_config(
             {

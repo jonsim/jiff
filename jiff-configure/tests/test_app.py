@@ -223,7 +223,10 @@ class ThemeTests(unittest.TestCase):
                 self.assertIn("[color.ansi256]", contents)
                 self.assertEqual(2 * len(STYLE_NAMES), contents.count("italic = false"))
                 for name in STYLE_NAMES:
-                    self.assertEqual(2, contents.count(f"{name} ="), name)
+                    style_count = sum(
+                        line.startswith(f"{name} =") for line in contents.splitlines()
+                    )
+                    self.assertEqual(2, style_count, name)
                     self.assertFalse(getattr(config.ansi16, name).italic)
                     self.assertFalse(getattr(config.ansi256, name).italic)
 
@@ -305,10 +308,10 @@ class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
                 str(app.query_one("#toml-preview").content),
             )
 
-    async def test_gutter_background_excludes_the_live_divider(self):
+    async def test_changed_gutter_background_excludes_the_live_divider(self):
         app = self.make_app()
         async with app.run_test(size=(140, 42)) as pilot:
-            app.query_one("#line_number-bgcolor", Select).value = "blue"
+            app.query_one("#line_number_remove-bgcolor", Select).value = "blue"
             await pilot.pause()
 
             preview = app.query_one("#side-preview", Static).content
@@ -324,7 +327,26 @@ class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
             self.assertIn(
-                'line_number = { color = "default", bgcolor = "blue"',
+                'line_number_remove = { color = "default", bgcolor = "blue"',
+                str(app.query_one("#toml-preview").content),
+            )
+
+    async def test_added_line_number_style_updates_the_preview(self):
+        app = self.make_app()
+        async with app.run_test(size=(140, 42)) as pilot:
+            app.query_one("#line_number_add-bgcolor", Select).value = "green"
+            await pilot.pause()
+
+            preview = app.query_one("#side-preview", Static).content
+
+            self.assertTrue(
+                any(
+                    span.style.bgcolor is not None and span.style.bgcolor.number == 2
+                    for span in preview.spans
+                )
+            )
+            self.assertIn(
+                'line_number_add = { color = "default", bgcolor = "green"',
                 str(app.query_one("#toml-preview").content),
             )
 
@@ -359,9 +381,7 @@ class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
             app.query_one("#palette", Select).value = "ansi256"
             await pilot.pause()
             add_colour = app.query_one("#add-color", Button)
-            add_colour.scroll_visible()
-            await pilot.pause()
-            await pilot.click(add_colour)
+            add_colour.press()
             await pilot.pause()
 
             self.assertIsInstance(app.screen, IndexedColorPicker)

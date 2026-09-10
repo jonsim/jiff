@@ -189,6 +189,8 @@ These styles control the diff itself:
 |---|---|---|---|
 | `same` | Unchanged text | Terminal default | Terminal default |
 | `line_number` | Side-by-side line-number gutters | Terminal default | Terminal default |
+| `line_number_add` | Line numbers beside additions | Inherits `line_number` | Inherits `line_number` |
+| `line_number_remove` | Line numbers beside removals | Inherits `line_number` | Inherits `line_number` |
 | `omitted` | `... N unchanged lines ...` markers | `bright_black` | Terminal default |
 | `add` | Normal added text and unchanged characters in paired lines | `green` | Terminal default |
 | `add_highlight` | Changed characters and unpaired side-by-side additions | `black` | `green` |
@@ -196,12 +198,14 @@ These styles control the diff itself:
 | `remove_highlight` | Changed characters and unpaired side-by-side removals | `black` | `red` |
 | `overlap_highlight` | Middle-pane characters changed by both outer files in a three-way | `black` | `yellow` |
 
-All eight accept `color`, `bgcolor`, `bold` and `italic`. Their built-in text
-attributes are both `false`. `line_number` applies to the complete padded
-line-number cell, but not the vertical rule beside it, so a background colour
-fills the number cleanly without catching the divider. The `+`/`-` markers
-inherit the corresponding diff colour and italics, and are deliberately bold.
-`overlap_highlight` is only used in three-way side-by-side output.
+All ten accept `color`, `bgcolor`, `bold` and `italic`. Their built-in text
+attributes are both `false`. `line_number`, `line_number_add` and
+`line_number_remove` apply to the complete padded line-number cell, but not
+the vertical rule beside it, so a background colour fills the number cleanly
+without catching the divider. The two changed-line styles inherit
+`line_number` when omitted. The `+`/`-` markers inherit the corresponding diff
+colour and italics, and are deliberately bold. `overlap_highlight` is only
+used in three-way side-by-side output.
 
 #### Syntax highlighting styles
 

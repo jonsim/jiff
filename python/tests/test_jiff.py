@@ -352,10 +352,18 @@ class OutputTests(unittest.TestCase):
 
         self.assertEqual(ColorScheme.plain().add, colors.without_additions().add)
         self.assertEqual(
+            ColorScheme.plain().line_number_add,
+            colors.without_additions().line_number_add,
+        )
+        self.assertEqual(
             ColorScheme.plain().add_highlight,
             colors.without_additions().add_highlight,
         )
         self.assertEqual(ColorScheme.plain().remove, colors.without_removals().remove)
+        self.assertEqual(
+            ColorScheme.plain().line_number_remove,
+            colors.without_removals().line_number_remove,
+        )
         self.assertEqual(
             ColorScheme.plain().remove_highlight,
             colors.without_removals().remove_highlight,

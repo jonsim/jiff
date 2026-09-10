@@ -590,11 +590,15 @@ fn side_by_side_header(
 }
 
 pub(super) fn line_number_margin(number: &str, colors: &ColorScheme) -> ANSIString<'static> {
-    Style::default().paint(format!(
-        "{}{}",
-        colors.line_number.paint(number),
-        colors.same.paint("│")
-    ))
+    styled_line_number_margin(number, colors.line_number, colors)
+}
+
+pub(super) fn styled_line_number_margin(
+    number: &str,
+    style: Style,
+    colors: &ColorScheme,
+) -> ANSIString<'static> {
+    Style::default().paint(format!("{}{}", style.paint(number), colors.same.paint("│")))
 }
 
 /// Renders a two-column diff sized to the current terminal.
@@ -660,7 +664,7 @@ pub(super) fn render_diffs_side_by_side(
                     render_side_by_side_line(
                         &mut output,
                         line_number_margin(&empty_lineno, colors),
-                        line_number_margin(&lineno_r_fmt, colors),
+                        styled_line_number_margin(&lineno_r_fmt, colors.line_number_add, colors),
                         line_number_margin(&empty_lineno, colors),
                         line_number_margin(&empty_lineno, colors),
                         &[line_styling.same.paint("")],
@@ -681,7 +685,7 @@ pub(super) fn render_diffs_side_by_side(
                     let lineno_l_fmt = format!("{:w$}", lineno_l, w = lineno_width);
                     render_side_by_side_line(
                         &mut output,
-                        line_number_margin(&lineno_l_fmt, colors),
+                        styled_line_number_margin(&lineno_l_fmt, colors.line_number_remove, colors),
                         line_number_margin(&empty_lineno, colors),
                         line_number_margin(&empty_lineno, colors),
                         line_number_margin(&empty_lineno, colors),
@@ -727,7 +731,11 @@ pub(super) fn render_diffs_side_by_side(
                             let lineno_l_fmt = format!("{:w$}", lineno_l, w = lineno_width);
                             render_side_by_side_line(
                                 &mut output,
-                                line_number_margin(&lineno_l_fmt, colors),
+                                styled_line_number_margin(
+                                    &lineno_l_fmt,
+                                    colors.line_number_remove,
+                                    colors,
+                                ),
                                 line_number_margin(&empty_lineno, colors),
                                 line_number_margin(&empty_lineno, colors),
                                 line_number_margin(&empty_lineno, colors),
@@ -748,7 +756,11 @@ pub(super) fn render_diffs_side_by_side(
                             render_side_by_side_line(
                                 &mut output,
                                 line_number_margin(&empty_lineno, colors),
-                                line_number_margin(&lineno_r_fmt, colors),
+                                styled_line_number_margin(
+                                    &lineno_r_fmt,
+                                    colors.line_number_add,
+                                    colors,
+                                ),
                                 line_number_margin(&empty_lineno, colors),
                                 line_number_margin(&empty_lineno, colors),
                                 &[line_styling.same.paint("")],
@@ -779,8 +791,16 @@ pub(super) fn render_diffs_side_by_side(
                             );
                             render_side_by_side_line(
                                 &mut output,
-                                line_number_margin(&lineno_l_fmt, colors),
-                                line_number_margin(&lineno_r_fmt, colors),
+                                styled_line_number_margin(
+                                    &lineno_l_fmt,
+                                    colors.line_number_remove,
+                                    colors,
+                                ),
+                                styled_line_number_margin(
+                                    &lineno_r_fmt,
+                                    colors.line_number_add,
+                                    colors,
+                                ),
                                 line_number_margin(&empty_lineno, colors),
                                 line_number_margin(&empty_lineno, colors),
                                 &fmt_l,
@@ -1076,6 +1096,33 @@ mod tests {
         let divider = colors.same.paint("│");
 
         assert!(output.starts_with(&format!("{gutter}{divider} Kermit")));
+    }
+
+    #[test]
+    fn changed_lines_use_their_own_line_number_styles() {
+        let colors = ColorScheme {
+            line_number_add: Color::White.on(Color::Green),
+            line_number_remove: Color::White.on(Color::Red),
+            ..ColorScheme::default()
+        };
+
+        let added = render_diffs_side_by_side(
+            &[Diff::Add("Kermit".to_string())],
+            1,
+            &colors,
+            &HighlightedFiles::default(),
+            None,
+        );
+        let removed = render_diffs_side_by_side(
+            &[Diff::Remove("Kermit".to_string())],
+            1,
+            &colors,
+            &HighlightedFiles::default(),
+            None,
+        );
+
+        assert!(added.contains(&colors.line_number_add.paint("1").to_string()));
+        assert!(removed.contains(&colors.line_number_remove.paint("1").to_string()));
     }
 
     #[test]

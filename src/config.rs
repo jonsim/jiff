@@ -14,6 +14,8 @@ const SUPPORTED_COLORS: &str = concat!(
 const STYLE_NAMES: &[&str] = &[
     "same",
     "line_number",
+    "line_number_add",
+    "line_number_remove",
     "omitted",
     "add",
     "add_highlight",
@@ -70,6 +72,8 @@ impl ColorConfig {
 pub(crate) struct ColorScheme {
     pub(crate) same: Style,
     pub(crate) line_number: Style,
+    pub(crate) line_number_add: Style,
+    pub(crate) line_number_remove: Style,
     pub(crate) omitted: Style,
     pub(crate) add: Style,
     pub(crate) add_highlight: Style,
@@ -93,6 +97,8 @@ impl ColorScheme {
         Self {
             same: Style::default(),
             line_number: Style::default(),
+            line_number_add: Style::default(),
+            line_number_remove: Style::default(),
             omitted: Style::default(),
             add: Style::default(),
             add_highlight: Style::default(),
@@ -113,12 +119,14 @@ impl ColorScheme {
     }
 
     pub(crate) fn without_additions(mut self) -> Self {
+        self.line_number_add = Style::default();
         self.add = Style::default();
         self.add_highlight = Style::default();
         self
     }
 
     pub(crate) fn without_removals(mut self) -> Self {
+        self.line_number_remove = Style::default();
         self.remove = Style::default();
         self.remove_highlight = Style::default();
         self
@@ -130,6 +138,8 @@ impl Default for ColorScheme {
         Self {
             same: Style::default(),
             line_number: Style::default(),
+            line_number_add: Style::default(),
+            line_number_remove: Style::default(),
             omitted: Color::DarkGray.normal(),
             add: Color::Green.normal(),
             add_highlight: Color::Black.on(Color::Green),
@@ -160,6 +170,8 @@ fn ansi256_scheme(scheme: ColorScheme) -> ColorScheme {
     ColorScheme {
         same: indexed_style(scheme.same),
         line_number: indexed_style(scheme.line_number),
+        line_number_add: indexed_style(scheme.line_number_add),
+        line_number_remove: indexed_style(scheme.line_number_remove),
         omitted: indexed_style(scheme.omitted),
         add: indexed_style(scheme.add),
         add_highlight: indexed_style(scheme.add_highlight),
@@ -355,6 +367,16 @@ fn parse_scheme(
     }
     parse!(same, true);
     parse!(line_number, true);
+    if table.contains_key("line_number") {
+        if !table.contains_key("line_number_add") {
+            scheme.line_number_add = scheme.line_number;
+        }
+        if !table.contains_key("line_number_remove") {
+            scheme.line_number_remove = scheme.line_number;
+        }
+    }
+    parse!(line_number_add, true);
+    parse!(line_number_remove, true);
     parse!(omitted, true);
     parse!(add, true);
     parse!(add_highlight, true);
@@ -585,6 +607,50 @@ mod tests {
         assert!(config.ansi16.line_number.is_bold);
         assert_eq!(Some(Color::Fixed(7)), config.ansi256.line_number.foreground);
         assert_eq!(Some(Color::Fixed(4)), config.ansi256.line_number.background);
+    }
+
+    #[test]
+    fn changed_line_numbers_inherit_the_general_gutter_style() {
+        // Existing configs should keep styling every gutter as they did before.
+        let config = parse_config(
+            r#"
+            [color.ansi16.line_number]
+            color = "white"
+            bgcolor = "blue"
+            bold = true
+            "#,
+            Path::new("/tmp/.jiffconfig"),
+        )
+        .unwrap();
+
+        assert_eq!(config.ansi16.line_number, config.ansi16.line_number_add);
+        assert_eq!(config.ansi16.line_number, config.ansi16.line_number_remove);
+        assert_eq!(config.ansi256.line_number, config.ansi256.line_number_add);
+        assert_eq!(
+            config.ansi256.line_number,
+            config.ansi256.line_number_remove
+        );
+    }
+
+    #[test]
+    fn changed_line_number_styles_are_configurable() {
+        let scheme = parse(
+            r#"
+            [color.ansi16.line_number_add]
+            color = "green"
+            bgcolor = "blue"
+
+            [color.ansi16.line_number_remove]
+            color = "red"
+            bgcolor = "yellow"
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(Some(Color::Green), scheme.line_number_add.foreground);
+        assert_eq!(Some(Color::Blue), scheme.line_number_add.background);
+        assert_eq!(Some(Color::Red), scheme.line_number_remove.foreground);
+        assert_eq!(Some(Color::Yellow), scheme.line_number_remove.background);
     }
 
     #[test]

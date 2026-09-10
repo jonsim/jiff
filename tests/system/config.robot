@@ -15,6 +15,8 @@ Renderer Loads Custom Colours
     VAR    ${config_contents}
     ...    [color.ansi16]
     ...    \nline_number = { color = "white", bgcolor = "blue", bold = true }
+    ...    \nline_number_add = { color = "cyan", bgcolor = "green", bold = true }
+    ...    \nline_number_remove = { color = "magenta", bgcolor = "red", bold = true }
     ...    \nadd = { color = "blue", bold = true, italic = true }
     ...    \nadd_highlight = { color = "yellow", bgcolor = "blue" }
     ...    \noverlap_highlight = { color = "white", bgcolor = "blue" }
@@ -30,6 +32,7 @@ Renderer Loads Custom Colours
     Output Uses Custom Colours    ${inline.stdout}
     Output Uses Custom Colours    ${side_by_side.stdout}
     Output Uses Custom Gutter    ${side_by_side.stdout}
+    Output Uses Changed Gutters    ${side_by_side.stdout}
 
     VAR    ${local}     ${base_dir}/testcases/threeway/overlapping/local.py
     VAR    ${base}      ${base_dir}/testcases/threeway/overlapping/base.py
@@ -66,4 +69,18 @@ Output Uses Custom Gutter
     ...    ${output}
     ...    foreground=white
     ...    background=blue
+    ...    bold=${True}
+
+Output Uses Changed Gutters
+    [Documentation]    Checks additions and removals have distinct gutter styles.
+    [Arguments]    ${output}
+    Output Should Contain ANSI Style
+    ...    ${output}
+    ...    foreground=cyan
+    ...    background=green
+    ...    bold=${True}
+    Output Should Contain ANSI Style
+    ...    ${output}
+    ...    foreground=magenta
+    ...    background=red
     ...    bold=${True}

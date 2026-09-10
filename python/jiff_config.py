@@ -55,6 +55,8 @@ ANSI16_INDEXES = {
 DIFF_STYLE_NAMES = (
     "same",
     "line_number",
+    "line_number_add",
+    "line_number_remove",
     "omitted",
     "add",
     "add_highlight",
@@ -108,6 +110,8 @@ class ColorScheme:
 
     same: ColorStyle
     line_number: ColorStyle
+    line_number_add: ColorStyle
+    line_number_remove: ColorStyle
     omitted: ColorStyle
     add: ColorStyle
     add_highlight: ColorStyle
@@ -130,6 +134,8 @@ class ColorScheme:
         return cls(
             same=ColorStyle(),
             line_number=ColorStyle(),
+            line_number_add=ColorStyle(),
+            line_number_remove=ColorStyle(),
             omitted=ColorStyle(color="bright_black"),
             add=ColorStyle(color="green"),
             add_highlight=ColorStyle(color="black", bgcolor="green"),
@@ -154,11 +160,21 @@ class ColorScheme:
 
     def without_additions(self) -> ColorScheme:
         """Returns the palette with addition diff styles disabled."""
-        return replace(self, add=ColorStyle(), add_highlight=ColorStyle())
+        return replace(
+            self,
+            line_number_add=ColorStyle(),
+            add=ColorStyle(),
+            add_highlight=ColorStyle(),
+        )
 
     def without_removals(self) -> ColorScheme:
         """Returns the palette with removal diff styles disabled."""
-        return replace(self, remove=ColorStyle(), remove_highlight=ColorStyle())
+        return replace(
+            self,
+            line_number_remove=ColorStyle(),
+            remove=ColorStyle(),
+            remove_highlight=ColorStyle(),
+        )
 
 
 @dataclass(frozen=True)
@@ -314,18 +330,24 @@ def _parse_scheme(
         return defaults
     table = _table(value, field)
     _reject_unknown_fields(table, set(STYLE_NAMES), field)
-    return ColorScheme(
-        **{
-            name: _parse_style(
-                table.get(name),
-                getattr(defaults, name),
-                f"{field}.{name}",
-                indexed,
-                name in DIFF_STYLE_NAMES,
-            )
-            for name in STYLE_NAMES
-        }
-    )
+    styles = {
+        name: _parse_style(
+            table.get(name),
+            getattr(defaults, name),
+            f"{field}.{name}",
+            indexed,
+            name in DIFF_STYLE_NAMES,
+        )
+        for name in STYLE_NAMES
+    }
+
+    # A configured general gutter style still applies to changed lines unless
+    # the corresponding specialised style is present.
+    if "line_number" in table:
+        for name in ("line_number_add", "line_number_remove"):
+            if name not in table:
+                styles[name] = styles["line_number"]
+    return ColorScheme(**styles)
 
 
 def _parse_style(

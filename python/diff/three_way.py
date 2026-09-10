@@ -468,8 +468,23 @@ def render_three_way_side_by_side(
 
             rendered = _style_three_way_line(row, colors, highlighting)
             source_lines = (row.left, row.middle, row.right)
+            # The outer panes have clear before/after roles. The middle can
+            # contain changes in both directions, so its gutter stays neutral.
+            number_styles = (
+                colors.line_number_remove
+                if row.left is not None
+                and (row.middle is None or row.left.text != row.middle.text)
+                else colors.line_number,
+                colors.line_number,
+                colors.line_number_add
+                if row.right is not None
+                and (row.middle is None or row.right.text != row.middle.text)
+                else colors.line_number,
+            )
             panes = []
-            for source_line, text in zip(source_lines, rendered, strict=True):
+            for source_line, text, number_style in zip(
+                source_lines, rendered, number_styles, strict=True
+            ):
                 number = (
                     f"{source_line.index + 1:>{lineno_width}}"
                     if source_line is not None
@@ -477,7 +492,7 @@ def render_three_way_side_by_side(
                 )
                 panes.append(
                     PaneLine(
-                        diff_mod._line_number_margin(number, colors),
+                        diff_mod._line_number_margin(number, colors, number_style),
                         diff_mod._line_number_margin(empty_lineno, colors),
                         text,
                         source_line is not None,

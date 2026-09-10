@@ -78,6 +78,35 @@ class SideBySideRenderingTests(unittest.TestCase):
             )
         )
 
+    def test_changed_lines_use_their_own_line_number_styles(self):
+        colors = replace(
+            ColorScheme.default(),
+            line_number_add=ColorStyle(bgcolor="green"),
+            line_number_remove=ColorStyle(bgcolor="red"),
+        )
+
+        for kind, expected_background in (
+            (DiffType.ADD, 2),
+            (DiffType.REMOVE, 1),
+        ):
+            with self.subTest(kind=kind):
+                output = diff.render_diffs_side_by_side(
+                    [Diff(kind, "Kermit")],
+                    1,
+                    True,
+                    colors,
+                    terminal_width=40,
+                )
+                rendered = Text.from_ansi(output)
+                number_offset = rendered.plain.index("1│")
+                gutter = next(
+                    span
+                    for span in rendered.spans
+                    if span.start <= number_offset < span.end
+                )
+
+                self.assertEqual(expected_background, gutter.style.bgcolor.number)
+
     def test_line_number_background_does_not_cover_the_pane_header(self):
         # The rule below the headings separates panes; it is not a line number.
         colors = replace(

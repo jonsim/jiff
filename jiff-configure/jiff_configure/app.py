@@ -51,6 +51,8 @@ CURRENT_CONFIG_THEME = "Current configuration"
 STYLE_LABELS = {
     "same": "Unchanged text",
     "line_number": "Line-number gutters",
+    "line_number_add": "Added line numbers",
+    "line_number_remove": "Removed line numbers",
     "omitted": "Omitted lines",
     "add": "Added text",
     "add_highlight": "Added highlights",

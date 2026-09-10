@@ -14,7 +14,7 @@ from diff.three_way import (
 )
 from jiff_config import ColorScheme, ColorStyle
 from rich.style import Style
-from rich.text import Span
+from rich.text import Span, Text
 from syntax_highlighting import HighlightedFile
 
 
@@ -118,6 +118,36 @@ class ThreeWayRenderingTests(unittest.TestCase):
         self.assertIn("1│ same", output)
         self.assertTrue(all(not line.endswith(" ") for line in output.splitlines()))
         self.assertNotIn("\x1b[", output)
+
+    def test_outer_changes_use_added_and_removed_line_number_styles(self):
+        colors = replace(
+            ColorScheme.default(),
+            line_number_add=ColorStyle(bgcolor="green"),
+            line_number_remove=ColorStyle(bgcolor="red"),
+        )
+
+        output = render_three_way_side_by_side(
+            ("local", "base", "remote"),
+            ("local.txt", "base.txt", "remote.txt"),
+            colors=colors,
+            terminal_width=120,
+        )
+        rendered = Text.from_ansi(output)
+        number_offsets = [
+            index
+            for index in range(len(rendered.plain))
+            if rendered.plain.startswith("1│", index)
+        ]
+        backgrounds = [
+            next(
+                span.style.bgcolor.number
+                for span in rendered.spans
+                if span.start <= offset < span.end and span.style.bgcolor is not None
+            )
+            for offset in (number_offsets[0], number_offsets[2])
+        ]
+
+        self.assertEqual([1, 2], backgrounds)
 
     def test_width_accounts_for_two_separators_and_three_margins(self):
         self.assertEqual(36, _line_width(120, 1))
