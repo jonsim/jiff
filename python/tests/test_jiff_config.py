@@ -186,6 +186,19 @@ class ColorConfigTests(unittest.TestCase):
 
 
 class ConfigPathTests(unittest.TestCase):
+    def test_public_loader_accepts_an_explicit_config_path(self):
+        # jiff-configure can load the path found by Jiff without rediscovering it.
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "gonzo.toml"
+            path.write_text(
+                '[color.ansi16]\nadd = { color = "blue" }\n',
+                encoding="utf-8",
+            )
+
+            config = jiff_config.load_color_config(path)
+
+        self.assertEqual("blue", config.ansi16.add.color)
+
     def test_default_path_uses_an_absolute_xdg_home(self):
         path = jiff_config._default_config_path(
             {"XDG_CONFIG_HOME": "/the-muppet-theatre"}, Path("/home/kermit")

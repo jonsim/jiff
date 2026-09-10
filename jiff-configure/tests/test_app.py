@@ -26,6 +26,7 @@ from jiff_configure.app import (
     PreviewSource,
     SavePathDialog,
     load_preview_source,
+    load_starting_themes,
     load_themes,
 )
 from textual.widgets import Button, Input, Label, Select, Static, Switch, TabbedContent
@@ -151,6 +152,32 @@ class ThemeTests(unittest.TestCase):
             set(themes),
         )
 
+    def test_standard_config_is_added_as_the_starting_theme(self):
+        # A saved config should appear first rather than masquerading as Default.
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.toml"
+            path.write_text(
+                '[color.ansi16]\nadd = { color = "blue" }\n',
+                encoding="utf-8",
+            )
+            with mock.patch(
+                "jiff_configure.app.find_color_config_path",
+                return_value=path,
+            ):
+                themes, selected_theme = load_starting_themes()
+
+        self.assertEqual("Current configuration", selected_theme)
+        self.assertEqual("Current configuration", next(iter(themes)))
+        self.assertEqual("blue", themes[selected_theme].ansi16.add.color)
+
+    @mock.patch("jiff_configure.app.find_color_config_path", return_value=None)
+    def test_default_theme_is_used_without_a_standard_config(self, _find_config):
+        # Avoid a duplicate Current configuration entry when Jiff has no config.
+        themes, selected_theme = load_starting_themes()
+
+        self.assertEqual("Default", selected_theme)
+        self.assertNotIn("Current configuration", themes)
+
     def test_dark_contrast_and_gruvbox_use_bright_foregrounds(self):
         # Standard backgrounds keep highlighted spans less overpowering.
         themes = load_themes()
@@ -242,6 +269,27 @@ class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
                 'syntax_keyword = { color = "magenta"',
                 str(app.query_one("#toml-preview").content),
             )
+
+    async def test_loaded_config_can_switch_to_a_packaged_theme(self):
+        # The loaded config behaves like any other starting point in the picker.
+        loaded = parse_color_config('[color.ansi16]\nadd = { color = "blue" }\n')
+        themes = {"Current configuration": loaded, **load_themes()}
+        app = JiffConfigureApp(
+            PreviewSource.built_in(),
+            themes,
+            selected_theme="Current configuration",
+        )
+        async with app.run_test(size=(140, 42)) as pilot:
+            theme = app.query_one("#theme", Select)
+
+            self.assertEqual("Current configuration", theme.value)
+            self.assertEqual("blue", app.config.ansi16.add.color)
+
+            theme.value = "Dracula"
+            await pilot.pause()
+
+            self.assertEqual("Dracula", app.selected_theme)
+            self.assertEqual(app.themes["Dracula"], app.config)
 
     async def test_editing_a_colour_updates_the_live_toml(self):
         app = self.make_app()

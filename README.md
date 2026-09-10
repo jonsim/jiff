@@ -296,17 +296,20 @@ uv run jiff-configure
 ```
 
 This starts with a small built-in Python diff which exercises all supported diff
-functionality. To preview a pair of your own files:
+functionality. If Jiff already has a configuration file, the tool loads it as
+`Current configuration` using the same path lookup as Jiff. To preview a pair
+of your own files:
 
 ```sh
 uv run jiff-configure OLD NEW
 ```
 
-Pick one of the packaged themes as a starting point. `Preferred output` chooses
-the depth used by Jiff and the previews; `Palette to edit` switches between the
-indexed palette and its named fallback. ANSI16 fields use named selectors.
-ANSI256 fields open a 16 by 16 colour grid which works with the mouse or arrow
-keys, plus a separate terminal-default choice.
+Use the picker to switch between the current configuration, the default colours
+and the packaged themes. `Preferred output` chooses the depth used by Jiff and
+the previews; `Palette to edit` switches between the indexed palette and its
+named fallback. ANSI16 fields use named selectors. ANSI256 fields open a 16 by
+16 colour grid which works with the mouse or arrow keys, plus a separate
+terminal-default choice.
 
 The Side-by-side, Inline, and Three-way tabs use Jiff's real Python renderer, so
 they update as either palette changes. If the current terminal cannot display

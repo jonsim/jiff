@@ -180,8 +180,15 @@ class ColorConfig:
         return self.ansi16
 
 
-def load_color_config() -> ColorConfig:
-    path = _find_config_file(os.environ, Path.home())
+def find_color_config_path() -> Path | None:
+    """Finds the configuration file Jiff would load, if one exists."""
+    return _find_config_file(os.environ, Path.home())
+
+
+def load_color_config(path: Path | None = None) -> ColorConfig:
+    """Loads an explicit configuration or Jiff's discovered configuration."""
+    if path is None:
+        path = find_color_config_path()
     if path is None:
         return ColorConfig.default()
     try:

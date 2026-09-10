@@ -19,6 +19,8 @@ from jiff_config import (
     ConfigError,
     color_config_to_toml,
     default_config_path,
+    find_color_config_path,
+    load_color_config,
     parse_color_config,
     terminal_supports_ansi256,
 )
@@ -44,6 +46,8 @@ from textual.widgets import (
     TabPane,
 )
 
+DEFAULT_THEME = "Default"
+CURRENT_CONFIG_THEME = "Current configuration"
 STYLE_LABELS = {
     "same": "Unchanged text",
     "line_number": "Line-number gutters",
@@ -275,7 +279,7 @@ def load_preview_source(paths: Sequence[str]) -> PreviewSource:
 
 def load_themes() -> dict[str, ColorConfig]:
     """Loads the built-in default and every packaged TOML theme."""
-    themes = {"Default": ColorConfig.default()}
+    themes = {DEFAULT_THEME: ColorConfig.default()}
     resources = files("jiff_configure.themes")
     for resource in sorted(resources.iterdir(), key=lambda item: item.name):
         if not resource.name.endswith(".toml"):
@@ -286,6 +290,17 @@ def load_themes() -> dict[str, ColorConfig]:
         except ConfigError as error:
             raise ConfigError(f"bundled theme {resource.name}: {error}") from error
     return themes
+
+
+def load_starting_themes() -> tuple[dict[str, ColorConfig], str]:
+    """Loads themes and selects Jiff's current configuration when present."""
+    themes = load_themes()
+    config_path = find_color_config_path()
+    if config_path is None:
+        return themes, DEFAULT_THEME
+
+    current_config = load_color_config(config_path)
+    return {CURRENT_CONFIG_THEME: current_config, **themes}, CURRENT_CONFIG_THEME
 
 
 def _configured_colour(colour: str) -> str | None:
@@ -540,16 +555,17 @@ class JiffConfigureApp(App[None]):
         self,
         preview_source: PreviewSource,
         themes: dict[str, ColorConfig],
+        selected_theme: str = DEFAULT_THEME,
     ) -> None:
         # Textual normally replaces the terminal's 16 ANSI colours with its own
         # RGB palette. If it does that here, the preview won't match Jiff.
         super().__init__(ansi_color=True)
         self.preview_source = preview_source
         self.themes = themes
-        self.config = themes["Default"]
+        self.config = themes[selected_theme]
         self.edit_palette = "ansi16"
         self.ansi256_supported = terminal_supports_ansi256(force_terminal=True)
-        self.selected_theme = "Default"
+        self.selected_theme = selected_theme
         self.dirty = False
 
     @property
@@ -871,10 +887,10 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = parser.parse_args(argv)
     try:
         source = load_preview_source(args.files)
-        themes = load_themes()
+        themes, selected_theme = load_starting_themes()
     except (ConfigError, OSError, TypeError, ValueError) as error:
         parser.error(str(error))
-    JiffConfigureApp(source, themes).run()
+    JiffConfigureApp(source, themes, selected_theme).run()
 
 
 if __name__ == "__main__":

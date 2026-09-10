@@ -10,6 +10,11 @@ Run it from the root of the Jiff repository:
 uv run jiff-configure
 ```
 
+If Jiff already has a configuration file, `jiff-configure` loads it as
+`Current configuration`. This uses the same `JIFF_CONFIG`, XDG and legacy
+path lookup as Jiff itself. The picker still includes `Default` and every
+packaged theme, so you can try another theme and switch back.
+
 The built-in examples exercise every diff and syntax style. Side-by-side and
 Inline show the larger two-file example. Three-way uses a separate compact
 example so all three panes remain readable beside the controls.
@@ -23,9 +28,9 @@ uv run jiff-configure OLD NEW
 Those files replace the Side-by-side and Inline examples. The Three-way tab
 keeps its compact built-in example.
 
-Choose a packaged theme as a starting point, then set `Preferred output` to
-ANSI16 or ANSI256. `Palette to edit` switches between that indexed palette and
-the named ANSI16 fallback. ANSI256 colour fields open a 16 by 16 grid; use the
+Choose a theme as a starting point, then set `Preferred output` to ANSI16 or
+ANSI256. `Palette to edit` switches between that indexed palette and the named
+ANSI16 fallback. ANSI256 colour fields open a 16 by 16 grid; use the
 mouse or arrow keys to choose an index from 0 to 255, or select terminal
 default.
 
