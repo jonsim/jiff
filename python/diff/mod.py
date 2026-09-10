@@ -755,13 +755,8 @@ def _print_side_by_side_header(
     output_console.print(Text(left + "│" + right, style=style), soft_wrap=True)
     gutter_rule = "─" * lineno_width
     content_rule = "─" * (pane_width - lineno_width - 1)
-    line_number_style = colors.line_number.rich_style()
-    divider = Text()
-    divider.append(gutter_rule, style=line_number_style)
-    divider.append("┬" + content_rule + "┼", style=style)
-    divider.append(gutter_rule, style=line_number_style)
-    divider.append("┬" + content_rule, style=style)
-    output_console.print(divider, soft_wrap=True)
+    divider = f"{gutter_rule}┬{content_rule}┼{gutter_rule}┬{content_rule}"
+    output_console.print(Text(divider, style=style), soft_wrap=True)
 
 
 def _print_side_by_side_line(

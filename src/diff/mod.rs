@@ -577,20 +577,15 @@ fn side_by_side_header(
     let gutter_rule = "─".repeat(lineno_width);
     let content_rule = "─".repeat(pane_width - lineno_width - 1);
     let left_padding = " ".repeat(pane_width - pane_labels[0].width() - 1);
+    let divider = format!("{gutter_rule}┬{content_rule}┼{gutter_rule}┬{content_rule}");
     format!(
-        "{}\n{}\n{}{}{}{}{}{}{}\n",
+        "{}\n{}\n{}\n",
         colors.same.paint(format!("{rule}┬{rule}")),
         colors.same.paint(format!(
             " {}{left_padding}│ {}",
             pane_labels[0], pane_labels[1]
         )),
-        colors.line_number.paint(&gutter_rule),
-        colors.same.paint("┬"),
-        colors.same.paint(&content_rule),
-        colors.same.paint("┼"),
-        colors.line_number.paint(&gutter_rule),
-        colors.same.paint("┬"),
-        colors.same.paint(&content_rule),
+        colors.same.paint(divider),
     )
 }
 
@@ -1107,6 +1102,19 @@ mod tests {
             ),
             output,
         );
+    }
+
+    #[test]
+    fn line_number_background_does_not_cover_the_pane_header() {
+        // The rule below the headings separates panes; it is not a line number.
+        let colors = ColorScheme {
+            line_number: Color::LightGray.on(Color::Blue),
+            ..ColorScheme::default()
+        };
+
+        let output = side_by_side_header(["a/left.py", "b/right.py"], 19, 1, &colors);
+
+        assert!(!output.lines().nth(2).unwrap().contains("\x1b["));
     }
 
     #[test]

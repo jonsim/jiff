@@ -78,6 +78,27 @@ class SideBySideRenderingTests(unittest.TestCase):
             )
         )
 
+    def test_line_number_background_does_not_cover_the_pane_header(self):
+        # The rule below the headings separates panes; it is not a line number.
+        colors = replace(
+            ColorScheme.default(),
+            line_number=ColorStyle(bgcolor="blue"),
+        )
+
+        output = diff.render_diffs_side_by_side(
+            [Diff(DiffType.SAME, "Kermit")],
+            10,
+            True,
+            colors,
+            terminal_width=40,
+            labels=("a/left.py", "b/right.py"),
+        )
+        header_rule = Text.from_ansi(output.splitlines()[2])
+
+        self.assertFalse(
+            any(span.style.bgcolor is not None for span in header_rule.spans)
+        )
+
     def test_terminal_width_falls_back_to_an_attached_standard_stream(self):
         # Git sends stdout to its pager, leaving another stream attached to the
         # terminal which launched it.
