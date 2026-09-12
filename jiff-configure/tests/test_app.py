@@ -10,6 +10,7 @@ from jiff_config import (
     CANONICAL_COLORS,
     STYLE_NAMES,
     ColorConfig,
+    ColorDepth,
     ColorScheme,
     parse_color_config,
 )
@@ -25,6 +26,7 @@ from jiff_configure.app import (
     JiffConfigureApp,
     PreviewSource,
     SavePathDialog,
+    TrueColorPicker,
     load_preview_source,
     load_starting_themes,
     load_themes,
@@ -196,7 +198,7 @@ class ThemeTests(unittest.TestCase):
     def test_twilight_dark_uses_the_tilix_palette(self):
         twilight = load_themes()["Twilight Dark"]
 
-        self.assertEqual(256, twilight.depth)
+        self.assertEqual(ColorDepth.TRUECOLOR, twilight.depth)
         self.assertEqual("green", twilight.ansi16.add.color)
         self.assertEqual("white", twilight.ansi16.line_number.color)
         self.assertTrue(twilight.ansi16.line_number.bold)
@@ -209,7 +211,7 @@ class ThemeTests(unittest.TestCase):
         self.assertEqual(228, twilight.ansi256.overlap_highlight.bgcolor)
         self.assertEqual(139, twilight.ansi256.syntax_keyword.color)
 
-    def test_every_packaged_theme_contains_both_complete_palettes(self):
+    def test_every_packaged_theme_contains_all_complete_palettes(self):
         resources = files("jiff_configure.themes")
         for resource in resources.iterdir():
             if not resource.name.endswith(".toml"):
@@ -218,17 +220,19 @@ class ThemeTests(unittest.TestCase):
                 contents = resource.read_text(encoding="utf-8")
                 config = parse_color_config(contents)
 
-                self.assertEqual(256, config.depth)
+                self.assertEqual(ColorDepth.TRUECOLOR, config.depth)
                 self.assertIn("[color.ansi16]", contents)
                 self.assertIn("[color.ansi256]", contents)
-                self.assertEqual(2 * len(STYLE_NAMES), contents.count("italic = false"))
+                self.assertIn("[color.truecolor]", contents)
+                self.assertEqual(3 * len(STYLE_NAMES), contents.count("italic = false"))
                 for name in STYLE_NAMES:
                     style_count = sum(
                         line.startswith(f"{name} =") for line in contents.splitlines()
                     )
-                    self.assertEqual(2, style_count, name)
+                    self.assertEqual(3, style_count, name)
                     self.assertFalse(getattr(config.ansi16, name).italic)
                     self.assertFalse(getattr(config.ansi256, name).italic)
+                    self.assertFalse(getattr(config.truecolor, name).italic)
 
 
 class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
@@ -311,6 +315,8 @@ class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
     async def test_changed_gutter_background_excludes_the_live_divider(self):
         app = self.make_app()
         async with app.run_test(size=(140, 42)) as pilot:
+            app.query_one("#depth", Select).value = 16
+            await pilot.pause()
             app.query_one("#line_number_remove-bgcolor", Select).value = "blue"
             await pilot.pause()
 
@@ -334,6 +340,8 @@ class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
     async def test_added_line_number_style_updates_the_preview(self):
         app = self.make_app()
         async with app.run_test(size=(140, 42)) as pilot:
+            app.query_one("#depth", Select).value = 16
+            await pilot.pause()
             app.query_one("#line_number_add-bgcolor", Select).value = "green"
             await pilot.pause()
 
@@ -401,6 +409,31 @@ class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(114, app.config.ansi256.add.color)
             self.assertEqual("114", str(app.query_one("#add-color", Button).label))
 
+    async def test_truecolor_picker_validates_and_applies_rgb(self):
+        app = self.make_app()
+        async with app.run_test(size=(140, 42)) as pilot:
+            app.query_one("#palette", Select).value = "truecolor"
+            await pilot.pause()
+            app.query_one("#add-color", Button).press()
+            await pilot.pause()
+
+            self.assertIsInstance(app.screen, TrueColorPicker)
+            rgb = app.screen.query_one("#rgb-value", Input)
+            rgb.value = "Gonzo"
+            await pilot.click("#rgb-accept")
+            self.assertIn(
+                "#RRGGBB",
+                str(app.screen.query_one("#rgb-error", Label).content),
+            )
+
+            rgb.value = "#12Ab34"
+            await pilot.pause()
+            await pilot.click("#rgb-accept")
+            await pilot.pause()
+
+            self.assertEqual("#12ab34", app.config.truecolor.add.color)
+            self.assertEqual("#12ab34", str(app.query_one("#add-color", Button).label))
+
     async def test_editing_from_another_tab_keeps_the_preview_width(self):
         # Hidden tabs have no width, but edits still refresh every preview.
         app = self.make_app()
@@ -455,7 +488,7 @@ class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_ansi256_edit_updates_the_live_preview(self):
         app = self.make_app()
-        app.ansi256_supported = True
+        app.terminal_depth = ColorDepth.ANSI256
         async with app.run_test(size=(140, 42)) as pilot:
             app.query_one("#depth", Select).value = 256
             app.query_one("#palette", Select).value = "ansi256"
@@ -473,7 +506,7 @@ class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_fallback_notice_appears_when_ansi256_is_unavailable(self):
         app = self.make_app()
-        app.ansi256_supported = False
+        app.terminal_depth = ColorDepth.ANSI16
         async with app.run_test(size=(140, 42)) as pilot:
             app.query_one("#depth", Select).value = 256
             await pilot.pause()

@@ -1,6 +1,6 @@
 # High-contrast colours for terminals with a dark background.
 [color]
-depth = 256
+depth = 24
 
 [color.ansi16]
 same = { color = "white", bgcolor = "default", bold = false, italic = false }
@@ -45,3 +45,25 @@ syntax_number = { color = 39, bold = false, italic = false }
 syntax_number_highlight = { color = 39, bold = false, italic = false }
 syntax_definition = { color = 226, bold = false, italic = false }
 syntax_definition_highlight = { color = 226, bold = false, italic = false }
+
+[color.truecolor]
+same = { color = "#eeeeee", bgcolor = "default", bold = false, italic = false }
+line_number = { color = "#eeeeee", bgcolor = "default", bold = true, italic = false }
+line_number_add = { color = "#eeeeee", bgcolor = "default", bold = true, italic = false }
+line_number_remove = { color = "#eeeeee", bgcolor = "default", bold = true, italic = false }
+omitted = { color = "#808080", bgcolor = "default", bold = false, italic = false }
+add = { color = "#00ffff", bgcolor = "default", bold = true, italic = false }
+add_highlight = { color = "#000000", bgcolor = "#008787", bold = true, italic = false }
+remove = { color = "#ffff00", bgcolor = "default", bold = true, italic = false }
+remove_highlight = { color = "#000000", bgcolor = "#af5f00", bold = true, italic = false }
+overlap_highlight = { color = "#000000", bgcolor = "#ff00ff", bold = true, italic = false }
+syntax_comment = { color = "#808080", bold = false, italic = false }
+syntax_comment_highlight = { color = "#808080", bold = false, italic = false }
+syntax_keyword = { color = "#ff00ff", bold = false, italic = false }
+syntax_keyword_highlight = { color = "#ff00ff", bold = false, italic = false }
+syntax_string = { color = "#00ffff", bold = false, italic = false }
+syntax_string_highlight = { color = "#00ffff", bold = false, italic = false }
+syntax_number = { color = "#00afff", bold = false, italic = false }
+syntax_number_highlight = { color = "#00afff", bold = false, italic = false }
+syntax_definition = { color = "#ffff00", bold = false, italic = false }
+syntax_definition_highlight = { color = "#ffff00", bold = false, italic = false }

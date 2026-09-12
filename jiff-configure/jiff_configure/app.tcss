@@ -67,6 +67,11 @@ JiffConfigureApp {
     min-width: 8;
 }
 
+.rgb-colour {
+    width: 1fr;
+    min-width: 10;
+}
+
 .attribute-fields {
     height: 1;
     align-vertical: middle;
@@ -130,9 +135,25 @@ Switch.style-switch:focus {
 
 ConfirmDialog,
 SavePathDialog,
-IndexedColorPicker {
+IndexedColorPicker,
+TrueColorPicker {
     align: center middle;
     background: $background 60%;
+}
+
+.rgb-dialog {
+    width: 54;
+}
+
+#rgb-swatch {
+    width: 100%;
+    height: 2;
+    margin-top: 1;
+}
+
+#rgb-error {
+    height: 1;
+    color: $error;
 }
 
 .indexed-dialog {

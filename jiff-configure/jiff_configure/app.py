@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
@@ -14,6 +15,7 @@ from jiff_config import (
     DIFF_STYLE_NAMES,
     SYNTAX_STYLE_NAMES,
     ColorConfig,
+    ColorDepth,
     ColorScheme,
     ColorStyle,
     ConfigError,
@@ -22,7 +24,7 @@ from jiff_config import (
     find_color_config_path,
     load_color_config,
     parse_color_config,
-    terminal_supports_ansi256,
+    terminal_color_depth,
 )
 from rich.text import Text
 from textual import events, on
@@ -330,11 +332,12 @@ class StyleControl(Vertical):
                 name=name,
                 classes="colour-select",
             )
+        classes = "indexed-colour" if self.palette == "ansi256" else "rgb-colour"
         return Button(
             "Default" if value is None else str(value),
             id=f"{self.style_name}-{field}",
             name=name,
-            classes="indexed-colour",
+            classes=classes,
             compact=True,
         )
 
@@ -479,6 +482,70 @@ class IndexedColorPicker(ModalScreen[int | None]):
         self._update_readout(event.value)
 
 
+class TrueColorPicker(ModalScreen[str | None]):
+    """Accepts one six-digit RGB colour or terminal default."""
+
+    BINDINGS: ClassVar[list[Binding]] = [
+        Binding("escape", "cancel", "Cancel", show=False),
+    ]
+
+    def __init__(self, value: str | None) -> None:
+        super().__init__()
+        self.value = value
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="dialog rgb-dialog"):
+            yield Label("Choose a truecolour value", classes="dialog-title")
+            yield Input(self.value or "", placeholder="#RRGGBB", id="rgb-value")
+            yield Static("  ", id="rgb-swatch")
+            yield Label("", id="rgb-error")
+            with Horizontal(classes="dialog-actions"):
+                yield Button("Terminal default", id="rgb-default")
+                yield Button("Cancel", id="rgb-cancel")
+                yield Button("Choose", id="rgb-accept", variant="primary")
+
+    def on_mount(self) -> None:
+        self.query_one("#rgb-value", Input).focus()
+        self._update_swatch(self.value or "")
+
+    def _normalised_value(self) -> str | None:
+        value = self.query_one("#rgb-value", Input).value.strip().lower()
+        if re.fullmatch(r"#[0-9a-f]{6}", value):
+            return value
+        self.query_one("#rgb-error", Label).update("Enter a colour as #RRGGBB.")
+        return None
+
+    def _update_swatch(self, value: str) -> None:
+        if re.fullmatch(r"#[0-9a-fA-F]{6}", value.strip()):
+            self.query_one("#rgb-swatch", Static).styles.background = Color.parse(value)
+
+    def action_cancel(self) -> None:
+        self.dismiss(self.value)
+
+    @on(Input.Changed, "#rgb-value")
+    def value_changed(self, event: Input.Changed) -> None:
+        self.query_one("#rgb-error", Label).update("")
+        self._update_swatch(event.value)
+
+    @on(Input.Submitted, "#rgb-value")
+    def value_submitted(self) -> None:
+        if (value := self._normalised_value()) is not None:
+            self.dismiss(value)
+
+    @on(Button.Pressed, "#rgb-accept")
+    def choose(self) -> None:
+        if (value := self._normalised_value()) is not None:
+            self.dismiss(value)
+
+    @on(Button.Pressed, "#rgb-default")
+    def choose_default(self) -> None:
+        self.dismiss(None)
+
+    @on(Button.Pressed, "#rgb-cancel")
+    def cancel(self) -> None:
+        self.dismiss(self.value)
+
+
 class ConfirmDialog(ModalScreen[bool]):
     """Asks before an action which would discard or overwrite user data."""
 
@@ -566,7 +633,7 @@ class JiffConfigureApp(App[None]):
         self.themes = themes
         self.config = themes[selected_theme]
         self.edit_palette = "ansi16"
-        self.ansi256_supported = terminal_supports_ansi256(force_terminal=True)
+        self.terminal_depth = terminal_color_depth(force_terminal=True)
         self.selected_theme = selected_theme
         self.dirty = False
 
@@ -600,14 +667,18 @@ class JiffConfigureApp(App[None]):
                 )
                 yield Label("Preferred output", classes="section-title")
                 yield Select(
-                    (("ANSI16", 16), ("ANSI256", 256)),
+                    (("ANSI16", 16), ("ANSI256", 256), ("Truecolour", 24)),
                     value=self.config.depth,
                     allow_blank=False,
                     id="depth",
                 )
                 yield Label("Palette to edit", classes="section-title")
                 yield Select(
-                    (("ANSI16 fallback", "ansi16"), ("ANSI256", "ansi256")),
+                    (
+                        ("ANSI16 fallback", "ansi16"),
+                        ("ANSI256 fallback", "ansi256"),
+                        ("Truecolour", "truecolor"),
+                    ),
                     value=self.edit_palette,
                     allow_blank=False,
                     id="palette",
@@ -669,10 +740,19 @@ class JiffConfigureApp(App[None]):
 
         side_preview = self.query_one("#side-preview", Static)
         source = self.preview_source
-        preview_scheme = self.config.scheme(self.ansi256_supported)
-        fallback = self.config.depth == 256 and not self.ansi256_supported
+        preview_scheme = self.config.scheme(self.terminal_depth)
+        preview_depth = self.config.scheme_depth(self.terminal_depth)
+        fallback = preview_depth != self.config.depth
         notice = self.query_one("#fallback-notice", Label)
-        notice.update("ANSI256 is unavailable here - previewing the ANSI16 fallback.")
+        depth_name = {
+            ColorDepth.ANSI16: "ANSI16",
+            ColorDepth.ANSI256: "ANSI256",
+            ColorDepth.TRUECOLOR: "truecolour",
+        }
+        notice.update(
+            f"{depth_name[self.config.depth]} is unavailable here - "
+            f"previewing the {depth_name[preview_depth]} fallback."
+        )
         notice.display = fallback
         common = {
             "left": source.left,
@@ -756,7 +836,7 @@ class JiffConfigureApp(App[None]):
 
     @on(Select.Changed, "#depth")
     def depth_changed(self, event: Select.Changed) -> None:
-        depth = int(event.value)
+        depth = ColorDepth(int(event.value))
         if depth == self.config.depth:
             return
         self.config = replace(self.config, depth=depth)
@@ -804,6 +884,31 @@ class JiffConfigureApp(App[None]):
         )
         button = self.query_one(f"#{style_name}-{field}", Button)
         button.label = "Default" if value is None else str(value)
+        self._set_dirty()
+        self.refresh_previews()
+
+    @on(Button.Pressed, ".rgb-colour")
+    def rgb_colour_pressed(self, event: Button.Pressed) -> None:
+        style_name, field = event.button.name.split(".", maxsplit=1)
+        style = getattr(self.scheme, style_name)
+        value = getattr(style, field)
+        self.push_screen(
+            TrueColorPicker(value),
+            lambda selected: self._rgb_colour_chosen(style_name, field, selected),
+        )
+
+    def _rgb_colour_chosen(
+        self, style_name: str, field: str, value: str | None
+    ) -> None:
+        style = getattr(self.scheme, style_name)
+        if getattr(style, field) == value:
+            return
+        self.scheme = replace(
+            self.scheme,
+            **{style_name: replace(style, **{field: value})},
+        )
+        button = self.query_one(f"#{style_name}-{field}", Button)
+        button.label = "Default" if value is None else value
         self._set_dirty()
         self.refresh_previews()
 
