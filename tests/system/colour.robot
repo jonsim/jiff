@@ -18,6 +18,14 @@ Rust ANSI256
     [Template]    Renderer Uses ANSI256 When Supported
     cargo    run    --quiet    --manifest-path=${CURDIR}/../../Cargo.toml    --
 
+Python Truecolour
+    [Template]    Renderer Uses Truecolour With Depth Fallbacks
+    python3    ${CURDIR}/../../python/jiff.py
+
+Rust Truecolour
+    [Template]    Renderer Uses Truecolour With Depth Fallbacks
+    cargo    run    --quiet    --manifest-path=${CURDIR}/../../Cargo.toml    --
+
 *** Keywords ***
 Renderer Uses One Colour Palette
     [Documentation]    Checks inline and side-by-side output use the same diff colours.
@@ -91,3 +99,24 @@ Renderer Uses ANSI256 When Supported
     ...    @{command}    --git-external-diff
     ...    muppets.txt    ${first}    old    100644    ${changed}    new    100644
     Output Should Contain ANSI Style    ${git_diff.stdout}    foreground=color(114)
+
+Renderer Uses Truecolour With Depth Fallbacks
+    [Documentation]    Checks truecolour falls back through ANSI256 and ANSI16.
+    [Arguments]    @{command}
+    VAR    ${config}    ${CURDIR}/truecolor-config.toml
+    VAR    ${first}    ${CURDIR}/../../testcases/minimal/02.txt
+    VAR    ${changed}    ${CURDIR}/../../testcases/minimal/03.txt
+    ${true_colour} =    Run Process Check Configured Output For Terminal
+    ...    ${config}    xterm    truecolor
+    ...    @{command}    --inline    ${first}    ${changed}
+    Output Should Contain ANSI Style    ${true_colour.stdout}    foreground=#12ab34
+
+    ${ansi256} =    Run Process Check Configured Output For Terminal
+    ...    ${config}    xterm-256color    ${EMPTY}
+    ...    @{command}    --inline    ${first}    ${changed}
+    Output Should Contain ANSI Style    ${ansi256.stdout}    foreground=color(114)
+
+    ${ansi16} =    Run Process Check Configured Output For Terminal
+    ...    ${config}    xterm    ${EMPTY}
+    ...    @{command}    --inline    ${first}    ${changed}
+    Output Should Contain ANSI Style    ${ansi16.stdout}    foreground=green

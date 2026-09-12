@@ -38,6 +38,7 @@ const STYLE_NAMES: &[&str] = &[
 pub(crate) enum ColorDepth {
     Ansi16,
     Ansi256,
+    TrueColor,
 }
 
 #[derive(Clone, Copy)]
@@ -45,25 +46,39 @@ pub(crate) struct ColorConfig {
     pub(crate) depth: ColorDepth,
     pub(crate) ansi16: ColorScheme,
     pub(crate) ansi256: ColorScheme,
+    pub(crate) truecolor: ColorScheme,
 }
 
 impl Default for ColorConfig {
     fn default() -> Self {
         let ansi16 = ColorScheme::default();
+        let ansi256 = ansi256_scheme(ansi16);
         Self {
-            depth: ColorDepth::Ansi16,
+            depth: ColorDepth::TrueColor,
             ansi16,
-            ansi256: ansi256_scheme(ansi16),
+            ansi256,
+            truecolor: truecolor_scheme(ansi256),
         }
     }
 }
 
 impl ColorConfig {
-    pub(crate) fn scheme(self, ansi256_supported: bool) -> ColorScheme {
-        if self.depth == ColorDepth::Ansi256 && ansi256_supported {
-            self.ansi256
-        } else {
-            self.ansi16
+    pub(crate) fn scheme(self, terminal_depth: ColorDepth) -> ColorScheme {
+        match self.scheme_depth(terminal_depth) {
+            ColorDepth::Ansi16 => self.ansi16,
+            ColorDepth::Ansi256 => self.ansi256,
+            ColorDepth::TrueColor => self.truecolor,
+        }
+    }
+
+    fn scheme_depth(self, terminal_depth: ColorDepth) -> ColorDepth {
+        match (self.depth, terminal_depth) {
+            (ColorDepth::TrueColor, ColorDepth::TrueColor) => ColorDepth::TrueColor,
+            (
+                ColorDepth::TrueColor | ColorDepth::Ansi256,
+                ColorDepth::TrueColor | ColorDepth::Ansi256,
+            ) => ColorDepth::Ansi256,
+            _ => ColorDepth::Ansi16,
         }
     }
 }
@@ -215,6 +230,71 @@ fn indexed_color(color: Color) -> Color {
     }
 }
 
+fn truecolor_scheme(scheme: ColorScheme) -> ColorScheme {
+    fn rgb_style(mut style: Style) -> Style {
+        style.foreground = style.foreground.map(rgb_color);
+        style.background = style.background.map(rgb_color);
+        style
+    }
+
+    ColorScheme {
+        same: rgb_style(scheme.same),
+        line_number: rgb_style(scheme.line_number),
+        line_number_add: rgb_style(scheme.line_number_add),
+        line_number_remove: rgb_style(scheme.line_number_remove),
+        omitted: rgb_style(scheme.omitted),
+        add: rgb_style(scheme.add),
+        add_highlight: rgb_style(scheme.add_highlight),
+        remove: rgb_style(scheme.remove),
+        remove_highlight: rgb_style(scheme.remove_highlight),
+        overlap_highlight: rgb_style(scheme.overlap_highlight),
+        syntax_comment: rgb_style(scheme.syntax_comment),
+        syntax_comment_highlight: rgb_style(scheme.syntax_comment_highlight),
+        syntax_keyword: rgb_style(scheme.syntax_keyword),
+        syntax_keyword_highlight: rgb_style(scheme.syntax_keyword_highlight),
+        syntax_string: rgb_style(scheme.syntax_string),
+        syntax_string_highlight: rgb_style(scheme.syntax_string_highlight),
+        syntax_number: rgb_style(scheme.syntax_number),
+        syntax_number_highlight: rgb_style(scheme.syntax_number_highlight),
+        syntax_definition: rgb_style(scheme.syntax_definition),
+        syntax_definition_highlight: rgb_style(scheme.syntax_definition_highlight),
+    }
+}
+
+fn rgb_color(color: Color) -> Color {
+    let Color::Fixed(index) = color else {
+        return color;
+    };
+    let (red, green, blue) = match index {
+        0 => (0, 0, 0),
+        1 => (128, 0, 0),
+        2 => (0, 128, 0),
+        3 => (128, 128, 0),
+        4 => (0, 0, 128),
+        5 => (128, 0, 128),
+        6 => (0, 128, 128),
+        7 => (192, 192, 192),
+        8 => (128, 128, 128),
+        9 => (255, 0, 0),
+        10 => (0, 255, 0),
+        11 => (255, 255, 0),
+        12 => (0, 0, 255),
+        13 => (255, 0, 255),
+        14 => (0, 255, 255),
+        15 => (255, 255, 255),
+        16..=231 => {
+            let cube = index - 16;
+            let level = |value| [0, 95, 135, 175, 215, 255][value as usize];
+            (level(cube / 36), level(cube / 6 % 6), level(cube % 6))
+        }
+        232..=255 => {
+            let level = 8 + (index - 232) * 10;
+            (level, level, level)
+        }
+    };
+    Color::Rgb(red, green, blue)
+}
+
 #[derive(Debug)]
 pub(crate) struct ConfigError {
     path: PathBuf,
@@ -303,18 +383,26 @@ fn parse_config(contents: &str, path: &Path) -> Result<ColorConfig, ConfigError>
     let color = color_value
         .as_table()
         .ok_or_else(|| ConfigError::new(path, "color must be a table"))?;
-    reject_unknown_fields(color, &["depth", "ansi16", "ansi256"], "color", path)?;
+    reject_unknown_fields(
+        color,
+        &["depth", "ansi16", "ansi256", "truecolor"],
+        "color",
+        path,
+    )?;
 
     let depth = match color.get("depth") {
-        None | Some(toml::Value::Integer(16)) => ColorDepth::Ansi16,
+        None | Some(toml::Value::Integer(24)) => ColorDepth::TrueColor,
+        Some(toml::Value::Integer(16)) => ColorDepth::Ansi16,
         Some(toml::Value::Integer(256)) => ColorDepth::Ansi256,
         Some(toml::Value::Integer(value)) => {
             return Err(ConfigError::new(
                 path,
-                format!("color.depth must be 16 or 256, not {value}"),
+                format!("color.depth must be 16, 24 or 256, not {value}"),
             ));
         }
-        Some(_) => return Err(ConfigError::new(path, "color.depth must be 16 or 256")),
+        Some(_) => {
+            return Err(ConfigError::new(path, "color.depth must be 16, 24 or 256"));
+        }
     };
 
     let ansi16 = parse_scheme(
@@ -322,19 +410,27 @@ fn parse_config(contents: &str, path: &Path) -> Result<ColorConfig, ConfigError>
         ColorScheme::default(),
         "color.ansi16",
         path,
-        false,
+        ColorDepth::Ansi16,
     )?;
     let ansi256 = parse_scheme(
         color.get("ansi256"),
         ansi256_scheme(ansi16),
         "color.ansi256",
         path,
-        true,
+        ColorDepth::Ansi256,
+    )?;
+    let truecolor = parse_scheme(
+        color.get("truecolor"),
+        truecolor_scheme(ansi256),
+        "color.truecolor",
+        path,
+        ColorDepth::TrueColor,
     )?;
     Ok(ColorConfig {
         depth,
         ansi16,
         ansi256,
+        truecolor,
     })
 }
 
@@ -343,7 +439,7 @@ fn parse_scheme(
     mut scheme: ColorScheme,
     field: &str,
     path: &Path,
-    indexed: bool,
+    depth: ColorDepth,
 ) -> Result<ColorScheme, ConfigError> {
     let Some(value) = value else {
         return Ok(scheme);
@@ -361,7 +457,7 @@ fn parse_scheme(
                 &format!("{field}.{}", stringify!($name)),
                 path,
                 $background,
-                indexed,
+                depth,
             )?;
         };
     }
@@ -402,7 +498,7 @@ fn parse_style(
     field: &str,
     path: &Path,
     allow_background: bool,
-    indexed: bool,
+    depth: ColorDepth,
 ) -> Result<Style, ConfigError> {
     let Some(value) = value else {
         return Ok(style);
@@ -417,11 +513,11 @@ fn parse_style(
     };
     reject_unknown_fields(table, expected, field, path)?;
 
-    if let Some(color) = color_field(table, "color", field, path, indexed)? {
+    if let Some(color) = color_field(table, "color", field, path, depth)? {
         style.foreground = color;
     }
     if allow_background {
-        if let Some(color) = color_field(table, "bgcolor", field, path, indexed)? {
+        if let Some(color) = color_field(table, "bgcolor", field, path, depth)? {
             style.background = color;
         }
     }
@@ -439,13 +535,13 @@ fn color_field(
     name: &str,
     parent: &str,
     path: &Path,
-    indexed: bool,
+    depth: ColorDepth,
 ) -> Result<Option<Option<Color>>, ConfigError> {
     let Some(value) = table.get(name) else {
         return Ok(None);
     };
     let field = format!("{parent}.{name}");
-    if indexed {
+    if depth == ColorDepth::Ansi256 {
         return match value {
             toml::Value::Integer(index) if (0..=255).contains(index) => {
                 Ok(Some(Some(Color::Fixed(*index as u8))))
@@ -464,10 +560,38 @@ fn color_field(
         };
     }
 
+    if depth == ColorDepth::TrueColor {
+        return match value {
+            toml::Value::String(value) if value.trim().eq_ignore_ascii_case("default") => {
+                Ok(Some(None))
+            }
+            toml::Value::String(value) => parse_rgb(value)
+                .map(|color| Some(Some(color)))
+                .ok_or_else(|| {
+                    ConfigError::new(path, format!("{field} must be #RRGGBB or \"default\""))
+                }),
+            _ => Err(ConfigError::new(
+                path,
+                format!("{field} must be #RRGGBB or \"default\""),
+            )),
+        };
+    }
+
     match value {
         toml::Value::String(value) => Ok(Some(parse_color(value, &field, path)?)),
         _ => Err(ConfigError::new(path, format!("{field} must be a string"))),
     }
+}
+
+fn parse_rgb(value: &str) -> Option<Color> {
+    let value = value.trim();
+    if value.len() != 7 || !value.starts_with('#') {
+        return None;
+    }
+    let red = u8::from_str_radix(&value[1..3], 16).ok()?;
+    let green = u8::from_str_radix(&value[3..5], 16).ok()?;
+    let blue = u8::from_str_radix(&value[5..7], 16).ok()?;
+    Some(Color::Rgb(red, green, blue))
 }
 
 fn boolean_field(
@@ -819,9 +943,59 @@ mod tests {
     }
 
     #[test]
+    fn truecolor_styles_inherit_the_resolved_ansi256_palette() {
+        let config = parse_config(
+            r##"
+            [color.ansi256]
+            add = { color = 114, bold = true, italic = true }
+
+            [color.truecolor]
+            add = { color = "#89B4FA" }
+            "##,
+            Path::new("/tmp/.jiffconfig"),
+        )
+        .unwrap();
+
+        assert_eq!(
+            Some(Color::Rgb(137, 180, 250)),
+            config.truecolor.add.foreground
+        );
+        assert!(config.truecolor.add.is_bold);
+        assert!(config.truecolor.add.is_italic);
+        assert_eq!(
+            Some(Color::Rgb(128, 0, 0)),
+            config.truecolor.remove.foreground
+        );
+    }
+
+    #[test]
+    fn truecolor_preference_falls_back_through_each_palette() {
+        let config = ColorConfig::default();
+
+        assert_eq!(
+            config.truecolor.add,
+            config.scheme(ColorDepth::TrueColor).add
+        );
+        assert_eq!(config.ansi256.add, config.scheme(ColorDepth::Ansi256).add);
+        assert_eq!(config.ansi16.add, config.scheme(ColorDepth::Ansi16).add);
+    }
+
+    #[test]
+    fn invalid_truecolor_values_are_rejected() {
+        for value in ["12ab34", "#abc", "#12zz34", "green"] {
+            let contents = format!("[color.truecolor]\nadd = {{ color = {value:?} }}\n");
+            let error = parse_config(&contents, Path::new("/tmp/.jiffconfig"))
+                .err()
+                .expect("invalid RGB should be rejected");
+
+            assert!(error.to_string().contains("#RRGGBB"), "{}", value);
+        }
+    }
+
+    #[test]
     fn invalid_depth_and_indexes_are_rejected() {
         for contents in [
-            "[color]\ndepth = 24\n",
+            "[color]\ndepth = 23\n",
             "[color.ansi256]\nadd = { color = -1 }\n",
             "[color.ansi256]\nadd = { color = 256 }\n",
         ] {

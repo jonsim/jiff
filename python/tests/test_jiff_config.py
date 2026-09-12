@@ -16,10 +16,11 @@ class ColorConfigTests(unittest.TestCase):
         self.assertEqual(config, jiff_config.parse_color_config(contents))
         self.assertIn("[color.ansi16]", contents)
         self.assertIn("[color.ansi256]", contents)
-        self.assertEqual(2 * len(jiff_config.STYLE_NAMES), contents.count(" = {"))
+        self.assertEqual(3 * len(jiff_config.STYLE_NAMES), contents.count(" = {"))
         self.assertEqual(
-            2 * len(jiff_config.STYLE_NAMES), contents.count("italic = false")
+            3 * len(jiff_config.STYLE_NAMES), contents.count("italic = false")
         )
+        self.assertIn("[color.truecolor]", contents)
 
     def test_invalid_toml_is_reported_by_the_public_parser(self):
         with self.assertRaisesRegex(jiff_config.ConfigError, "invalid TOML"):
@@ -32,24 +33,29 @@ class ColorConfigTests(unittest.TestCase):
 
         contents = jiff_config.color_config_to_toml(config)
 
-        self.assertEqual(2, contents.count("italic = true"))
+        self.assertEqual(3, contents.count("italic = true"))
         self.assertEqual(config, jiff_config.parse_color_config(contents))
 
-    def test_depth_defaults_to_16(self):
+    def test_depth_defaults_to_truecolor(self):
         config = jiff_config.parse_color_config("[color]\n")
 
-        self.assertEqual(16, config.depth)
+        self.assertEqual(jiff_config.ColorDepth.TRUECOLOR, config.depth)
 
     def test_depth_accepts_256(self):
         config = jiff_config.parse_color_config("[color]\ndepth = 256\n")
 
         self.assertEqual(256, config.depth)
 
+    def test_depth_accepts_24(self):
+        config = jiff_config.parse_color_config("[color]\ndepth = 24\n")
+
+        self.assertEqual(jiff_config.ColorDepth.TRUECOLOR, config.depth)
+
     def test_invalid_depth_is_rejected(self):
-        for value in (0, 24, 257, '"256"', "true"):
+        for value in (0, 23, 257, '"256"', "true"):
             with (
                 self.subTest(value=value),
-                self.assertRaisesRegex(jiff_config.ConfigError, "depth.*16 or 256"),
+                self.assertRaisesRegex(jiff_config.ConfigError, "depth.*16, 24 or 256"),
             ):
                 jiff_config.parse_color_config(f"[color]\ndepth = {value}\n")
 
@@ -133,6 +139,59 @@ class ColorConfigTests(unittest.TestCase):
         self.assertTrue(config.ansi256.add.italic)
         self.assertEqual(1, config.ansi256.remove.color)
 
+    def test_truecolor_inherits_the_resolved_ansi256_palette(self):
+        config = jiff_config._parse_color_config(
+            {
+                "color": {
+                    "ansi256": {"add": {"color": 114, "bold": True, "italic": True}},
+                    "truecolor": {"add": {"color": "#89B4FA"}},
+                }
+            }
+        )
+
+        self.assertEqual("#89b4fa", config.truecolor.add.color)
+        self.assertTrue(config.truecolor.add.bold)
+        self.assertTrue(config.truecolor.add.italic)
+        self.assertEqual("#800000", config.truecolor.remove.color)
+
+    def test_truecolor_accepts_rgb_and_default(self):
+        config = jiff_config._parse_color_config(
+            {
+                "color": {
+                    "truecolor": {
+                        "add": {"color": " #12Ab34 "},
+                        "add_highlight": {"bgcolor": "default"},
+                    }
+                }
+            }
+        )
+
+        self.assertEqual("#12ab34", config.truecolor.add.color)
+        self.assertIsNone(config.truecolor.add_highlight.bgcolor)
+
+    def test_invalid_truecolor_values_are_rejected(self):
+        for value in ("12ab34", "#abc", "#12zz34", 0, True):
+            with (
+                self.subTest(value=value),
+                self.assertRaisesRegex(jiff_config.ConfigError, "#RRGGBB"),
+            ):
+                jiff_config._parse_color_config(
+                    {"color": {"truecolor": {"add": {"color": value}}}}
+                )
+
+    def test_truecolor_preference_falls_back_through_each_palette(self):
+        config = jiff_config.ColorConfig.default()
+
+        self.assertIs(
+            config.truecolor,
+            config.scheme(jiff_config.ColorDepth.TRUECOLOR),
+        )
+        self.assertIs(
+            config.ansi256,
+            config.scheme(jiff_config.ColorDepth.ANSI256),
+        )
+        self.assertIs(config.ansi16, config.scheme(jiff_config.ColorDepth.ANSI16))
+
     def test_invalid_italic_value_is_rejected(self):
         with self.assertRaisesRegex(
             jiff_config.ConfigError, "color.ansi16.add.italic must be true or false"
@@ -201,12 +260,29 @@ class ColorConfigTests(unittest.TestCase):
         console.return_value.color_system = "truecolor"
 
         self.assertTrue(jiff_config.terminal_supports_ansi256())
+        self.assertEqual(
+            jiff_config.ColorDepth.TRUECOLOR,
+            jiff_config.terminal_color_depth(),
+        )
+
+    @mock.patch("jiff_config.Console")
+    def test_indexed_terminal_reports_ansi256(self, console):
+        console.return_value.color_system = "256"
+
+        self.assertEqual(
+            jiff_config.ColorDepth.ANSI256,
+            jiff_config.terminal_color_depth(),
+        )
 
     @mock.patch("jiff_config.Console")
     def test_standard_terminal_uses_ansi16(self, console):
         console.return_value.color_system = "standard"
 
         self.assertFalse(jiff_config.terminal_supports_ansi256())
+        self.assertEqual(
+            jiff_config.ColorDepth.ANSI16,
+            jiff_config.terminal_color_depth(),
+        )
 
 
 class ConfigPathTests(unittest.TestCase):

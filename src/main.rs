@@ -720,7 +720,7 @@ fn main() {
         let is_tty = std::io::stdout().is_terminal();
         color = force_color || is_tty;
     }
-    let ansi256_supported = if color {
+    let terminal_depth = if color {
         let stdout = std::io::stdout();
         let mut vars = TermVars::from_env(&stdout, DetectorSettings::default());
         // Git sends output to its own pager, so stdout isn't the terminal Jiff
@@ -728,15 +728,16 @@ fn main() {
         if git_external_diff || std::env::var("RICH_FORCE_TERMINAL").is_ok() {
             vars.meta.is_terminal = true;
         }
-        matches!(
-            TermProfile::detect_with_vars(vars),
-            TermProfile::Ansi256 | TermProfile::TrueColor
-        )
+        match TermProfile::detect_with_vars(vars) {
+            TermProfile::TrueColor => config::ColorDepth::TrueColor,
+            TermProfile::Ansi256 => config::ColorDepth::Ansi256,
+            _ => config::ColorDepth::Ansi16,
+        }
     } else {
-        false
+        config::ColorDepth::Ansi16
     };
     let colors = if color {
-        color_config.scheme(ansi256_supported)
+        color_config.scheme(terminal_depth)
     } else {
         config::ColorScheme::plain()
     };

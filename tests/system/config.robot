@@ -13,7 +13,9 @@ Renderer Loads Custom Colours
     VAR    ${work_dir}    ${OUTPUT DIR}/jiff-system/${SUITE NAME}/${TEST NAME}
     VAR    ${config}    ${work_dir}/jiff-colour-test.toml
     VAR    ${config_contents}
-    ...    [color.ansi16]
+    ...    [color]
+    ...    \ndepth = 16
+    ...    \n[color.ansi16]
     ...    \nline_number = { color = "white", bgcolor = "blue", bold = true }
     ...    \nline_number_add = { color = "cyan", bgcolor = "green", bold = true }
     ...    \nline_number_remove = { color = "magenta", bgcolor = "red", bold = true }

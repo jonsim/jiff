@@ -23,7 +23,9 @@ Renderer Highlights Source Syntax
     Create File    ${right_python}    def kermit(): return "blue"
     Copy File    ${left_python}    ${left_text}
     Copy File    ${right_python}    ${right_text}
-    Create File    ${config}    color.ansi16.syntax_keyword = { color = "blue" }
+    Create File
+    ...    ${config}
+    ...    color.depth = 16${\n}color.ansi16.syntax_keyword = { color = "blue" }
     ${detected} =    Run Keyword
     ...    ${runner}    --no-pager    ${left_python}    ${right_python}
     Output Should Contain ANSI Style    ${detected.stdout}    foreground=magenta
@@ -47,7 +49,7 @@ Renderer Highlights Source Syntax
     Create File    ${right_keyword}    class kermit: pass
     Create File
     ...    ${config_highlight}
-    ...    color.ansi16.syntax_keyword_highlight = { color = "bright_red" }
+    ...    color.depth = 16${\n}color.ansi16.syntax_keyword_highlight = { color = "bright_red" }
 
     ${configured_highlight} =    Run Keyword
     ...    ${config_runner}    ${config_highlight}    --no-pager    ${left_keyword}    ${right_keyword}

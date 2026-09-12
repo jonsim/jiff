@@ -1,0 +1,11 @@
+[color]
+depth = 24
+
+[color.ansi16]
+add = { color = "green" }
+
+[color.ansi256]
+add = { color = 114 }
+
+[color.truecolor]
+add = { color = "#12ab34" }

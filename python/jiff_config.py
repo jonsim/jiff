@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
+from enum import IntEnum
 from pathlib import Path
 
 from rich.console import Console
@@ -52,6 +54,24 @@ ANSI16_INDEXES = {
     "bright_cyan": 14,
     "bright_white": 15,
 }
+ANSI16_RGB = (
+    (0, 0, 0),
+    (128, 0, 0),
+    (0, 128, 0),
+    (128, 128, 0),
+    (0, 0, 128),
+    (128, 0, 128),
+    (0, 128, 128),
+    (192, 192, 192),
+    (128, 128, 128),
+    (255, 0, 0),
+    (0, 255, 0),
+    (255, 255, 0),
+    (0, 0, 255),
+    (255, 0, 255),
+    (0, 255, 255),
+    (255, 255, 255),
+)
 DIFF_STYLE_NAMES = (
     "same",
     "line_number",
@@ -81,6 +101,14 @@ STYLE_NAMES = DIFF_STYLE_NAMES + SYNTAX_STYLE_NAMES
 
 class ConfigError(Exception):
     """A Jiff colour configuration could not be loaded or parsed."""
+
+
+class ColorDepth(IntEnum):
+    """One of the colour depths understood by Jiff."""
+
+    ANSI16 = 16
+    ANSI256 = 256
+    TRUECOLOR = 24
 
 
 @dataclass(frozen=True)
@@ -181,19 +209,41 @@ class ColorScheme:
 class ColorConfig:
     """The preferred colour depth and its resolved fallback palettes."""
 
-    depth: int
+    depth: ColorDepth
     ansi16: ColorScheme
     ansi256: ColorScheme
+    truecolor: ColorScheme
 
     @classmethod
     def default(cls) -> ColorConfig:
         ansi16 = ColorScheme.default()
-        return cls(16, ansi16, _ansi256_scheme(ansi16))
+        ansi256 = _ansi256_scheme(ansi16)
+        return cls(ColorDepth.TRUECOLOR, ansi16, ansi256, _truecolor_scheme(ansi256))
 
-    def scheme(self, ansi256_supported: bool) -> ColorScheme:
-        if self.depth == 256 and ansi256_supported:
-            return self.ansi256
-        return self.ansi16
+    def scheme(self, terminal_depth: ColorDepth) -> ColorScheme:
+        """Returns the preferred palette supported by the terminal."""
+        return {
+            ColorDepth.ANSI16: self.ansi16,
+            ColorDepth.ANSI256: self.ansi256,
+            ColorDepth.TRUECOLOR: self.truecolor,
+        }[self.scheme_depth(terminal_depth)]
+
+    def scheme_depth(self, terminal_depth: ColorDepth) -> ColorDepth:
+        """Returns the depth selected for the terminal."""
+        if (
+            self.depth == ColorDepth.TRUECOLOR
+            and terminal_depth == ColorDepth.TRUECOLOR
+        ):
+            return ColorDepth.TRUECOLOR
+        if self.depth in (
+            ColorDepth.TRUECOLOR,
+            ColorDepth.ANSI256,
+        ) and terminal_depth in (
+            ColorDepth.TRUECOLOR,
+            ColorDepth.ANSI256,
+        ):
+            return ColorDepth.ANSI256
+        return ColorDepth.ANSI16
 
 
 def find_color_config_path() -> Path | None:
@@ -217,16 +267,25 @@ def load_color_config(path: Path | None = None) -> ColorConfig:
         raise ConfigError(f"{path}: {error}") from error
 
 
-def terminal_supports_ansi256(force_terminal: bool = False) -> bool:
-    """Reports whether Rich detects indexed or true-colour output support."""
+def terminal_color_depth(force_terminal: bool = False) -> ColorDepth:
+    """Returns the colour depth Rich detects for the terminal."""
     console = Console(force_terminal=True if force_terminal else None)
-    return console.color_system in ("256", "truecolor")
+    if console.color_system == "truecolor":
+        return ColorDepth.TRUECOLOR
+    if console.color_system == "256":
+        return ColorDepth.ANSI256
+    return ColorDepth.ANSI16
+
+
+def terminal_supports_ansi256(force_terminal: bool = False) -> bool:
+    """Reports whether the terminal supports at least 256 colours."""
+    return terminal_color_depth(force_terminal) != ColorDepth.ANSI16
 
 
 def load_color_scheme(force_terminal: bool = False) -> ColorScheme:
     """Loads the palette suitable for the current terminal."""
     config = load_color_config()
-    return config.scheme(terminal_supports_ansi256(force_terminal))
+    return config.scheme(terminal_color_depth(force_terminal))
 
 
 def parse_color_config(contents: str) -> ColorConfig:
@@ -245,10 +304,11 @@ def parse_color_scheme(contents: str) -> ColorScheme:
 
 def color_config_to_toml(config: ColorConfig) -> str:
     """Returns a complete Jiff TOML configuration."""
-    lines = ["[color]", f"depth = {config.depth}"]
+    lines = ["[color]", f"depth = {int(config.depth)}"]
     for palette_name, scheme in (
         ("ansi16", config.ansi16),
         ("ansi256", config.ansi256),
+        ("truecolor", config.truecolor),
     ):
         lines.extend(("", f"[color.{palette_name}]"))
         for name in STYLE_NAMES:
@@ -264,7 +324,10 @@ def color_config_to_toml(config: ColorConfig) -> str:
 
 def color_scheme_to_toml(scheme: ColorScheme) -> str:
     """Returns a complete depth-16 config for an existing scheme."""
-    return color_config_to_toml(ColorConfig(16, scheme, _ansi256_scheme(scheme)))
+    ansi256 = _ansi256_scheme(scheme)
+    return color_config_to_toml(
+        ColorConfig(ColorDepth.ANSI16, scheme, ansi256, _truecolor_scheme(ansi256))
+    )
 
 
 def _toml_color(value: str | int | None, palette_name: str) -> str:
@@ -309,22 +372,39 @@ def _parse_color_config(document: object) -> ColorConfig:
     if "color" not in root:
         return ColorConfig.default()
     color = _table(root["color"], "color")
-    _reject_unknown_fields(color, {"depth", "ansi16", "ansi256"}, "color")
-    depth = color.get("depth", 16)
-    if not isinstance(depth, int) or isinstance(depth, bool) or depth not in (16, 256):
-        raise ConfigError("color.depth must be 16 or 256")
+    _reject_unknown_fields(color, {"depth", "ansi16", "ansi256", "truecolor"}, "color")
+    depth = color.get("depth", ColorDepth.TRUECOLOR)
+    if (
+        not isinstance(depth, int)
+        or isinstance(depth, bool)
+        or depth not in (16, 24, 256)
+    ):
+        raise ConfigError("color.depth must be 16, 24 or 256")
+    depth = ColorDepth(depth)
 
     ansi16 = _parse_scheme(
-        color.get("ansi16"), ColorScheme.default(), "color.ansi16", False
+        color.get("ansi16"),
+        ColorScheme.default(),
+        "color.ansi16",
+        ColorDepth.ANSI16,
     )
     ansi256 = _parse_scheme(
-        color.get("ansi256"), _ansi256_scheme(ansi16), "color.ansi256", True
+        color.get("ansi256"),
+        _ansi256_scheme(ansi16),
+        "color.ansi256",
+        ColorDepth.ANSI256,
     )
-    return ColorConfig(depth, ansi16, ansi256)
+    truecolor = _parse_scheme(
+        color.get("truecolor"),
+        _truecolor_scheme(ansi256),
+        "color.truecolor",
+        ColorDepth.TRUECOLOR,
+    )
+    return ColorConfig(depth, ansi16, ansi256, truecolor)
 
 
 def _parse_scheme(
-    value: object, defaults: ColorScheme, field: str, indexed: bool
+    value: object, defaults: ColorScheme, field: str, depth: ColorDepth
 ) -> ColorScheme:
     if value is None:
         return defaults
@@ -335,7 +415,7 @@ def _parse_scheme(
             table.get(name),
             getattr(defaults, name),
             f"{field}.{name}",
-            indexed,
+            depth,
             name in DIFF_STYLE_NAMES,
         )
         for name in STYLE_NAMES
@@ -354,7 +434,7 @@ def _parse_style(
     value: object,
     default: ColorStyle,
     field: str,
-    indexed: bool,
+    depth: ColorDepth,
     allow_background: bool,
 ) -> ColorStyle:
     if value is None:
@@ -364,9 +444,9 @@ def _parse_style(
     if allow_background:
         expected.add("bgcolor")
     _reject_unknown_fields(table, expected, field)
-    color = _color_field(table, "color", field, default.color, indexed)
+    color = _color_field(table, "color", field, default.color, depth)
     bgcolor = (
-        _color_field(table, "bgcolor", field, default.bgcolor, indexed)
+        _color_field(table, "bgcolor", field, default.bgcolor, depth)
         if allow_background
         else None
     )
@@ -384,12 +464,12 @@ def _color_field(
     name: str,
     parent: str,
     default: str | int | None,
-    indexed: bool,
+    depth: ColorDepth,
 ) -> str | int | None:
     if name not in table:
         return default
     value = table[name]
-    if indexed:
+    if depth == ColorDepth.ANSI256:
         if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 255:
             return value
         if isinstance(value, str) and value.strip().lower() == "default":
@@ -397,9 +477,17 @@ def _color_field(
         raise ConfigError(
             f'{parent}.{name} must be an index from 0 to 255 or "default"'
         )
+    if depth == ColorDepth.TRUECOLOR and not isinstance(value, str):
+        raise ConfigError(f'{parent}.{name} must be #RRGGBB or "default"')
     if not isinstance(value, str):
         raise ConfigError(f"{parent}.{name} must be a string")
     normalized = value.strip().lower()
+    if depth == ColorDepth.TRUECOLOR:
+        if normalized == "default":
+            return None
+        if not re.fullmatch(r"#[0-9a-f]{6}", normalized):
+            raise ConfigError(f'{parent}.{name} must be #RRGGBB or "default"')
+        return normalized
     if normalized not in SUPPORTED_COLORS:
         expected = ", ".join(SUPPORTED_COLORS)
         raise ConfigError(
@@ -424,6 +512,32 @@ def _ansi256_scheme(scheme: ColorScheme) -> ColorScheme:
     return ColorScheme(
         **{name: indexed_style(getattr(scheme, name)) for name in STYLE_NAMES}
     )
+
+
+def _truecolor_scheme(scheme: ColorScheme) -> ColorScheme:
+    def rgb(value: str | int | None) -> str | None:
+        if value is None or isinstance(value, str):
+            return value
+        red, green, blue = _ansi256_rgb(value)
+        return f"#{red:02x}{green:02x}{blue:02x}"
+
+    def rgb_style(style: ColorStyle) -> ColorStyle:
+        return replace(style, color=rgb(style.color), bgcolor=rgb(style.bgcolor))
+
+    return ColorScheme(
+        **{name: rgb_style(getattr(scheme, name)) for name in STYLE_NAMES}
+    )
+
+
+def _ansi256_rgb(index: int) -> tuple[int, int, int]:
+    if index < 16:
+        return ANSI16_RGB[index]
+    if index < 232:
+        index -= 16
+        levels = (0, 95, 135, 175, 215, 255)
+        return levels[index // 36], levels[index // 6 % 6], levels[index % 6]
+    level = 8 + (index - 232) * 10
+    return level, level, level
 
 
 def _table(value: object, field: str) -> dict[str, object]:
