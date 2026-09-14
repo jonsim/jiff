@@ -68,6 +68,16 @@ class CommandLineValueTests(unittest.TestCase):
             jiff._parse_input_paths(["muppet.txt"], True, None),
         )
 
+    def test_git_labels_use_dev_null_for_a_missing_side(self):
+        self.assertEqual(
+            ("/dev/null", "b/new.txt"),
+            jiff.file_labels("new.txt", "/dev/null", "/tmp/new"),
+        )
+        self.assertEqual(
+            ("a/old.txt", "/dev/null"),
+            jiff.file_labels("old.txt", "/tmp/old", "/dev/null"),
+        )
+
     def test_git_arguments_are_rejected_without_git_external_diff_mode(self):
         git_arguments = [
             "muppet.txt",
@@ -254,6 +264,20 @@ class OutputTests(unittest.TestCase):
         self.assertTrue(
             output.startswith("--- a/muppet cast.txt\n+++ b/muppet cast.txt\n")
         )
+
+    def test_git_inline_labels_a_deleted_file_as_dev_null(self):
+        output = jiff.render_output(
+            "Kermit",
+            "",
+            "/tmp/local",
+            "/dev/null",
+            repository_path="muppet.txt",
+            inline=True,
+            color=False,
+            colors=ColorScheme.plain(),
+        )
+
+        self.assertTrue(output.startswith("--- a/muppet.txt\n+++ /dev/null\n"))
 
     def test_differing_binary_files_are_reported_without_decoding_them(self):
         output = jiff.render_output(

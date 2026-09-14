@@ -131,14 +131,19 @@ def _colors(color: bool, colors: ColorScheme | None) -> ColorScheme:
 
 
 def render_file_header(
-    path: str, color: bool = True, colors: ColorScheme | None = None
+    left_label: str,
+    right_label: str,
+    color: bool = True,
+    colors: ColorScheme | None = None,
 ) -> str:
-    """Renders Git-style labels for a repository path."""
+    """Renders Git-style labels for a file comparison."""
     colors = _colors(color, colors)
     output_console = _console(color)
     with output_console.capture() as capture:
-        output_console.print(Text(f"--- a/{path}", style=colors.remove.rich_style()))
-        output_console.print(Text(f"+++ b/{path}", style=colors.add.rich_style()))
+        output_console.print(
+            Text(f"--- {left_label}", style=colors.remove.rich_style())
+        )
+        output_console.print(Text(f"+++ {right_label}", style=colors.add.rich_style()))
     return capture.get()
 
 

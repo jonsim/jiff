@@ -205,7 +205,11 @@ def file_labels(
     repository_path: str | None, left_path: str, right_path: str
 ) -> tuple[str, str]:
     if repository_path is not None:
-        return f"a/{repository_path}", f"b/{repository_path}"
+        left_label = "/dev/null" if left_path == "/dev/null" else f"a/{repository_path}"
+        right_label = (
+            "/dev/null" if right_path == "/dev/null" else f"b/{repository_path}"
+        )
+        return left_label, right_label
     return left_path, right_path
 
 
@@ -256,7 +260,7 @@ def render_output(
 
     output = ""
     if repository_path is not None and inline:
-        output += diff.render_file_header(repository_path, color, colors)
+        output += diff.render_file_header(left_label, right_label, color, colors)
 
     highlighting = syntax_highlighting.HighlightedFiles()
     if color and syntax_enabled:

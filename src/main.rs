@@ -136,7 +136,18 @@ fn file_labels(
     right_path: &str,
 ) -> (String, String) {
     match repository_path {
-        Some(path) => (format!("a/{path}"), format!("b/{path}")),
+        Some(path) => (
+            if left_path == "/dev/null" {
+                left_path.to_string()
+            } else {
+                format!("a/{path}")
+            },
+            if right_path == "/dev/null" {
+                right_path.to_string()
+            } else {
+                format!("b/{path}")
+            },
+        ),
         None => (left_path.to_string(), right_path.to_string()),
     }
 }
@@ -911,6 +922,18 @@ mod tests {
     }
 
     #[test]
+    fn git_labels_use_dev_null_for_a_missing_side() {
+        assert_eq!(
+            ("/dev/null".to_string(), "b/new.txt".to_string()),
+            file_labels(Some("new.txt"), "/dev/null", "/tmp/new")
+        );
+        assert_eq!(
+            ("a/old.txt".to_string(), "/dev/null".to_string()),
+            file_labels(Some("old.txt"), "/tmp/old", "/dev/null")
+        );
+    }
+
+    #[test]
     fn unmerged_index_entries_are_collected_by_stage() {
         let output = concat!(
             "100644 base-object 1\tmuppet cast.txt\0",
@@ -1116,6 +1139,28 @@ mod tests {
         );
 
         assert!(output.starts_with("--- a/muppet cast.txt\n+++ b/muppet cast.txt\n"));
+    }
+
+    #[test]
+    fn git_inline_labels_a_deleted_file_as_dev_null() {
+        let left = FileContents::Text("Kermit".to_string());
+        let right = FileContents::Text(String::new());
+
+        let output = render_output(
+            &left,
+            &right,
+            "/tmp/local",
+            "/dev/null",
+            &OutputOptions {
+                repository_path: Some("muppet.txt"),
+                inline: true,
+                context_lines: None,
+            },
+            &config::ColorScheme::plain(),
+            &syntax::HighlightedFiles::default(),
+        );
+
+        assert!(output.starts_with("--- a/muppet.txt\n+++ /dev/null\n"));
     }
 
     #[test]

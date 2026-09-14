@@ -80,8 +80,15 @@ class GitDifftoolTests(unittest.TestCase):
 
     def assert_side_by_side_header(self, output: str, path: str) -> None:
         """Checks that Git's path labels both side-by-side panes."""
-        self.assertRegex(output, rf"(?m)^ {re.escape(path)} +│ {re.escape(path)}$")
+        self.assert_side_by_side_labels(output, path, path)
         self.assertNotIn(f"--- a/{path}", output)
+
+    def assert_side_by_side_labels(self, output: str, left: str, right: str) -> None:
+        """Checks the labels above a pair of side-by-side panes."""
+        self.assertRegex(
+            output,
+            rf"(?m)^ {re.escape(left)} +│ {re.escape(right)}$",
+        )
 
     def test_worktree_diff_handles_multiple_files_and_spaces(self) -> None:
         # Git calls the tool once per file and should pass each repository path
@@ -113,8 +120,8 @@ class GitDifftoolTests(unittest.TestCase):
         result = self.difftool("--cached")
 
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assert_side_by_side_header(result.stdout, "statler.txt")
-        self.assert_side_by_side_header(result.stdout, "gonzo.txt")
+        self.assert_side_by_side_labels(result.stdout, "statler.txt", "/dev/null")
+        self.assert_side_by_side_labels(result.stdout, "/dev/null", "gonzo.txt")
         self.assert_side_by_side_header(result.stdout, "empty.txt")
         self.assertIn("Boo!", result.stdout)
         self.assertIn("The Great Gonzo", result.stdout)
@@ -188,6 +195,20 @@ class GitDifftoolTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         self.assert_side_by_side_header(result.stdout, "fozzie.txt")
         self.assertIn("Funny bear", result.stdout)
+
+    def test_external_diff_labels_added_and_deleted_files(self) -> None:
+        self.write("statler.txt", "Boo!\n")
+        self.commit("Prepare the balcony")
+        (self.repository / "statler.txt").unlink()
+        self.write("gonzo.txt", "The Great Gonzo\n")
+        self.git("add", "--all")
+        self.configure_external_diff()
+
+        result = self.git("diff", "HEAD", check=False)
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assert_side_by_side_labels(result.stdout, "/dev/null", "gonzo.txt")
+        self.assert_side_by_side_labels(result.stdout, "statler.txt", "/dev/null")
 
     def test_unmerged_protocol_renders_a_three_way_diff(self) -> None:
         path = "muppet cast.txt"
