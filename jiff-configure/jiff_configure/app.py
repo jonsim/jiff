@@ -759,7 +759,7 @@ class JiffConfigureApp(App[None]):
             "right": source.right,
             "left_path": source.left_path,
             "right_path": source.right_path,
-            "repository_path": None,
+            "repository_paths": None,
             "color": True,
             "colors": preview_scheme,
             "context_lines": source.context_lines,

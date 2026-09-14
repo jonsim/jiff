@@ -20,7 +20,9 @@ class CommandLineValueTests(unittest.TestCase):
 
     def test_ordinary_inputs_are_exactly_two_paths(self):
         self.assertEqual(
-            jiff.ComparisonPaths("local.txt", "remote.txt", "muppet.txt"),
+            jiff.ComparisonPaths(
+                "local.txt", "remote.txt", ("muppet.txt", "muppet.txt")
+            ),
             jiff._parse_input_paths(["local.txt", "remote.txt"], False, "muppet.txt"),
         )
         with self.assertRaisesRegex(ValueError, "expects two or three files"):
@@ -46,7 +48,7 @@ class CommandLineValueTests(unittest.TestCase):
 
     def test_git_external_diff_extracts_only_the_paths_jiff_uses(self):
         self.assertEqual(
-            jiff.ComparisonPaths("/tmp/old", "/tmp/new", "muppet.txt"),
+            jiff.ComparisonPaths("/tmp/old", "/tmp/new", ("muppet.txt", "muppet.txt")),
             jiff._parse_input_paths(
                 [
                     "muppet.txt",
@@ -62,6 +64,26 @@ class CommandLineValueTests(unittest.TestCase):
             ),
         )
 
+    def test_git_external_diff_retains_both_paths_for_a_rename(self):
+        self.assertEqual(
+            jiff.ComparisonPaths("/tmp/old", "/tmp/new", ("old.txt", "new.txt")),
+            jiff._parse_input_paths(
+                [
+                    "old.txt",
+                    "/tmp/old",
+                    "old-object",
+                    "100644",
+                    "/tmp/new",
+                    "new-object",
+                    "100644",
+                    "new.txt",
+                    "similarity index 100%",
+                ],
+                True,
+                None,
+            ),
+        )
+
     def test_git_external_diff_accepts_an_unmerged_path(self):
         self.assertEqual(
             jiff.UnmergedPath("muppet.txt"),
@@ -71,11 +93,11 @@ class CommandLineValueTests(unittest.TestCase):
     def test_git_labels_use_dev_null_for_a_missing_side(self):
         self.assertEqual(
             ("/dev/null", "b/new.txt"),
-            jiff.file_labels("new.txt", "/dev/null", "/tmp/new"),
+            jiff.file_labels(("new.txt", "new.txt"), "/dev/null", "/tmp/new"),
         )
         self.assertEqual(
             ("a/old.txt", "/dev/null"),
-            jiff.file_labels("old.txt", "/tmp/old", "/dev/null"),
+            jiff.file_labels(("old.txt", "old.txt"), "/tmp/old", "/dev/null"),
         )
 
     def test_git_arguments_are_rejected_without_git_external_diff_mode(self):
@@ -212,7 +234,7 @@ class OutputTests(unittest.TestCase):
             "Fozzie",
             "/tmp/left.py",
             "/tmp/right.py",
-            repository_path="muppet.py",
+            repository_paths=("muppet.py", "muppet.py"),
             inline=False,
             color=False,
             colors=ColorScheme.plain(),
@@ -235,7 +257,7 @@ class OutputTests(unittest.TestCase):
             "Fozzie",
             "/tmp/left.py",
             "/tmp/right.py",
-            repository_path=path,
+            repository_paths=(path, path),
             inline=False,
             color=False,
             colors=ColorScheme.plain(),
@@ -255,7 +277,7 @@ class OutputTests(unittest.TestCase):
             "Fozzie",
             "/tmp/local",
             "/tmp/remote",
-            repository_path="muppet cast.txt",
+            repository_paths=("muppet cast.txt", "muppet cast.txt"),
             inline=True,
             color=False,
             colors=ColorScheme.plain(),
@@ -271,7 +293,7 @@ class OutputTests(unittest.TestCase):
             "",
             "/tmp/local",
             "/dev/null",
-            repository_path="muppet.txt",
+            repository_paths=("muppet.txt", "muppet.txt"),
             inline=True,
             color=False,
             colors=ColorScheme.plain(),
@@ -285,7 +307,7 @@ class OutputTests(unittest.TestCase):
             bytes([0, 2]),
             "/tmp/local",
             "/tmp/remote",
-            repository_path="animal.dat",
+            repository_paths=("animal.dat", "animal.dat"),
             inline=False,
             color=False,
             colors=ColorScheme.plain(),
@@ -299,7 +321,7 @@ class OutputTests(unittest.TestCase):
             bytes([0, 1]),
             "/tmp/kermit.dat",
             "/tmp/kermit-copy.dat",
-            repository_path=None,
+            repository_paths=None,
             inline=False,
             color=False,
             colors=ColorScheme.plain(),

@@ -23,7 +23,7 @@ enum InputPaths<'a> {
     Comparison {
         left: &'a str,
         right: &'a str,
-        repository_path: Option<&'a str>,
+        repository_paths: Option<[&'a str; 2]>,
     },
     ThreeWay {
         left: &'a str,
@@ -36,7 +36,7 @@ enum InputPaths<'a> {
 }
 
 struct OutputOptions<'a> {
-    repository_path: Option<&'a str>,
+    repository_paths: Option<[&'a str; 2]>,
     inline: bool,
     context_lines: Option<usize>,
 }
@@ -104,7 +104,7 @@ fn parse_input_paths<'a>(
             [left, right] => Ok(InputPaths::Comparison {
                 left,
                 right,
-                repository_path,
+                repository_paths: repository_path.map(|path| [path, path]),
             }),
             [left, middle, right] if repository_path.is_none() => Ok(InputPaths::ThreeWay {
                 left,
@@ -124,28 +124,36 @@ fn parse_input_paths<'a>(
         [repository_path, left, _, _, right, _, _] => Ok(InputPaths::Comparison {
             left,
             right,
-            repository_path: Some(repository_path),
+            repository_paths: Some([repository_path, repository_path]),
         }),
-        _ => Err("--git-external-diff expects one or seven arguments"),
+        [repository_path, left, _, _, right, _, _, right_repository_path]
+        | [repository_path, left, _, _, right, _, _, right_repository_path, _] => {
+            Ok(InputPaths::Comparison {
+                left,
+                right,
+                repository_paths: Some([repository_path, right_repository_path]),
+            })
+        }
+        _ => Err("--git-external-diff expects one, seven, eight or nine arguments"),
     }
 }
 
 fn file_labels(
-    repository_path: Option<&str>,
+    repository_paths: Option<[&str; 2]>,
     left_path: &str,
     right_path: &str,
 ) -> (String, String) {
-    match repository_path {
-        Some(path) => (
+    match repository_paths {
+        Some([left_repository_path, right_repository_path]) => (
             if left_path == "/dev/null" {
                 left_path.to_string()
             } else {
-                format!("a/{path}")
+                format!("a/{left_repository_path}")
             },
             if right_path == "/dev/null" {
                 right_path.to_string()
             } else {
-                format!("b/{path}")
+                format!("b/{right_repository_path}")
             },
         ),
         None => (left_path.to_string(), right_path.to_string()),
@@ -168,12 +176,12 @@ fn render_output(
     colors: &config::ColorScheme,
     highlighting: &syntax::HighlightedFiles,
 ) -> String {
-    let (left_label, right_label) = file_labels(options.repository_path, left_path, right_path);
+    let (left_label, right_label) = file_labels(options.repository_paths, left_path, right_path);
 
     match (left, right) {
         (FileContents::Text(left), FileContents::Text(right)) => {
             let mut output = String::new();
-            if options.repository_path.is_some() && options.inline {
+            if options.repository_paths.is_some() && options.inline {
                 output.push_str(&format!(
                     "{}\n{}\n",
                     colors.remove.paint(format!("--- {left_label}")),
@@ -195,7 +203,7 @@ fn render_output(
                     colors,
                     highlighting,
                     options
-                        .repository_path
+                        .repository_paths
                         .map(|_| [left_label.as_str(), right_label.as_str()]),
                 ));
             }
@@ -226,7 +234,7 @@ fn render_comparison(
                 right,
                 left_path,
                 right_path,
-                output_options.repository_path,
+                output_options.repository_paths,
                 highlight_options.syntax_name,
                 colors,
             )?
@@ -344,7 +352,7 @@ fn render_directory_output(
         let left = FileContents::from_bytes(directory_diff.left.unwrap_or_default());
         let right = FileContents::from_bytes(directory_diff.right.unwrap_or_default());
         let file_options = OutputOptions {
-            repository_path: Some(&relative_path),
+            repository_paths: Some([&relative_path, &relative_path]),
             inline: output_options.inline,
             context_lines: output_options.context_lines,
         };
@@ -762,12 +770,12 @@ fn main() {
         InputPaths::Comparison {
             left,
             right,
-            repository_path,
+            repository_paths,
         } => render_path_comparison(
             left,
             right,
             &OutputOptions {
-                repository_path,
+                repository_paths,
                 inline,
                 context_lines,
             },
@@ -783,7 +791,7 @@ fn main() {
             middle,
             right,
             &OutputOptions {
-                repository_path: None,
+                repository_paths: None,
                 inline,
                 context_lines,
             },
@@ -793,7 +801,7 @@ fn main() {
         InputPaths::Unmerged { repository_path } => render_unmerged_path(
             repository_path,
             &OutputOptions {
-                repository_path: None,
+                repository_paths: None,
                 inline,
                 context_lines,
             },
@@ -845,7 +853,7 @@ mod tests {
             Ok(InputPaths::Comparison {
                 left: "local.txt",
                 right: "remote.txt",
-                repository_path: Some("muppet.txt"),
+                repository_paths: Some(["muppet.txt", "muppet.txt"]),
             }),
             parse_input_paths(&["local.txt", "remote.txt"], false, Some("muppet.txt"))
         );
@@ -893,7 +901,7 @@ mod tests {
             Ok(InputPaths::Comparison {
                 left: "/tmp/old",
                 right: "/tmp/new",
-                repository_path: Some("muppet.txt"),
+                repository_paths: Some(["muppet.txt", "muppet.txt"]),
             }),
             parse_input_paths(
                 &[
@@ -904,6 +912,32 @@ mod tests {
                     "/tmp/new",
                     "new-object",
                     "100644",
+                ],
+                true,
+                None,
+            )
+        );
+    }
+
+    #[test]
+    fn git_external_diff_retains_both_paths_for_a_rename() {
+        assert_eq!(
+            Ok(InputPaths::Comparison {
+                left: "/tmp/old",
+                right: "/tmp/new",
+                repository_paths: Some(["old.txt", "new.txt"]),
+            }),
+            parse_input_paths(
+                &[
+                    "old.txt",
+                    "/tmp/old",
+                    "old-object",
+                    "100644",
+                    "/tmp/new",
+                    "new-object",
+                    "100644",
+                    "new.txt",
+                    "similarity index 100%",
                 ],
                 true,
                 None,
@@ -925,11 +959,11 @@ mod tests {
     fn git_labels_use_dev_null_for_a_missing_side() {
         assert_eq!(
             ("/dev/null".to_string(), "b/new.txt".to_string()),
-            file_labels(Some("new.txt"), "/dev/null", "/tmp/new")
+            file_labels(Some(["new.txt", "new.txt"]), "/dev/null", "/tmp/new")
         );
         assert_eq!(
             ("a/old.txt".to_string(), "/dev/null".to_string()),
-            file_labels(Some("old.txt"), "/tmp/old", "/dev/null")
+            file_labels(Some(["old.txt", "old.txt"]), "/tmp/old", "/dev/null")
         );
     }
 
@@ -1060,7 +1094,7 @@ mod tests {
             },
             ["local.txt", "base.txt", "remote.txt"],
             &OutputOptions {
-                repository_path: None,
+                repository_paths: None,
                 inline: true,
                 context_lines: None,
             },
@@ -1130,7 +1164,7 @@ mod tests {
             "/tmp/local",
             "/tmp/remote",
             &OutputOptions {
-                repository_path: Some("muppet cast.txt"),
+                repository_paths: Some(["muppet cast.txt", "muppet cast.txt"]),
                 inline: true,
                 context_lines: None,
             },
@@ -1152,7 +1186,7 @@ mod tests {
             "/tmp/local",
             "/dev/null",
             &OutputOptions {
-                repository_path: Some("muppet.txt"),
+                repository_paths: Some(["muppet.txt", "muppet.txt"]),
                 inline: true,
                 context_lines: None,
             },
@@ -1174,7 +1208,7 @@ mod tests {
             "/tmp/left.py",
             "/tmp/right.py",
             &OutputOptions {
-                repository_path: Some("muppet.py"),
+                repository_paths: Some(["muppet.py", "muppet.py"]),
                 inline: false,
                 context_lines: None,
             },
@@ -1201,7 +1235,7 @@ mod tests {
             "/tmp/local",
             "/tmp/remote",
             &OutputOptions {
-                repository_path: Some("animal.dat"),
+                repository_paths: Some(["animal.dat", "animal.dat"]),
                 inline: false,
                 context_lines: None,
             },
@@ -1226,7 +1260,7 @@ mod tests {
             "/tmp/kermit.dat",
             "/tmp/kermit-copy.dat",
             &OutputOptions {
-                repository_path: None,
+                repository_paths: None,
                 inline: false,
                 context_lines: None,
             },

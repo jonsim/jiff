@@ -210,6 +210,53 @@ class GitDifftoolTests(unittest.TestCase):
         self.assert_side_by_side_labels(result.stdout, "/dev/null", "gonzo.txt")
         self.assert_side_by_side_labels(result.stdout, "statler.txt", "/dev/null")
 
+    def test_external_diff_labels_both_paths_of_a_rename(self) -> None:
+        self.write("old name.txt", "Miss Piggy\nKermit\nFozzie\nGonzo\n")
+        self.commit("Write the programme")
+        (self.repository / "old name.txt").rename(self.repository / "new name.txt")
+        self.write("new name.txt", "Miss Piggy\nKermit\nFozzie Bear\nGonzo\n")
+        self.commit("Rename the programme")
+        self.configure_external_diff()
+
+        result = self.git(
+            "show",
+            "--format=",
+            "--ext-diff",
+            "--find-renames",
+            "HEAD",
+            check=False,
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assert_side_by_side_labels(result.stdout, "old name.txt", "new name.txt")
+        self.assertIn("Fozzie Bear", result.stdout)
+
+    def test_external_diff_handles_a_delete_conflict_alongside_a_rename(
+        self,
+    ) -> None:
+        self.write("conflict.txt", "Original\n")
+        self.write("old name.txt", "Unchanged companion\n")
+        self.commit("Write the originals")
+        base = self.git("rev-parse", "HEAD").stdout.strip()
+
+        self.git("switch", "--quiet", "--create", "target")
+        self.write("conflict.txt", "Target edit\n")
+        self.commit("Modify the first file")
+        self.git("switch", "--quiet", "--create", "topic", base)
+        (self.repository / "conflict.txt").unlink()
+        (self.repository / "old name.txt").rename(self.repository / "new name.txt")
+        self.commit("Delete one file and rename the other")
+
+        rebase = self.git("rebase", "target", check=False)
+        self.assertNotEqual(0, rebase.returncode)
+        self.assertIn("conflict.txt", self.git("ls-files", "--unmerged").stdout)
+        self.configure_external_diff()
+
+        result = self.git("diff", "HEAD", check=False)
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assert_side_by_side_labels(result.stdout, "old name.txt", "new name.txt")
+
     def test_unmerged_protocol_renders_a_three_way_diff(self) -> None:
         path = "muppet cast.txt"
         self.write(path, "same\nbase tune\n")

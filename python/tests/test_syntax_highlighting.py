@@ -58,7 +58,7 @@ class SyntaxDetectionTests(unittest.TestCase):
             "def fozzie(): pass",
             "/tmp/old",
             "/tmp/new",
-            "muppets.py",
+            ("muppets.py", "muppets.py"),
             None,
             ColorScheme.default(),
         )

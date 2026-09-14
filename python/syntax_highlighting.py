@@ -156,7 +156,7 @@ def highlight_files(
     right: str,
     left_path: str,
     right_path: str,
-    repository_path: str | None,
+    repository_paths: tuple[str, str] | None,
     syntax: str | None,
     colors: ColorScheme,
 ) -> HighlightedFiles:
@@ -167,16 +167,15 @@ def highlight_files(
         right: Source text from the after side of the diff.
         left_path: Filename used to detect the left language.
         right_path: Filename used to detect the right language.
-        repository_path: Original Git path, when comparing temporary files.
+        repository_paths: Original Git paths, when comparing temporary files.
         syntax: Explicit Pygments lexer name, or ``None`` for detection.
         colors: Configured styles for each syntax token category.
 
     Raises:
         UnknownSyntaxError: The explicitly requested lexer is unknown.
     """
-    if repository_path is not None:
-        left_path = repository_path
-        right_path = repository_path
+    if repository_paths is not None:
+        left_path, right_path = repository_paths
 
     return HighlightedFiles(
         left=highlight_file(left, left_path, syntax, colors),

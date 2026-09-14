@@ -179,12 +179,11 @@ pub(crate) fn highlight_files(
     right: &str,
     left_path: &str,
     right_path: &str,
-    repository_path: Option<&str>,
+    repository_paths: Option<[&str; 2]>,
     syntax_name: Option<&str>,
     colors: &ColorScheme,
 ) -> Result<HighlightedFiles, HighlightError> {
-    let left_path = repository_path.unwrap_or(left_path);
-    let right_path = repository_path.unwrap_or(right_path);
+    let [left_path, right_path] = repository_paths.unwrap_or([left_path, right_path]);
 
     Ok(HighlightedFiles {
         left: highlight_file(left, left_path, syntax_name, colors)?,
@@ -454,7 +453,7 @@ mod tests {
             "def fozzie(): pass",
             "/tmp/old",
             "/tmp/new",
-            Some("muppets.py"),
+            Some(["muppets.py", "muppets.py"]),
             None,
             &ColorScheme::default(),
         )

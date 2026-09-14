@@ -23,11 +23,11 @@ TAB_WIDTH = 4
 
 @dataclass(frozen=True)
 class ComparisonPaths:
-    """Two inputs and their optional repository-relative display path."""
+    """Two inputs and their optional repository-relative display paths."""
 
     left: str
     right: str
-    repository_path: str | None
+    repository_paths: tuple[str, str] | None
 
 
 @dataclass(frozen=True)
@@ -88,7 +88,12 @@ def _parse_input_paths(
 ) -> ComparisonPaths | ThreeWayPaths | UnmergedPath:
     if not git_external_diff:
         if len(files) == 2:
-            return ComparisonPaths(files[0], files[1], repository_path)
+            repository_paths = (
+                (repository_path, repository_path)
+                if repository_path is not None
+                else None
+            )
+            return ComparisonPaths(files[0], files[1], repository_paths)
         if len(files) == 3 and repository_path is None:
             return ThreeWayPaths(*files)
         if len(files) == 3:
@@ -101,8 +106,10 @@ def _parse_input_paths(
     if len(files) == 1:
         return UnmergedPath(files[0])
     if len(files) == 7:
-        return ComparisonPaths(files[1], files[4], files[0])
-    raise ValueError("--git-external-diff expects one or seven arguments")
+        return ComparisonPaths(files[1], files[4], (files[0], files[0]))
+    if len(files) in (8, 9):
+        return ComparisonPaths(files[1], files[4], (files[0], files[7]))
+    raise ValueError("--git-external-diff expects one, seven, eight or nine arguments")
 
 
 def _parse_unmerged_stages(
@@ -202,12 +209,15 @@ def _read_unmerged_inputs(repository_path: str) -> tuple[str | bytes, ...]:
 
 
 def file_labels(
-    repository_path: str | None, left_path: str, right_path: str
+    repository_paths: tuple[str, str] | None, left_path: str, right_path: str
 ) -> tuple[str, str]:
-    if repository_path is not None:
-        left_label = "/dev/null" if left_path == "/dev/null" else f"a/{repository_path}"
+    if repository_paths is not None:
+        left_repository_path, right_repository_path = repository_paths
+        left_label = (
+            "/dev/null" if left_path == "/dev/null" else f"a/{left_repository_path}"
+        )
         right_label = (
-            "/dev/null" if right_path == "/dev/null" else f"b/{repository_path}"
+            "/dev/null" if right_path == "/dev/null" else f"b/{right_repository_path}"
         )
         return left_label, right_label
     return left_path, right_path
@@ -219,7 +229,7 @@ def render_output(
     left_path: str,
     right_path: str,
     *,
-    repository_path: str | None,
+    repository_paths: tuple[str, str] | None,
     inline: bool,
     color: bool,
     colors: ColorScheme,
@@ -231,7 +241,7 @@ def render_output(
     """Renders one file comparison.
 
     Binary input produces a single status line because the text renderer cannot
-    show useful line changes. ``repository_path`` labels Git output and takes
+    show useful line changes. ``repository_paths`` label Git output and take
     precedence over temporary filenames when detecting syntax.
 
     Args:
@@ -239,7 +249,7 @@ def render_output(
         right: After-side text or undecoded binary content.
         left_path: Filename used for labels and syntax detection.
         right_path: Filename used for labels and syntax detection.
-        repository_path: Original Git path, or ``None`` for ordinary files.
+        repository_paths: Original Git paths, or ``None`` for ordinary files.
         inline: Use unified output instead of the default two panes.
         color: Include ANSI colours in the output.
         colors: Styles used for diff and syntax highlighting.
@@ -248,7 +258,7 @@ def render_output(
         syntax_enabled: Whether to apply syntax highlighting.
         terminal_width: Explicit width for an embedded side-by-side preview.
     """
-    left_label, right_label = file_labels(repository_path, left_path, right_path)
+    left_label, right_label = file_labels(repository_paths, left_path, right_path)
 
     if isinstance(left, bytes) or isinstance(right, bytes):
         relationship = (
@@ -259,7 +269,7 @@ def render_output(
         return f"Binary files {left_label} and {right_label} {relationship}\n"
 
     output = ""
-    if repository_path is not None and inline:
+    if repository_paths is not None and inline:
         output += diff.render_file_header(left_label, right_label, color, colors)
 
     highlighting = syntax_highlighting.HighlightedFiles()
@@ -269,7 +279,7 @@ def render_output(
             right,
             left_path,
             right_path,
-            repository_path,
+            repository_paths,
             syntax,
             colors,
         )
@@ -288,7 +298,7 @@ def render_output(
             colors,
             highlighting,
             terminal_width,
-            (left_label, right_label) if repository_path is not None else None,
+            (left_label, right_label) if repository_paths is not None else None,
         )
     return output
 
@@ -371,7 +381,7 @@ def render_three_way_output(
         middle,
         left_path,
         middle_path,
-        repository_path=None,
+        repository_paths=None,
         inline=inline,
         color=color,
         colors=colors.without_additions(),
@@ -385,7 +395,7 @@ def render_three_way_output(
         right,
         middle_path,
         right_path,
-        repository_path=None,
+        repository_paths=None,
         inline=inline,
         color=color,
         colors=colors.without_removals(),
@@ -429,7 +439,7 @@ def render_directory_output(
                 file_contents(directory_entry.right or b""),
                 str(left_path),
                 str(right_path),
-                repository_path=relative_path,
+                repository_paths=(relative_path, relative_path),
                 inline=inline,
                 color=color,
                 colors=colors,
@@ -672,7 +682,7 @@ def run():
                     read_file(right_path),
                     left_path,
                     right_path,
-                    repository_path=input_paths.repository_path,
+                    repository_paths=input_paths.repository_paths,
                     inline=args.inline,
                     color=color,
                     colors=colors,
