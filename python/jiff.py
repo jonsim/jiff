@@ -431,8 +431,16 @@ def render_directory_output(
     output = []
     for directory_entry in directory_diff.directory_diffs(left_root, right_root):
         relative_path = directory_entry.relative_path.as_posix()
-        left_path = left_root / directory_entry.relative_path
-        right_path = right_root / directory_entry.relative_path
+        left_path = (
+            left_root / directory_entry.relative_path
+            if directory_entry.left is not None
+            else Path("/dev/null")
+        )
+        right_path = (
+            right_root / directory_entry.relative_path
+            if directory_entry.right is not None
+            else Path("/dev/null")
+        )
         output.append(
             render_output(
                 file_contents(directory_entry.left or b""),

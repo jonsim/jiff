@@ -486,14 +486,12 @@ class GitDifftoolTests(unittest.TestCase):
         self.assertIn(
             "Binary files a/animal.dat and b/animal.dat differ\n", result.stdout
         )
-        self.assertNotIn("--- a/empty.txt", result.stdout)
-        for path in (
-            "empty.txt",
-            "kermit.txt",
-            "nested/muppet cast.txt",
-            "statler.txt",
-        ):
-            self.assert_side_by_side_header(result.stdout, path)
+        self.assert_side_by_side_labels(result.stdout, "/dev/null", "empty.txt")
+        self.assert_side_by_side_header(result.stdout, "kermit.txt")
+        self.assert_side_by_side_labels(
+            result.stdout, "/dev/null", "nested/muppet cast.txt"
+        )
+        self.assert_side_by_side_labels(result.stdout, "statler.txt", "/dev/null")
         self.assertIn("┬", result.stdout)
         self.assertIn("┼", result.stdout)
         self.assertIn("Still green", result.stdout)

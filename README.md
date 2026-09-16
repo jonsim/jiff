@@ -372,9 +372,10 @@ continuing.
 ### Git diff and Git show
 
 Git's ordinary `diff` command uses a different interface from `git difftool`.
-It calls an external diff once per changed path using its own seven-argument
-protocol. `--git-external-diff` tells Jiff to parse those arguments, retain its
-colours and leave Git in charge of the pager.
+It calls an external diff once per changed path using its own positional
+protocol. Renames and copies include the new path as an extra argument.
+`--git-external-diff` tells Jiff to parse those arguments, retain both paths,
+keep its colours and leave Git in charge of the pager.
 
 Configure Jiff globally, or omit `--global` to use it in one repository:
 
@@ -391,6 +392,12 @@ git diff HEAD~
 ```
 
 Added and deleted files use `/dev/null` for the missing side.
+
+Unresolved files are another difference between the two Git interfaces.
+`git diff` calls Jiff with the unresolved path, which lets Jiff read all three
+stages from Git's index. `git difftool` does not call a custom file-mode tool
+for unresolved paths. Use the `diff.external` integration above when you want
+Jiff's three-way conflict view during a merge or rebase.
 
 `git show` and `git log` do not enable external diff programs by default. Pass
 `--ext-diff`, or add shorter aliases:

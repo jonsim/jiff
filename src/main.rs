@@ -347,8 +347,22 @@ fn render_directory_output(
             .map(|component| component.to_string_lossy())
             .collect::<Vec<_>>()
             .join("/");
-        let left_path = left_root.join(&directory_diff.relative_path);
-        let right_path = right_root.join(&directory_diff.relative_path);
+        let left_path = if directory_diff.left.is_some() {
+            left_root
+                .join(&directory_diff.relative_path)
+                .to_string_lossy()
+                .into_owned()
+        } else {
+            "/dev/null".to_string()
+        };
+        let right_path = if directory_diff.right.is_some() {
+            right_root
+                .join(&directory_diff.relative_path)
+                .to_string_lossy()
+                .into_owned()
+        } else {
+            "/dev/null".to_string()
+        };
         let left = FileContents::from_bytes(directory_diff.left.unwrap_or_default());
         let right = FileContents::from_bytes(directory_diff.right.unwrap_or_default());
         let file_options = OutputOptions {
@@ -361,8 +375,8 @@ fn render_directory_output(
             &render_comparison(
                 &left,
                 &right,
-                &left_path.to_string_lossy(),
-                &right_path.to_string_lossy(),
+                &left_path,
+                &right_path,
                 &file_options,
                 highlight_options,
                 colors,
