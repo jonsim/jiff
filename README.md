@@ -279,23 +279,20 @@ CSS colour names are not accepted.
 
 #### Complete themes
 
-The repository includes seven complete themes which you can use as-is or extend:
+The repository includes complete themes in
+[jiff-configure/themes](jiff-configure/themes). High Contrast Light, High
+Contrast Dark, Tokyo Night and Twilight Dark are Jiff themes. The other 25 use
+the static themes bundled with `bat`: 1337, the four Catppuccin variants,
+Coldark, DarkNeon, Dracula, GitHub, Gruvbox, Monokai Extended, Nord, OneHalf,
+Solarized, Sublime Snazzy, TwoDark, Chalkboard and Zenburn.
 
-| Theme | Best suited to | Character |
-|---|---|---|
-| [High contrast light](jiff-configure/themes/high-contrast-light.toml) | Light terminals | Crisp blue and magenta diff colours |
-| [High contrast dark](jiff-configure/themes/high-contrast-dark.toml) | Dark terminals | Bright cyan and yellow diff colours |
-| [Catppuccin Mocha](jiff-configure/themes/catppuccin-mocha.toml) | Dark terminals | Soft green, magenta and cyan |
-| [Dracula](jiff-configure/themes/dracula.toml) | Dark terminals | Green and red diffs with purple syntax |
-| [Gruvbox Dark](jiff-configure/themes/gruvbox-dark.toml) | Dark terminals | Warm, bright foregrounds on restrained backgrounds |
-| [Nord](jiff-configure/themes/nord.toml) | Dark terminals | Cool cyan, red and blue |
-| [Tokyo Night](jiff-configure/themes/tokyo-night.toml) | Dark terminals | Cyan and magenta with blue syntax |
-
-The first two prioritise contrast and colour-blind accessibility. The other
-five borrow the colour relationships of popular editor themes. Every theme has
-a truecolour palette plus indexed and named fallbacks. Terminals can customise
-their first 16 colours, so the ANSI16 fallback's exact appearance still depends
-on the terminal theme.
+Each theme has a truecolour palette plus indexed and named fallbacks. The
+syntax styles come directly from its `bat` theme. Jiff derives the diff
+backgrounds from that palette, because `bat` does not define diff colours.
+Terminals can customise their first 16 colours, so the ANSI16 fallback's exact
+appearance still depends on the terminal theme. `bat`'s `ansi` and Base16
+templates are not included: they rely on a terminal-specific palette rather
+than defining fixed colours.
 
 Copy any theme to the standard XDG location to use it:
 

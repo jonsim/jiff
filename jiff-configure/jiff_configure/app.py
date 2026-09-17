@@ -50,6 +50,18 @@ from textual.widgets import (
 
 DEFAULT_THEME = "Default"
 CURRENT_CONFIG_THEME = "Current configuration"
+THEME_NAMES = {
+    "coldark-cold.toml": "Coldark-Cold",
+    "coldark-dark.toml": "Coldark-Dark",
+    "dark-neon.toml": "DarkNeon",
+    "github.toml": "GitHub",
+    "one-half-dark.toml": "OneHalfDark",
+    "one-half-light.toml": "OneHalfLight",
+    "solarized-dark.toml": "Solarized (dark)",
+    "solarized-light.toml": "Solarized (light)",
+    "two-dark.toml": "TwoDark",
+    "chalkboard.toml": "Chalkboard",
+}
 STYLE_LABELS = {
     "same": "Unchanged text",
     "line_number": "Line-number gutters",
@@ -288,7 +300,10 @@ def load_themes() -> dict[str, ColorConfig]:
     for resource in sorted(resources.iterdir(), key=lambda item: item.name):
         if not resource.name.endswith(".toml"):
             continue
-        name = resource.name.removesuffix(".toml").replace("-", " ").title()
+        name = THEME_NAMES.get(
+            resource.name,
+            resource.name.removesuffix(".toml").replace("-", " ").title(),
+        )
         try:
             themes[name] = parse_color_config(resource.read_text(encoding="utf-8"))
         except ConfigError as error:

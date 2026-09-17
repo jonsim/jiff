@@ -142,14 +142,35 @@ class ThemeTests(unittest.TestCase):
         self.assertEqual(
             {
                 "Default",
+                "1337",
+                "Catppuccin Frappe",
+                "Catppuccin Latte",
+                "Catppuccin Macchiato",
                 "Catppuccin Mocha",
+                "Coldark-Cold",
+                "Coldark-Dark",
+                "DarkNeon",
                 "Dracula",
+                "GitHub",
                 "Gruvbox Dark",
+                "Gruvbox Light",
                 "High Contrast Dark",
                 "High Contrast Light",
+                "Monokai Extended",
+                "Monokai Extended Bright",
+                "Monokai Extended Light",
+                "Monokai Extended Origin",
                 "Nord",
+                "OneHalfDark",
+                "OneHalfLight",
+                "Solarized (dark)",
+                "Solarized (light)",
+                "Sublime Snazzy",
                 "Tokyo Night",
                 "Twilight Dark",
+                "TwoDark",
+                "Chalkboard",
+                "Zenburn",
             },
             set(themes),
         )
@@ -180,20 +201,27 @@ class ThemeTests(unittest.TestCase):
         self.assertEqual("Default", selected_theme)
         self.assertNotIn("Current configuration", themes)
 
-    def test_dark_contrast_and_gruvbox_use_bright_foregrounds(self):
-        # Standard backgrounds keep highlighted spans less overpowering.
+    def test_bat_themes_keep_their_distinct_syntax_colours(self):
+        # These were loaded from bat rather than approximated from the theme names.
         themes = load_themes()
 
-        gruvbox = themes["Gruvbox Dark"].ansi16
-        self.assertEqual("bright_green", gruvbox.add.color)
-        self.assertEqual("green", gruvbox.add_highlight.bgcolor)
-        self.assertEqual("bright_red", gruvbox.syntax_keyword.color)
-        self.assertEqual("bright_yellow", gruvbox.syntax_definition.color)
+        catppuccin = themes["Catppuccin Mocha"].truecolor
+        self.assertEqual("#cba6f7", catppuccin.syntax_keyword.color)
+        self.assertEqual("#a6e3a1", catppuccin.syntax_string.color)
+        self.assertTrue(catppuccin.syntax_comment.italic)
 
-        high_contrast = themes["High Contrast Dark"].ansi16
-        self.assertEqual("bright_cyan", high_contrast.add.color)
-        self.assertEqual("cyan", high_contrast.add_highlight.bgcolor)
-        self.assertEqual("bright_yellow", high_contrast.remove.color)
+        dracula = themes["Dracula"].truecolor
+        self.assertEqual("#8be9fd", dracula.syntax_keyword.color)
+        self.assertEqual("#f1fa8c", dracula.syntax_string.color)
+        self.assertTrue(dracula.syntax_keyword.italic)
+
+        gruvbox = themes["Gruvbox Dark"].truecolor
+        self.assertEqual("#8ec07c", gruvbox.syntax_keyword.color)
+        self.assertEqual("#d3869b", gruvbox.syntax_number.color)
+
+        nord = themes["Nord"].truecolor
+        self.assertEqual("#81a1c1", nord.syntax_keyword.color)
+        self.assertEqual("#a3be8c", nord.syntax_string.color)
 
     def test_twilight_dark_uses_the_tilix_palette(self):
         twilight = load_themes()["Twilight Dark"]
@@ -224,15 +252,13 @@ class ThemeTests(unittest.TestCase):
                 self.assertIn("[color.ansi16]", contents)
                 self.assertIn("[color.ansi256]", contents)
                 self.assertIn("[color.truecolor]", contents)
-                self.assertEqual(3 * len(STYLE_NAMES), contents.count("italic = false"))
+                self.assertEqual(3 * len(STYLE_NAMES), contents.count("bold ="))
+                self.assertEqual(3 * len(STYLE_NAMES), contents.count("italic ="))
                 for name in STYLE_NAMES:
                     style_count = sum(
                         line.startswith(f"{name} =") for line in contents.splitlines()
                     )
                     self.assertEqual(3, style_count, name)
-                    self.assertFalse(getattr(config.ansi16, name).italic)
-                    self.assertFalse(getattr(config.ansi256, name).italic)
-                    self.assertFalse(getattr(config.truecolor, name).italic)
 
 
 class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
@@ -273,7 +299,7 @@ class ConfigureAppTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(app.themes["Dracula"], app.config)
             self.assertTrue(app.dirty)
             self.assertIn(
-                'syntax_keyword = { color = "magenta"',
+                'syntax_keyword = { color = "#8be9fd"',
                 str(app.query_one("#toml-preview").content),
             )
 
