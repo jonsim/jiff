@@ -1017,15 +1017,15 @@ mod tests {
 
     #[test]
     fn xdg_config_precedes_the_home_dotfile() {
-        let paths = config_candidates(
-            Some(PathBuf::from("/home/kermit")),
-            Some(PathBuf::from("/configs")),
-        );
+        let root = env::temp_dir();
+        let home = root.join("home").join("kermit");
+        let xdg_home = root.join("configs");
+        let paths = config_candidates(Some(home.clone()), Some(xdg_home.clone()));
 
         assert_eq!(
             vec![
-                PathBuf::from("/configs/jiff/config.toml"),
-                PathBuf::from("/home/kermit/.jiffconfig"),
+                xdg_home.join("jiff").join("config.toml"),
+                home.join(".jiffconfig"),
             ],
             paths
         );
@@ -1033,15 +1033,13 @@ mod tests {
 
     #[test]
     fn home_config_is_used_when_xdg_home_is_relative() {
-        let paths = config_candidates(
-            Some(PathBuf::from("/home/fozzie")),
-            Some(PathBuf::from("relative")),
-        );
+        let home = env::temp_dir().join("home").join("fozzie");
+        let paths = config_candidates(Some(home.clone()), Some(PathBuf::from("relative")));
 
         assert_eq!(
             vec![
-                PathBuf::from("/home/fozzie/.config/jiff/config.toml"),
-                PathBuf::from("/home/fozzie/.jiffconfig"),
+                home.join(".config").join("jiff").join("config.toml"),
+                home.join(".jiffconfig"),
             ],
             paths
         );
