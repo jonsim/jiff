@@ -1,8 +1,12 @@
 # jiff
 
-[![Build Status](https://travis-ci.org/jonsim/jiff.svg?branch=master)](https://travis-ci.org/jonsim/jiff)
+[![CI](https://github.com/jonsim/jiff/actions/workflows/ci.yml/badge.svg)](https://github.com/jonsim/jiff/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/jonsim/jiff)](https://github.com/jonsim/jiff/releases/latest)
+[![License](https://img.shields.io/github/license/jonsim/jiff)](LICENSE)
 
 A terminal diff tool supporting sub-line diffs and side-by-side output display
+
+![Jiff showing a side-by-side source code diff](jiff-screenshot.png)
 
 ## Implementations
 
